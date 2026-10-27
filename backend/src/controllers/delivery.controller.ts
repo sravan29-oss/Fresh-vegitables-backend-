@@ -243,6 +243,7 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
       }
     }
     if (!order) {
+      // Fallback demo order with Hyderabad details
       order = {
         id: id || 'demo-order',
         order_number: 'FV-884291',
@@ -251,22 +252,94 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         delivery_charge: 0,
         discount: 50,
         total: 530,
-        payment_method: 'upi',
-        payment_status: 'paid',
+        payment_method: 'cod',
+        payment_status: 'pending',
         order_status: 'confirmed',
+        customer_name: 'Customer',
+        customer_mobile: '+91 8106970384',
+        address_snapshot: {
+          house_number: '102',
+          area: 'KPHB Colony',
+          city: 'Hyderabad',
+          state: 'Telangana',
+          pincode: '500072',
+        },
         delivery_address: {
-          area: 'Sector 14, Satellite Road',
-          city: 'Ahmedabad',
-          pincode: '380015',
+          house_number: '102',
+          area: 'KPHB Colony',
+          city: 'Hyderabad',
+          state: 'Telangana',
+          pincode: '500072',
+          full_address: 'Flat 102, KPHB Colony, Hyderabad, Telangana - 500072',
         },
         created_at: new Date().toISOString(),
       };
     }
 
+    // Parse real address snapshot and resolve customer details
+    let addrSnapshot: any = {};
+    if (order.address_snapshot) {
+      try {
+        addrSnapshot = typeof order.address_snapshot === 'string'
+          ? JSON.parse(order.address_snapshot)
+          : order.address_snapshot;
+      } catch {
+        addrSnapshot = order.address_snapshot || {};
+      }
+    } else if (order.delivery_address) {
+      try {
+        addrSnapshot = typeof order.delivery_address === 'string'
+          ? JSON.parse(order.delivery_address)
+          : order.delivery_address;
+      } catch {
+        addrSnapshot = order.delivery_address || {};
+      }
+    }
+
+    let userObj: any = null;
+    if (order.user_id && order.user_id !== 'guest') {
+      try {
+        const uRes = await db.query('SELECT name, mobile, email FROM users WHERE id = $1', [order.user_id]);
+        if (uRes.rows.length > 0) userObj = uRes.rows[0];
+      } catch {}
+    }
+
+    const customerName = addrSnapshot.full_name || order.customer_name || userObj?.name || 'Customer';
+    const customerMobile = addrSnapshot.phone || order.customer_mobile || userObj?.mobile || '+91 8106970384';
+
+    const fullAddrString = [
+      addrSnapshot.house_number ? (String(addrSnapshot.house_number).toLowerCase().includes('flat') || String(addrSnapshot.house_number).toLowerCase().includes('house') ? addrSnapshot.house_number : `Flat/House ${addrSnapshot.house_number}`) : '',
+      addrSnapshot.street,
+      addrSnapshot.area,
+      addrSnapshot.landmark ? `Near ${addrSnapshot.landmark}` : '',
+      addrSnapshot.city || 'Hyderabad',
+      addrSnapshot.state || 'Telangana',
+      addrSnapshot.pincode ? `- ${addrSnapshot.pincode}` : '',
+    ].filter(Boolean).join(', ');
+
+    const normalizedAddress = {
+      ...addrSnapshot,
+      full_name: customerName,
+      phone: customerMobile,
+      house_number: addrSnapshot.house_number || '',
+      street: addrSnapshot.street || '',
+      area: addrSnapshot.area || addrSnapshot.city || 'KPHB Colony',
+      landmark: addrSnapshot.landmark || '',
+      city: addrSnapshot.city || 'Hyderabad',
+      state: addrSnapshot.state || 'Telangana',
+      pincode: addrSnapshot.pincode || '500072',
+      full_address: fullAddrString || 'KPHB Colony, Hyderabad - 500072',
+    };
+
+    order.customer_name = customerName;
+    order.customer_mobile = customerMobile;
+    order.delivery_address = normalizedAddress;
+    order.address_snapshot = addrSnapshot;
+
     // Fetch items for package contents display
     let items: any[] = [];
     try {
-      const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [id]);
+      const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
       items = itemsRes.rows || [];
     } catch {
       items = [];
@@ -305,15 +378,15 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         partner_phone: '+91 98123 45678',
         partner_rating: 4.88,
         vehicle_type: 'Electric Bike (Eco-Harvest)',
-        vehicle_number: 'GJ-01-EV-4421',
-        partner_lat: 23.0295,
-        partner_lng: 72.5684,
+        vehicle_number: 'TS-09-EV-4421',
+        partner_lat: Number(addrSnapshot.latitude) || 17.4938,
+        partner_lng: Number(addrSnapshot.longitude) || 78.3995,
         estimated_delivery_time: new Date(Date.now() + 15 * 60000).toISOString(),
         show_driver: true,
       };
     }
 
-    // Build Amazon/Flipkart logistics timeline milestones
+    // Build logistics timeline milestones
     const createdAt = new Date(order.created_at || Date.now());
     const orderDateStr = createdAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     const orderTimeStr = createdAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -338,7 +411,7 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         title: 'Order Confirmed by Fulfillment Center',
         description: 'Order accepted by warehouse manager. Assigned to fresh farm procurement.',
         timestamp: `${orderDateStr}, ${new Date(createdAt.getTime() + 8 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-        location: 'Central Farm Depot, Agro Hub',
+        location: 'Central Farm Depot, Hyderabad Agro Hub',
         completed: isConfirmed,
       },
       {
@@ -347,7 +420,7 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         title: 'Harvested Fresh & Quality Graded',
         description: 'Vegetables harvested from partner hydroponic and organic plots. 100% pesticide-free quality check passed.',
         timestamp: isHarvested ? `${orderDateStr}, ${new Date(createdAt.getTime() + 20 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected today',
-        location: 'Agro Harvest Sorting Unit 2',
+        location: 'Agro Harvest Sorting Unit, Hyderabad',
         completed: isHarvested,
       },
       {
@@ -356,7 +429,7 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         title: 'Packed in Temperature-Controlled Crate',
         description: 'Packed with biodegradable liners and eco-chill packaging for cold-chain transit.',
         timestamp: isPacked ? `${orderDateStr}, ${new Date(createdAt.getTime() + 35 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'In progress',
-        location: 'Sorting & Packaging Center Hub 04, Ahmedabad',
+        location: 'Sorting & Packaging Center Hub, Hyderabad',
         completed: isPacked,
       },
       {
@@ -367,16 +440,16 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
           ? `Package picked up by ${trackingInfo?.partner_name || 'Delivery Partner'} on ${trackingInfo?.vehicle_type || 'EV Bike'}. Heading toward your location.`
           : 'Delivery partner details will be assigned and shown here once the package leaves the local hub.',
         timestamp: isOutForDelivery ? `${orderDateStr}, ${new Date(createdAt.getTime() + 50 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected soon',
-        location: 'Local Delivery Station, Sector 14',
+        location: `Local Delivery Station, ${normalizedAddress.area || 'Hyderabad'}`,
         completed: isOutForDelivery,
       },
       {
         id: 'act-6',
         status: 'delivered',
         title: 'Delivered',
-        description: isDelivered ? 'Package safely delivered to your doorstep.' : 'Expected doorstep delivery within 30-45 mins.',
+        description: isDelivered ? 'Package safely delivered to your doorstep.' : 'Expected doorstep delivery within 25–35 mins.',
         timestamp: isDelivered ? `${orderDateStr}, ${new Date(createdAt.getTime() + 65 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Estimated today',
-        location: order.delivery_address?.area || 'Customer Address',
+        location: normalizedAddress.full_address || 'Customer Doorstep',
         completed: isDelivered,
       },
     ];
@@ -390,16 +463,16 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
       show_driver: isOutForDelivery,
       carrier_name: 'FreshVeg Logistics Express',
       tracking_number: `TRK-${(order.order_number || id).replace(/[^A-Za-z0-9]/g, '').slice(-8)}`,
-      expected_delivery: isDelivered ? 'Delivered Today' : 'Today, by 8:00 PM',
+      expected_delivery: isDelivered ? 'Delivered Today' : 'Today, within 25–35 mins',
       logistics_status: orderStatus,
-      fulfillment_center: 'Central Farm Depot, Agro Hub 04',
+      fulfillment_center: 'Central Farm Depot, Hyderabad Agro Hub',
       package_type: 'Eco-Insulated Cold Chain Crate',
       activities,
-      store_location: { name: 'Central Farm Depot, Agro Hub', latitude: 23.0225, longitude: 72.5714 },
+      store_location: { name: 'Fresh Vegetables Hub, KPHB Main Road', latitude: 17.4938, longitude: 78.3995 },
       destination: {
-        address: order.delivery_address?.area || 'Sector 14, Satellite Road',
-        latitude: 23.0330,
-        longitude: 72.5650,
+        address: normalizedAddress.full_address || 'KPHB Colony, Hyderabad, Telangana',
+        latitude: Number(addrSnapshot.latitude) || 17.4938,
+        longitude: Number(addrSnapshot.longitude) || 78.3995,
       },
     });
   } catch (error) {
@@ -423,9 +496,21 @@ export async function getDeliverySettings(req: Request, res: Response, next: Nex
   try {
     let settings = getPersistedDeliverySettings();
     try {
-      const result = await db.query('SELECT * FROM delivery_settings LIMIT 1');
+      const result = await db.query("SELECT * FROM delivery_settings WHERE id = 'global_delivery_settings' LIMIT 1");
       if (result.rows.length > 0) {
-        settings = result.rows[0];
+        const row = result.rows[0];
+        settings = {
+          id: 'global_delivery_settings',
+          default_delivery_charge: Number(row.default_delivery_charge),
+          free_delivery_threshold: Number(row.free_delivery_threshold),
+          min_order_amount: Number(row.min_order_amount),
+          enable_free_delivery: Boolean(row.enable_free_delivery),
+          express_delivery_fee: Number(row.express_delivery_fee),
+          estimated_delivery_time: String(row.estimated_delivery_time || '25–35 mins'),
+          is_delivery_active: row.is_delivery_active !== false,
+          surge_charge: Number(row.surge_charge || 0),
+          updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+        };
         savePersistedDeliverySettings(settings);
       }
     } catch {
@@ -464,21 +549,35 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
       is_delivery_active,
     });
 
-    // Also persist to PostgreSQL if table exists
+    // Also persist to PostgreSQL with UPSERT
     try {
       await db.query(
-        `UPDATE delivery_settings SET
-          default_delivery_charge = $1,
-          free_delivery_threshold = $2,
-          min_order_amount = $3,
-          enable_free_delivery = $4,
-          express_delivery_fee = $5,
-          estimated_delivery_time = $6,
-          surge_charge = $7,
-          is_delivery_active = $8,
+        `INSERT INTO delivery_settings (
+          id,
+          default_delivery_charge,
+          free_delivery_threshold,
+          min_order_amount,
+          enable_free_delivery,
+          express_delivery_fee,
+          estimated_delivery_time,
+          surge_charge,
+          is_delivery_active,
+          updated_at
+        ) VALUES (
+          'global_delivery_settings',
+          $1, $2, $3, $4, $5, $6, $7, $8, NOW()
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          default_delivery_charge = EXCLUDED.default_delivery_charge,
+          free_delivery_threshold = EXCLUDED.free_delivery_threshold,
+          min_order_amount = EXCLUDED.min_order_amount,
+          enable_free_delivery = EXCLUDED.enable_free_delivery,
+          express_delivery_fee = EXCLUDED.express_delivery_fee,
+          estimated_delivery_time = EXCLUDED.estimated_delivery_time,
+          surge_charge = EXCLUDED.surge_charge,
+          is_delivery_active = EXCLUDED.is_delivery_active,
           updated_at = NOW()
-         WHERE id = 'global_delivery_settings'
-         RETURNING *`,
+        RETURNING *`,
         [
           updatedSettings.default_delivery_charge,
           updatedSettings.free_delivery_threshold,
@@ -490,8 +589,8 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           updatedSettings.is_delivery_active,
         ]
       );
-    } catch {
-      // PostgreSQL might be running in memory mock mode
+    } catch (dbErr) {
+      console.warn('DB delivery_settings upsert error:', dbErr);
     }
 
     await logAuditEvent({

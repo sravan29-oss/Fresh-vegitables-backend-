@@ -6,11 +6,16 @@ import { getPersistedDeliverySettings, savePersistedDeliverySettings } from '../
 import { savePersistedProducts, savePersistedVariants, getPersistedProducts, getPersistedVariants } from '../services/productStore.service';
 import { savePersistedOrders, savePersistedOrderItems, getPersistedOrders } from '../services/orderStore.service';
 
+const useSsl =
+  (env.DATABASE_URL && (env.DATABASE_URL.includes('sslmode=require') || env.DATABASE_URL.includes('render.com'))) ||
+  (env.NODE_ENV === 'production' && !env.DATABASE_URL.includes('localhost') && !env.DATABASE_URL.includes('127.0.0.1'));
+
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
   max: 10,
   idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 1000,
+  connectionTimeoutMillis: 8000,
+  ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 
 let isPgHealthy = false;

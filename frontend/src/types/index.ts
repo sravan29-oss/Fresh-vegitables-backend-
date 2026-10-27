@@ -294,7 +294,7 @@ export interface CouponValidationResult {
 // ================= Phase 11: Notifications =================
 export interface Notification {
   id: string;
-  user_id: string;
+  user_id?: string | null;
   title: string;
   message: string;
   type: string;

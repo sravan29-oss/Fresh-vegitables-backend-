@@ -1,23 +1,62 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Search, User, LogOut, Package, MapPin, Menu, X, ShieldAlert, Bell, Check } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import {
+  ShoppingBag,
+  Search,
+  User,
+  LogOut,
+  Package,
+  MapPin,
+  Menu,
+  X,
+  ShieldAlert,
+  Bell,
+  Check,
+  Wallet,
+  ChevronDown,
+  Phone,
+  Clock,
+  Flame,
+  ShieldCheck,
+  Sparkles,
+  Leaf,
+  ArrowRight,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import api from '../../services/api';
 import { Category, Notification, DeliveryZone } from '../../types';
 import { LocationSelectorModal } from './LocationSelectorModal';
-import { Wallet, Calendar } from 'lucide-react';
+import { useNotifications } from '../../context/NotificationContext';
+
+const DYNAMIC_PLACEHOLDERS = [
+  'Search organic spinach, tomatoes, broccoli...',
+  'Search fresh methi, coriander, mint & herbs...',
+  'Search crunchy capsicum, cucumbers, zucchini...',
+  'Search farm potatoes, red onions & ginger...',
+  'Search daily sunrise harvest & green veggies...',
+];
 
 export const Header: React.FC = () => {
   const { user, logout, showLogoutConfirm, showLogoutSuccess } = useAuth();
   const { itemCount, setIsCartOpen } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Dynamic rotating search placeholder with smooth timing
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPlaceholderIdx((prev) => (prev + 1) % DYNAMIC_PLACEHOLDERS.length);
+    }, 3800);
+    return () => clearInterval(timer);
+  }, []);
 
   // Store Support & Contact Settings (Admin configurable)
   const [storeSettings, setStoreSettings] = useState<{
@@ -26,8 +65,8 @@ export const Header: React.FC = () => {
     quality_badge?: string;
   }>({
     support_phone: '+91 8106970384',
-    announcement_text: 'Same-Day Farm Delivery available for orders before 2:00 PM',
-    quality_badge: '⚡ 100% Residue-Free & Organic',
+    announcement_text: 'Same-Day Farm Delivery for orders placed before 2:00 PM',
+    quality_badge: '100% Genuine Certified Organic Harvest',
   });
 
   useEffect(() => {
@@ -40,7 +79,7 @@ export const Header: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  // Phase 19: Location & Delivery Zone selector state
+  // Location & Delivery Zone selector state
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [currentZone, setCurrentZone] = useState<DeliveryZone | null>(() => {
     const saved = localStorage.getItem('fresh_delivery_zone');
@@ -49,7 +88,7 @@ export const Header: React.FC = () => {
     }
     return {
       id: 'zone-kphb',
-      name: 'Kukatpally Zone',
+      name: 'Kukatpally & KPHB Zone',
       pincodes: ['500072'],
       delivery_radius_km: 8.5,
       delivery_fee: 20,
@@ -60,24 +99,10 @@ export const Header: React.FC = () => {
     };
   });
 
-  // Phase 11: Notification state
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  // Notification state connected to Global NotificationContext
+  const { notifications, unreadCount, markAllAsRead, markAsRead } = useNotifications();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
-
-  const fetchNotifications = async () => {
-    if (!user) return;
-    try {
-      const res = await api.get('/notifications');
-      if (res.data?.data) {
-        setNotifications(res.data.data.notifications || []);
-        setUnreadCount(res.data.data.unread_count || 0);
-      }
-    } catch (err) {
-      // ignore silently for guests
-    }
-  };
 
   useEffect(() => {
     api.get('/categories')
@@ -85,10 +110,6 @@ export const Header: React.FC = () => {
         if (res.data?.data) setCategories(res.data.data.slice(0, 6));
       })
       .catch(() => {});
-
-    if (user) {
-      fetchNotifications();
-    }
 
     const handleClickOutside = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
@@ -100,26 +121,12 @@ export const Header: React.FC = () => {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [user]);
-
-  const handleMarkAllRead = async () => {
-    try {
-      await api.put('/notifications/read-all');
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      setUnreadCount(0);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  }, []);
 
   const handleNotificationClick = async (notif: Notification) => {
     try {
       if (!notif.is_read) {
-        await api.put(`/notifications/${notif.id}/read`);
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
-        );
-        setUnreadCount((c) => Math.max(0, c - 1));
+        await markAsRead(notif.id);
       }
       setIsNotifOpen(false);
       if (notif.reference_type === 'order' && notif.reference_id) {
@@ -139,358 +146,485 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 glass-header transition-all">
-      {/* Top micro banner */}
-      <div className="bg-brand-900/90 backdrop-blur-sm text-brand-50 text-xs py-1.5 px-4 font-medium">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>{storeSettings.announcement_text || 'Same-Day Farm Delivery available for orders before 2:00 PM'}</span>
+    <header className="sticky top-0 z-40 premium-glass-header transition-all duration-300">
+      {/* ─── Top Executive Announcement Bar (Deep Forest Emerald + Gold/Champagne Accents) ─── */}
+      <div className="bg-gradient-to-r from-[#03130a] via-[#062415] to-[#03130a] border-b border-emerald-500/20 text-emerald-200/90 text-[11px] font-medium h-9 flex items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex items-center justify-between gap-4">
+          
+          {/* Left: Dispatch Radar & Rotating Live Status */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hidden xs:inline-flex">
+              LIVE DISPATCH
+            </span>
+            <span className="truncate text-emerald-100 font-semibold tracking-wide text-[11.5px]">
+              {storeSettings.announcement_text || 'Same-Day Farm Delivery for orders placed before 2:00 PM'}
+            </span>
           </div>
-          <div className="flex items-center gap-4 hidden sm:flex">
-            <span>{storeSettings.quality_badge || '⚡ 100% Residue-Free & Organic'}</span>
+
+          {/* Right: Quality Certification & Clickable Support Phone Capsule */}
+          <div className="flex items-center gap-4 shrink-0 hidden sm:flex text-emerald-200/90">
+            <div className="flex items-center gap-1.5 text-xs text-emerald-300/90 font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>{storeSettings.quality_badge || '100% Residue-Free & Certified Organic'}</span>
+            </div>
+
+            <span className="text-emerald-700/60 font-bold">•</span>
+
             <a
               href={`tel:${(storeSettings.support_phone || '+91 8106970384').replace(/[\s-]/g, '')}`}
-              className="hover:text-brand-300 transition-colors flex items-center gap-1 font-semibold"
+              className="group flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-200 hover:text-white transition-all text-[11px] font-bold cursor-pointer"
+              title="Call Dedicated Customer Support"
             >
-              <span>📞 Support: {storeSettings.support_phone || '+91 8106970384'}</span>
+              <Phone className="w-3 h-3 text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span>Support: {storeSettings.support_phone || '+91 8106970384'}</span>
             </a>
           </div>
         </div>
       </div>
 
-      {/* Main navigation row */}
+      {/* ─── Main Navigation Center (Polished Ultra-Luxury Glass) ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-18 py-3 gap-4">
+        <div className="flex items-center justify-between h-20 gap-3 md:gap-5">
           
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 flex-shrink-0 group">
-            <img
-              src="/logo.png"
-              alt="Fresh Vegetables Organic Logo"
-              className="w-12 h-12 rounded-full object-cover shadow-md shadow-brand-500/25 group-hover:scale-105 group-hover:rotate-1 transition-all duration-300 ring-2 ring-brand-500/30"
-            />
-            <div>
-              <span className="font-extrabold text-2xl tracking-tight text-slate-900 group-hover:text-brand-700 transition-colors">
-                Fresh<span className="text-brand-600">Vegetables</span>
+          {/* Brand Logo & Luxury Wordmark */}
+          <Link to="/" className="flex items-center gap-3.5 flex-shrink-0 group">
+            <div className="relative">
+              <img
+                src="/logo.png"
+                alt="Fresh Vegetables Organic Logo"
+                className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl object-cover ring-2 ring-emerald-500/30 group-hover:ring-emerald-400/80 shadow-[0_0_20px_rgba(16,185,129,0.3)] group-hover:scale-105 transition-all duration-300"
+              />
+              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#05180f] border-2 border-emerald-400 flex items-center justify-center">
+                <Leaf className="w-2.5 h-2.5 text-emerald-400" />
               </span>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-700/80 -mt-0.5 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                100% Certified Organic
-              </p>
+            </div>
+
+            <div className="flex flex-col justify-center leading-none">
+              <span className="text-2xl sm:text-[26px] font-black tracking-tight text-white group-hover:text-emerald-100 transition-colors">
+                Fresh<span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 animate-text-gradient font-black">Vegetables</span>
+              </span>
+              <div className="text-[9.5px] font-extrabold uppercase tracking-[0.18em] text-emerald-400/90 mt-1 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>EST. 2026 • 100% GENUINE ORGANIC</span>
+              </div>
             </div>
           </Link>
 
-          {/* Location indicator */}
+          {/* Location & Express Zone Capsule */}
           <button
             onClick={() => setIsLocationModalOpen(true)}
-            className="hidden lg:flex items-center gap-2 text-xs bg-slate-100 hover:bg-slate-200/70 px-3 py-2 rounded-xl text-slate-700 cursor-pointer border border-slate-200 transition-colors text-left"
+            className="hidden lg:flex items-center h-10 px-3 rounded-2xl premium-nav-capsule text-white transition-all duration-300 cursor-pointer group text-left shrink-0"
+            title="Click to switch delivery zone or address"
           >
-            <MapPin className="w-4 h-4 text-brand-600 flex-shrink-0 animate-bounce" />
-            <div className="leading-tight">
-              <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                <span>{currentZone ? currentZone.name : 'Select Zone'}</span>
-                <span className="text-[10px] bg-brand-500/20 text-brand-700 px-1.5 py-0.5 rounded font-black">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0 mr-2 text-emerald-400 group-hover:scale-110 transition-transform">
+              <MapPin className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex flex-col justify-center leading-tight">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[8.5px] font-black uppercase tracking-[0.14em] text-emerald-400/80">DELIVERING TO</span>
+                <span className="text-[9.5px] bg-emerald-400/20 text-emerald-300 font-black px-1.5 py-0.2 rounded-full border border-emerald-400/30">
                   ₹{currentZone?.delivery_fee || 20}
                 </span>
               </div>
-              <div className="text-slate-500 truncate max-w-[130px]">
-                {currentZone?.estimated_delivery_time || '30 Mins'} Express
+              <div className="font-bold text-white group-hover:text-emerald-200 transition-colors text-xs flex items-center gap-1.5 mt-0.5">
+                <span className="truncate max-w-[130px]">{currentZone ? currentZone.name : 'Select Zone'}</span>
+                <span className="text-emerald-400/60">•</span>
+                <span className="text-[10px] text-emerald-300/80 font-semibold flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-emerald-400" />
+                  {currentZone?.estimated_delivery_time || '25–35 mins'}
+                </span>
               </div>
             </div>
+            <ChevronDown className="w-3.5 h-3.5 text-emerald-400/60 group-hover:text-emerald-300 group-hover:translate-y-0.5 transition-all ml-1.5 shrink-0" />
           </button>
 
-          {/* Search bar */}
-          <form onSubmit={handleSearchSubmit} className="flex-1 max-w-xl mx-2 hidden md:block">
-            <div className="relative">
+          {/* Luxury Center Search Input (Clean, Spacious, Perfectly Aligned) */}
+          <form onSubmit={handleSearchSubmit} className="flex-1 max-w-xl mx-2 lg:mx-4 hidden md:block">
+            <div className="relative flex items-center w-full">
+              <Search className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              
               <input
                 type="text"
-                placeholder="Search fresh spinach, tomatoes, carrots, broccoli..."
+                placeholder={DYNAMIC_PLACEHOLDERS[placeholderIdx]}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-11 pr-4 py-2.5 text-sm bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-brand-500 rounded-full focus:outline-none focus:ring-4 focus:ring-brand-500/15 transition-all text-slate-800 placeholder-slate-400"
+                className="w-full h-10 pl-10 pr-24 text-xs sm:text-sm bg-[#061f12]/80 hover:bg-[#072416] focus:bg-[#051c10] border border-emerald-500/30 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-full transition-all text-white placeholder:text-emerald-100/50 font-medium shadow-inner"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+              
+              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="p-1 text-emerald-400 hover:text-white rounded-full hover:bg-emerald-900/60 transition-colors cursor-pointer mr-0.5"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  className="h-7.5 px-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-sm flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                  title="Search Catalog"
+                >
+                  <Search className="w-3 h-3 stroke-[2.5]" />
+                  <span>Search</span>
+                </button>
+              </div>
             </div>
           </form>
 
-          {/* Right actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Phase 11: Notification Bell */}
-            {user && (
-              <div className="relative" ref={notifRef}>
-                <button
-                  onClick={() => setIsNotifOpen(!isNotifOpen)}
-                  className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-700 transition-colors relative"
-                  title="Notifications"
-                >
-                  <Bell className="w-5 h-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute 1 top-1.5 right-1.5 bg-rose-500 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
-                      {unreadCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Notifications Dropdown */}
-                {isNotifOpen && (
-                  <div className="absolute right-0 mt-2 w-80 sm:w-96 glass-dropdown rounded-2xl py-3 z-50 animate-fade-in">
-                    <div className="px-4 pb-2 border-b border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-black text-slate-900 text-sm">Notifications</span>
-                        {unreadCount > 0 && (
-                          <span className="text-[11px] font-bold bg-brand-100 text-brand-800 px-2 py-0.5 rounded-full">
-                            {unreadCount} new
-                          </span>
-                        )}
-                      </div>
-                      {unreadCount > 0 && (
-                        <button
-                          onClick={handleMarkAllRead}
-                          className="text-[11px] font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
-                        >
-                          <Check className="w-3.5 h-3.5" /> Mark all read
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
-                      {notifications.length === 0 ? (
-                        <div className="py-8 text-center text-xs text-slate-400">
-                          <p>No notifications yet</p>
-                        </div>
-                      ) : (
-                        notifications.map((n) => (
-                          <div
-                            key={n.id}
-                            onClick={() => handleNotificationClick(n)}
-                            className={`p-3.5 cursor-pointer hover:bg-slate-50 transition-colors text-xs ${
-                              !n.is_read ? 'bg-brand-50/40' : ''
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className={`font-bold ${!n.is_read ? 'text-slate-900 font-extrabold' : 'text-slate-700'}`}>
-                                {n.title}
-                              </p>
-                              {!n.is_read && (
-                                <span className="w-2 h-2 rounded-full bg-brand-600 shrink-0 mt-1"></span>
-                              )}
-                            </div>
-                            <p className="text-slate-500 text-[11px] mt-0.5 line-clamp-2">{n.message}</p>
-                            <span className="text-[10px] text-slate-400 mt-1 block">
-                              {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* User Account */}
-            <div className="relative" ref={userMenuRef}>
-              {user ? (
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-2 p-2 rounded-xl hover:bg-slate-100 text-slate-700 transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-sm border border-brand-200">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="text-sm font-semibold hidden sm:inline max-w-[90px] truncate">
-                    {user.name.split(' ')[0]}
+          {/* Right Action Bar (Bell, User, Cart) */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            
+            {/* Notification Bell */}
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                className="w-10 h-10 rounded-2xl premium-nav-capsule text-emerald-300 hover:text-white flex items-center justify-center transition-all duration-300 group cursor-pointer hover-bell-wiggle"
+                title="Notifications"
+              >
+                <Bell className="w-4.5 h-4.5 bell-icon-anim" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-500 to-amber-500 text-white text-[9.5px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center ring-2 ring-[#05180f] shadow-md animate-pulse">
+                    {unreadCount}
                   </span>
-                </button>
-              ) : (
-                <Link
-                  to="/login"
-                  className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:text-brand-700 hover:bg-brand-50 rounded-xl transition-all"
-                >
-                  <User className="w-4 h-4" />
-                  <span className="hidden sm:inline">Sign In</span>
-                </Link>
-              )}
+                )}
+              </button>
 
-              {/* User Dropdown */}
-              {user && isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 glass-dropdown rounded-2xl py-2 z-50 animate-fade-in">
-                  <div className="px-4 py-2.5 border-b border-slate-100">
-                    <p className="text-xs text-slate-400 font-medium">Signed in as</p>
-                    <p className="text-sm font-bold text-slate-900 truncate">{user.name}</p>
-                    <p className="text-xs text-slate-500 truncate">{user.email}</p>
+              {/* Luxury Notifications Dropdown - Solid, Opaque, High-Contrast */}
+              {isNotifOpen && (
+                <div
+                  className="premium-dropdown absolute right-0 mt-2.5 w-80 sm:w-96 rounded-2xl z-[70] animate-fade-in shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_20px_rgba(16,185,129,0.2)] overflow-hidden"
+                  style={{ backgroundColor: '#091f14' }}
+                >
+                  <div className="px-4 py-3 bg-[#06160d] border-b border-emerald-500/20 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-white text-sm">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="text-[10px] font-black bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllAsRead}
+                        className="text-[11px] font-bold text-emerald-300 hover:text-white flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Mark all read
+                      </button>
+                    )}
                   </div>
-                  <Link
-                    to="/orders"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
-                  >
-                    <Package className="w-4 h-4 text-slate-400" />
-                    My Orders
-                  </Link>
-                  <Link
-                    to="/subscriptions"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
-                  >
-                    <Calendar className="w-4 h-4 text-emerald-600" />
-                    <span>My Subscriptions</span>
-                  </Link>
-                  <Link
-                    to="/wallet"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
-                  >
-                    <Wallet className="w-4 h-4 text-brand-600" />
-                    <span>Wallet &amp; Loyalty (₹250)</span>
-                  </Link>
-                  <Link
-                    to="/profile"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
-                  >
-                    <User className="w-4 h-4 text-slate-400" />
-                    Profile & Addresses
-                  </Link>
-                  <button
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      showLogoutConfirm(() => {
-                        logout();
-                        showLogoutSuccess(false, () => {
-                          navigate('/');
-                        });
-                      });
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors border-t border-slate-100 mt-1 cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Sign Out
-                  </button>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-emerald-950/80 bg-[#091f14]">
+                    {notifications.length === 0 ? (
+                      <div className="py-10 text-center text-xs text-slate-300 bg-[#091f14]">
+                        <Bell className="w-8 h-8 text-emerald-400/50 mx-auto mb-2" />
+                        <p className="font-semibold text-slate-300">No notifications yet</p>
+                      </div>
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          className={`p-3.5 cursor-pointer transition-colors text-xs ${
+                            !n.is_read
+                              ? 'bg-[#102d1e] hover:bg-[#153b28] border-l-4 border-emerald-400'
+                              : 'bg-[#091f14] hover:bg-[#0e2a1c] border-l-4 border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-extrabold text-white text-[13px] leading-snug">
+                              {n.title}
+                            </p>
+                            {!n.is_read && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 mt-1 shadow-[0_0_8px_rgba(52,211,153,1)]"></span>
+                            )}
+                          </div>
+                          <p className="text-slate-200 text-xs mt-1 leading-relaxed font-normal">
+                            {n.message}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-[10.5px] text-emerald-400 font-semibold mt-1.5 font-mono">
+                            <Clock className="w-3 h-3 text-emerald-400" />
+                            <span>{new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Cart Button with Counter */}
+            {/* User Account / Sign In */}
+            <div className="relative" ref={userMenuRef}>
+              {user ? (
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="h-10 flex items-center gap-2.5 px-3 rounded-2xl premium-nav-capsule text-white transition-all cursor-pointer group"
+                >
+                  <div className="w-6.5 h-6.5 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-[#05180f] font-black text-xs flex items-center justify-center shadow-md ring-1 ring-emerald-300/40 shrink-0">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex flex-col text-left leading-none hidden sm:flex">
+                    <span className="text-[8px] font-black text-emerald-400 uppercase tracking-wider">Account</span>
+                    <span className="text-xs font-bold text-white group-hover:text-emerald-200 truncate max-w-[85px] mt-0.5">
+                      {user.name.split(' ')[0]}
+                    </span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-emerald-400/60 group-hover:text-emerald-300 group-hover:translate-y-0.5 transition-all hidden sm:inline shrink-0" />
+                </button>
+              ) : (
+                <Link
+                  to="/login"
+                  className="h-10 flex items-center gap-2 px-3.5 text-xs font-bold text-emerald-200 hover:text-white rounded-2xl premium-nav-capsule transition-all"
+                >
+                  <User className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="hidden sm:inline">Sign In</span>
+                </Link>
+              )}
+
+              {/* Luxury User Dropdown Menu - Solid, Opaque */}
+              {user && isUserMenuOpen && (
+                <div
+                  className="premium-dropdown absolute right-0 mt-2.5 w-60 rounded-2xl z-[70] animate-fade-in shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_20px_rgba(16,185,129,0.2)] overflow-hidden"
+                  style={{ backgroundColor: '#091f14' }}
+                >
+                  <div className="px-4 py-3 bg-[#06160d] border-b border-emerald-500/20">
+                    <p className="text-[8.5px] text-emerald-400 font-black uppercase tracking-wider">Signed in as</p>
+                    <p className="text-sm font-extrabold text-white truncate">{user.name}</p>
+                    <p className="text-xs text-slate-300 truncate">{user.email}</p>
+                  </div>
+                  <div className="py-1.5 space-y-0.5 bg-[#091f14]">
+                    <Link
+                      to="/orders"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-emerald-900/40 transition-colors"
+                    >
+                      <Package className="w-4 h-4 text-emerald-400" />
+                      <span>My Orders</span>
+                    </Link>
+                    <Link
+                      to="/wallet"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="flex items-center justify-between px-4 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-emerald-900/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Wallet className="w-4 h-4 text-amber-400" />
+                        <span>Wallet &amp; Credits</span>
+                      </div>
+                      <span className="text-[10px] bg-amber-400/20 text-amber-300 font-extrabold px-1.5 py-0.5 rounded border border-amber-400/30">
+                        ₹250
+                      </span>
+                    </Link>
+                    <Link
+                      to="/profile"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-emerald-900/40 transition-colors"
+                    >
+                      <User className="w-4 h-4 text-emerald-400" />
+                      <span>Profile &amp; Addresses</span>
+                    </Link>
+                  </div>
+                  <div className="border-t border-emerald-950/80 pt-1 bg-[#091f14]">
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        showLogoutConfirm(() => {
+                          logout();
+                          showLogoutSuccess(false, () => {
+                            navigate('/');
+                          });
+                        });
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-rose-400" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Cart Button: The Opulent Emerald Centerpiece CTA */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white px-4 py-2.5 rounded-xl font-semibold shadow-md shadow-brand-600/25 transition-all"
+              className="h-10 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 text-white font-black text-xs flex items-center gap-2.5 shadow-[0_4px_16px_rgba(16,185,129,0.35)] hover:shadow-[0_6px_22px_rgba(16,185,129,0.5)] transition-all duration-300 active:scale-95 cursor-pointer shrink-0"
+              title="View Cart & Checkout"
             >
-              <div className="relative">
-                <ShoppingBag className="w-5 h-5" />
+              <div className="relative flex items-center justify-center">
+                <ShoppingBag className="w-4 h-4" />
                 {itemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-amber-400 text-slate-950 text-[10px] font-extrabold w-4 h-4 rounded-full flex items-center justify-center border-2 border-brand-600 shadow-sm animate-pulse">
+                  <span className="absolute -top-2 -right-2 bg-white text-emerald-950 text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-emerald-700 shadow-sm">
                     {itemCount}
                   </span>
                 )}
               </div>
-              <span className="hidden sm:inline text-sm">Cart</span>
+              <span className="hidden sm:inline tracking-wider uppercase font-black text-[11px]">Cart</span>
             </button>
 
             {/* Mobile menu toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100"
+              className="md:hidden w-10 h-10 flex items-center justify-center text-emerald-300 hover:text-white rounded-2xl premium-nav-capsule transition-colors cursor-pointer"
+              aria-label="Toggle mobile menu"
             >
-              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Search */}
-        <div className="md:hidden pb-3">
+        {/* Mobile Search Row (Themed with dark luxury styling) */}
+        <div className="md:hidden pb-3.5">
           <form onSubmit={handleSearchSubmit}>
-            <div className="relative">
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search fresh vegetables..."
+                placeholder={DYNAMIC_PLACEHOLDERS[placeholderIdx]}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full h-10 pl-10 pr-9 text-xs bg-[#062013]/70 border border-emerald-500/25 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-400 text-white placeholder:text-emerald-200/40"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-emerald-400 hover:text-white rounded-full"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </form>
         </div>
 
-        {/* Category bar */}
-        <div className="hidden md:flex items-center gap-6 py-2.5 border-t border-slate-100 text-xs font-semibold text-slate-600 overflow-x-auto">
-          <Link to="/products" className="text-brand-700 hover:text-brand-800 flex items-center gap-1 font-bold whitespace-nowrap">
-            All Products
+        {/* ─── Luxury Sub-Navigation Rail (Clean Categories, No Subscriptions) ─── */}
+        <div className="hidden md:flex items-center gap-2 py-2.5 border-t border-emerald-500/15 text-xs font-bold overflow-x-auto scrollbar-none">
+          <Link
+            to="/products"
+            className={`px-3.5 py-1.5 rounded-xl transition-all duration-300 whitespace-nowrap flex items-center gap-1.5 ${
+              location.pathname === '/products' && !location.search
+                ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 shadow-[0_0_12px_rgba(52,211,153,0.25)]'
+                : 'text-emerald-200/80 hover:text-white hover:bg-emerald-500/15 border border-transparent'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>All Vegetables</span>
           </Link>
-          {categories.map((cat) => (
-            <Link
-              key={cat.id}
-              to={`/products?category=${cat.slug}`}
-              className="hover:text-brand-600 whitespace-nowrap transition-colors"
-            >
-              {cat.name}
-            </Link>
-          ))}
-          <Link to="/subscriptions" className="text-emerald-700 hover:text-emerald-800 font-bold whitespace-nowrap flex items-center gap-1">
-            🥬 Subscribe &amp; Save (10% OFF)
+
+          {categories.map((cat) => {
+            const isCatActive = location.search.includes(`category=${cat.slug}`);
+            return (
+              <Link
+                key={cat.id}
+                to={`/products?category=${cat.slug}`}
+                className={`px-3 py-1.5 rounded-xl transition-all duration-300 whitespace-nowrap ${
+                  isCatActive
+                    ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 shadow-[0_0_12px_rgba(52,211,153,0.25)]'
+                    : 'text-emerald-100/70 hover:text-white hover:bg-emerald-500/10 border border-transparent'
+                }`}
+              >
+                {cat.name}
+              </Link>
+            );
+          })}
+
+          <Link
+            to="/products?in_stock=true"
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 font-black whitespace-nowrap transition-all ml-auto flex items-center gap-1.5 shadow-xs"
+          >
+            <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span>Daily Farm Deals</span>
           </Link>
-          <Link to="/products?in_stock=true" className="text-amber-700 hover:text-amber-800 ml-auto flex items-center gap-1 whitespace-nowrap">
-            🔥 Daily Deals
-          </Link>
+
+          <div className="hidden xl:flex items-center gap-2 pl-3 ml-2 border-l border-emerald-500/20 text-[11px] font-bold text-emerald-400/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>Harvested Fresh Today • Zero Cold Storage</span>
+          </div>
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
+      {/* ─── Luxury Mobile Drawer Menu (No Subscriptions) ─── */}
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm transition-opacity animate-fade-in flex flex-col justify-end">
-          <div className="bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div className="md:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-md transition-opacity animate-fade-in flex flex-col justify-end">
+          <div className="bg-[#051c11] border-t border-emerald-500/30 rounded-t-3xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-2xl text-white">
+            <div className="flex items-center justify-between border-b border-emerald-500/20 pb-4">
               <div className="flex items-center gap-3">
                 <img
                   src="/logo.png"
                   alt="Fresh Vegetables Logo"
-                  className="w-12 h-12 rounded-full object-cover ring-2 ring-brand-500/30 shadow-md"
+                  className="w-11 h-11 rounded-2xl object-cover ring-2 ring-emerald-500/40"
                 />
                 <div>
-                  <h3 className="font-extrabold text-lg text-slate-900 leading-tight">
-                    Fresh<span className="text-brand-600">Vegetables</span>
+                  <h3 className="font-black text-base text-white leading-tight">
+                    Fresh<span className="text-emerald-400">Vegetables</span>
                   </h3>
-                  <p className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    100% Certified Organic
+                  <p className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    EST. 2026 • 100% Genuine Certified Organic
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+                className="p-2 text-emerald-400 hover:text-white rounded-full hover:bg-emerald-900/60 transition-colors"
                 aria-label="Close menu"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Quick Delivery Zone Capsule for Mobile */}
+            <div
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                setIsLocationModalOpen(true);
+              }}
+              className="p-3.5 bg-emerald-950/60 rounded-2xl border border-emerald-500/30 flex items-center justify-between cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <MapPin className="w-4 h-4 text-emerald-400" />
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-emerald-400">Delivery Zone</p>
+                  <p className="text-xs font-bold text-white">{currentZone ? currentZone.name : 'Select Zone'}</p>
+                </div>
+              </div>
+              <span className="text-xs font-extrabold text-emerald-300">Change</span>
             </div>
 
             {/* Quick Links */}
             <div className="space-y-2">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Categories & Explore</p>
-              <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
+              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-400/80">Produce Categories</p>
+              <div className="grid grid-cols-2 gap-2 text-xs font-bold">
                 <Link
                   to="/products"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-brand-50 text-brand-900 rounded-xl hover:bg-brand-100 transition-colors"
+                  className="p-3 bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 rounded-xl hover:bg-emerald-500/30 transition-colors font-bold flex items-center gap-1.5"
                 >
-                  🥦 All Products
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>All Vegetables</span>
                 </Link>
                 <Link
-                  to="/subscriptions"
+                  to="/products?in_stock=true"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-emerald-50 text-emerald-900 rounded-xl hover:bg-emerald-100 transition-colors"
+                  className="p-3 bg-amber-500/20 text-amber-200 border border-amber-500/30 rounded-xl hover:bg-amber-500/30 transition-colors font-bold flex items-center gap-1.5"
                 >
-                  📅 Subscriptions
+                  <Flame className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Daily Deals</span>
                 </Link>
                 {categories.map((cat) => (
                   <Link
                     key={cat.id}
                     to={`/products?category=${cat.slug}`}
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="p-3 bg-slate-50 text-slate-700 rounded-xl hover:bg-slate-100 transition-colors truncate"
+                    className="p-3 bg-emerald-950/40 text-emerald-100/90 border border-emerald-500/15 rounded-xl hover:bg-emerald-900/40 transition-colors truncate"
                   >
                     {cat.name}
                   </Link>
@@ -499,32 +633,32 @@ export const Header: React.FC = () => {
             </div>
 
             {/* Account section */}
-            <div className="border-t border-slate-100 pt-4 space-y-3">
+            <div className="border-t border-emerald-500/20 pt-4 space-y-3">
               {user ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                    <div className="w-10 h-10 rounded-full bg-brand-500 text-slate-950 font-bold flex items-center justify-center text-sm">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-3 bg-emerald-950/60 rounded-2xl border border-emerald-500/25">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-[#05180f] font-black flex items-center justify-center text-xs">
                       {user.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-bold text-sm text-slate-900">{user.name}</p>
-                      <p className="text-xs text-slate-500">{user.email}</p>
+                      <p className="font-extrabold text-sm text-white">{user.name}</p>
+                      <p className="text-xs text-emerald-300/70">{user.email}</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs font-bold">
                     <Link
                       to="/orders"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-700 flex items-center gap-2"
+                      className="p-3 bg-emerald-950/40 hover:bg-emerald-900/60 rounded-xl text-emerald-200 border border-emerald-500/20 flex items-center gap-2"
                     >
-                      <Package className="w-4 h-4 text-brand-600" /> My Orders
+                      <Package className="w-4 h-4 text-emerald-400" /> My Orders
                     </Link>
                     <Link
                       to="/wallet"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-700 flex items-center gap-2"
+                      className="p-3 bg-emerald-950/40 hover:bg-emerald-900/60 rounded-xl text-amber-200 border border-amber-500/20 flex items-center gap-2"
                     >
-                      <Wallet className="w-4 h-4 text-emerald-600" /> Wallet
+                      <Wallet className="w-4 h-4 text-amber-400" /> Wallet (₹250)
                     </Link>
                     <button
                       onClick={() => {
@@ -536,9 +670,9 @@ export const Header: React.FC = () => {
                           });
                         });
                       }}
-                      className="p-3 bg-rose-50 hover:bg-rose-100 rounded-xl text-rose-700 flex items-center justify-center gap-2 col-span-2 cursor-pointer font-bold transition-colors"
+                      className="p-3 bg-rose-500/20 hover:bg-rose-500/30 rounded-xl text-rose-300 border border-rose-500/30 flex items-center justify-center gap-2 col-span-2 cursor-pointer font-bold transition-colors"
                     >
-                      <LogOut className="w-4 h-4" /> Sign Out
+                      <LogOut className="w-4 h-4 text-rose-400" /> Sign Out
                     </button>
                   </div>
                 </div>
@@ -547,14 +681,14 @@ export const Header: React.FC = () => {
                   <Link
                     to="/login"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex-1 text-center py-3 bg-brand-600 text-white rounded-xl font-bold text-sm shadow-md shadow-brand-600/20"
+                    className="flex-1 text-center py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold text-xs shadow-md"
                   >
                     Sign In
                   </Link>
                   <Link
                     to="/register"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex-1 text-center py-3 bg-slate-100 text-slate-800 rounded-xl font-bold text-sm hover:bg-slate-200"
+                    className="flex-1 text-center py-2.5 bg-emerald-950/60 text-emerald-200 border border-emerald-500/30 rounded-xl font-bold text-xs hover:bg-emerald-900/60"
                   >
                     Create Account
                   </Link>
@@ -565,9 +699,9 @@ export const Header: React.FC = () => {
                 <Link
                   to="/admin/login"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 py-2"
+                  className="flex items-center justify-center gap-2 text-xs font-semibold text-emerald-400/80 hover:text-white py-2"
                 >
-                  <ShieldAlert className="w-4 h-4 text-amber-500" />
+                  <ShieldAlert className="w-4 h-4 text-amber-400" />
                   Admin Operations Portal
                 </Link>
               </div>
@@ -576,6 +710,7 @@ export const Header: React.FC = () => {
         </div>
       )}
 
+      {/* Location & Delivery Zone Selector Modal */}
       <LocationSelectorModal
         isOpen={isLocationModalOpen}
         onClose={() => setIsLocationModalOpen(false)}
@@ -584,4 +719,5 @@ export const Header: React.FC = () => {
     </header>
   );
 };
+
 export default Header;

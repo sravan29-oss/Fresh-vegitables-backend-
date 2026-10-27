@@ -43,7 +43,6 @@ export const AdminLayout: React.FC = () => {
     { name: 'Products', path: '/admin/products', icon: Package },
     { name: 'Categories', path: '/admin/categories', icon: Layers },
     { name: 'Orders & Deliveries', path: '/admin/orders', icon: ShoppingBag },
-    { name: 'Subscriptions', path: '/admin/subscriptions', icon: Calendar },
     { name: 'Deliveries & Fleet', path: '/admin/deliveries', icon: Truck },
     { name: 'Delivery Charges & Zones', path: '/admin/delivery-charges', icon: MapPin },
     { name: 'Sellers & Farmers', path: '/admin/sellers', icon: Store },

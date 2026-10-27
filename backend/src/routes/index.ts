@@ -20,6 +20,7 @@ import sellerRoutes from './seller.routes';
 import feedRoutes from './feed.routes';
 import zoneRoutes from './zone.routes';
 import auditRoutes from './audit.routes';
+import webhookRoutes from './webhook.routes';
 
 const router = Router();
 
@@ -46,6 +47,9 @@ router.use('/sellers', sellerRoutes);
 router.use('/feeds', feedRoutes);
 router.use('/zones', zoneRoutes);
 router.use('/audit-logs', auditRoutes);
+
+// Meta WhatsApp Cloud API Webhook Integration
+router.use('/webhooks', webhookRoutes);
 
 export default router;
 

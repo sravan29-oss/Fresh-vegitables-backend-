@@ -24,6 +24,7 @@ import {
 import api from '../../services/api';
 import { DeliveryTrackingResponse, DeliveryTimelineEvent } from '../../types';
 import { subscribeLiveUpdates } from '../../services/liveSync';
+import { useAuth } from '../../context/AuthContext';
 
 const DEFAULT_TRACKING_DATA: DeliveryTrackingResponse = {
   order: {
@@ -35,26 +36,29 @@ const DEFAULT_TRACKING_DATA: DeliveryTrackingResponse = {
     delivery_charge: 0,
     discount: 50,
     total: 530,
-    payment_method: 'upi',
-    payment_status: 'paid',
+    payment_method: 'cod',
+    payment_status: 'pending',
     order_status: 'confirmed',
-    customer_name: 'Rahul Sharma',
+    customer_name: 'Customer',
     customer_mobile: '+91 8106970384',
     delivery_address: {
-      address_line1: 'Flat 402, Green Acres Residency',
-      address_line2: 'Near Outer Ring Road',
-      area: 'Satellite Road, Sector 14',
-      city: 'Ahmedabad',
-      pincode: '380015',
+      house_number: '102',
+      address_line1: 'Flat 102, KPHB Colony',
+      address_line2: 'Phase 1',
+      area: 'KPHB Colony',
+      city: 'Hyderabad',
+      state: 'Telangana',
+      pincode: '500072',
+      full_address: 'Flat 102, KPHB Colony, Phase 1, Hyderabad, Telangana - 500072',
     },
     created_at: new Date().toISOString(),
   },
   show_driver: false,
   carrier_name: 'FreshVeg Logistics Express',
   tracking_number: 'TRK-FV884291',
-  expected_delivery: 'Today, by 8:00 PM',
+  expected_delivery: 'Today, within 25–35 mins',
   logistics_status: 'confirmed',
-  fulfillment_center: 'Central Farm Depot, Agro Hub 04, Ahmedabad',
+  fulfillment_center: 'Fresh Vegetables Central Hub, KPHB, Hyderabad',
   package_type: 'Eco-Insulated Cold-Chain Fresh Harvest Box',
   tracking: {
     order_id: 'demo-order',
@@ -63,27 +67,28 @@ const DEFAULT_TRACKING_DATA: DeliveryTrackingResponse = {
     partner_phone: '+91 98123 45678',
     partner_rating: 4.88,
     vehicle_type: 'Electric Scooter (Eco-Harvest)',
-    vehicle_number: 'GJ-01-EV-4421',
-    partner_lat: 23.0295,
-    partner_lng: 72.5684,
+    vehicle_number: 'TS-09-EV-4421',
+    partner_lat: 17.4938,
+    partner_lng: 78.3995,
     estimated_delivery_time: '12-15 mins',
     notes: 'Temperature-controlled insulated fresh crate',
     show_driver: false,
   },
   store_location: {
     name: 'Fresh Vegetables Central Organic Hub',
-    latitude: 23.0225,
-    longitude: 72.5714,
+    latitude: 17.4938,
+    longitude: 78.3995,
   },
   destination: {
-    address: 'Flat 402, Green Acres Residency, Satellite Road, Ahmedabad',
-    latitude: 23.0330,
-    longitude: 72.5650,
+    address: 'KPHB Colony, Hyderabad, Telangana - 500072',
+    latitude: 17.4938,
+    longitude: 78.3995,
   },
 };
 
 export const TrackingPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const { user: authUser } = useAuth();
   const [data, setData] = useState<DeliveryTrackingResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [driverProgress, setDriverProgress] = useState(0.65);
@@ -98,14 +103,106 @@ export const TrackingPage: React.FC = () => {
   const fetchTracking = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const res = await api.get(`/delivery/tracking/${id}`);
-      if (res.data?.data) {
-        setData(res.data.data);
+      let trackingResult: DeliveryTrackingResponse | null = null;
+
+      try {
+        const res = await api.get(`/delivery/tracking/${id}`);
+        if (res.data?.data) {
+          trackingResult = res.data.data;
+        }
+      } catch (err) {
+        // Fallback to direct order query below
+      }
+
+      // Check if order details or address need enrichment from /orders/:id
+      const currentOrder = trackingResult?.order;
+      const currentAddr = currentOrder?.delivery_address || currentOrder?.address_snapshot;
+      const needsOrderFetch =
+        !trackingResult ||
+        !currentOrder ||
+        currentOrder.id === 'demo-order' ||
+        !currentAddr ||
+        !currentOrder.customer_name ||
+        currentOrder.customer_name === 'Rahul Sharma';
+
+      if (needsOrderFetch && id) {
+        try {
+          const ordRes = await api.get(`/orders/${id}`);
+          if (ordRes.data?.data) {
+            const rawOrd = ordRes.data.data;
+            const addr = rawOrd.address_snapshot || rawOrd.delivery_address || {};
+            const fullAddr = [
+              addr.house_number ? (String(addr.house_number).toLowerCase().includes('flat') || String(addr.house_number).toLowerCase().includes('house') ? addr.house_number : `Flat/House ${addr.house_number}`) : '',
+              addr.street,
+              addr.area,
+              addr.landmark ? `Near ${addr.landmark}` : '',
+              addr.city || 'Hyderabad',
+              addr.state || 'Telangana',
+              addr.pincode ? `- ${addr.pincode}` : '',
+            ].filter(Boolean).join(', ');
+
+            const resolvedRecipient = rawOrd.customer_name || addr.full_name || authUser?.name || 'Customer';
+            const resolvedPhone = rawOrd.customer_mobile || addr.phone || authUser?.mobile || '+91 8106970384';
+
+            const normalizedDeliveryAddr = {
+              ...addr,
+              full_name: resolvedRecipient,
+              phone: resolvedPhone,
+              area: addr.area || 'KPHB Colony',
+              city: addr.city || 'Hyderabad',
+              state: addr.state || 'Telangana',
+              pincode: addr.pincode || '500072',
+              full_address: fullAddr || 'KPHB Colony, Hyderabad, Telangana - 500072',
+            };
+
+            trackingResult = {
+              ...(trackingResult || DEFAULT_TRACKING_DATA),
+              order: {
+                ...rawOrd,
+                customer_name: resolvedRecipient,
+                customer_mobile: resolvedPhone,
+                delivery_address: normalizedDeliveryAddr,
+                address_snapshot: addr,
+              },
+              destination: {
+                address: fullAddr || 'KPHB Colony, Hyderabad, Telangana - 500072',
+                latitude: Number(addr.latitude) || 17.4938,
+                longitude: Number(addr.longitude) || 78.3995,
+              },
+            };
+          }
+        } catch (e) {
+          // Direct order fetch failed
+        }
+      }
+
+      if (trackingResult) {
+        // Guarantee clean destination address and recipient data
+        const ord = trackingResult.order;
+        const addr = ord.delivery_address || ord.address_snapshot || {};
+        const formatted = addr.full_address || [
+          addr.house_number ? (String(addr.house_number).toLowerCase().includes('flat') || String(addr.house_number).toLowerCase().includes('house') ? addr.house_number : `Flat/House ${addr.house_number}`) : '',
+          addr.street,
+          addr.area,
+          addr.landmark ? `Near ${addr.landmark}` : '',
+          addr.city || 'Hyderabad',
+          addr.state || 'Telangana',
+          addr.pincode ? `- ${addr.pincode}` : '',
+        ].filter(Boolean).join(', ');
+
+        if (!trackingResult.destination || !trackingResult.destination.address || trackingResult.destination.address.includes('Satellite Road')) {
+          trackingResult.destination = {
+            address: formatted || 'KPHB Colony, Hyderabad, Telangana - 500072',
+            latitude: Number(addr.latitude) || 17.4938,
+            longitude: Number(addr.longitude) || 78.3995,
+          };
+        }
+
+        setData(trackingResult);
       } else {
         setData(DEFAULT_TRACKING_DATA);
       }
     } catch {
-      // Seamlessly fall back to demo tracking
       setData(DEFAULT_TRACKING_DATA);
     } finally {
       if (!silent) setLoading(false);
@@ -529,7 +626,7 @@ export const TrackingPage: React.FC = () => {
       title: 'Harvested & Packed in Insulated Crate',
       description: 'Vegetables harvested fresh, washed, quality graded, and packed in eco-chill insulated containers.',
       timestamp: currentStepIdx >= 2 ? 'Today, 10:48 AM' : 'Expected within 20 mins',
-      location: 'Sorting & Packaging Center Hub 04, Ahmedabad',
+      location: 'Sorting & Packaging Center Hub 04, Hyderabad',
       completed: currentStepIdx >= 2,
     },
     {
@@ -540,7 +637,7 @@ export const TrackingPage: React.FC = () => {
         ? `Handed over to delivery executive ${tracking?.partner_name || 'Ravi Kumar'} on ${tracking?.vehicle_type || 'Electric Scooter'}. En route to your address.`
         : 'Package will be assigned to a local delivery executive once dispatched from sorting facility.',
       timestamp: isOutForDelivery ? 'Today, 11:10 AM' : 'Scheduled upon dispatch',
-      location: 'Local Delivery Hub, Sector 14',
+      location: `Local Delivery Hub, ${order.delivery_address?.area || 'KPHB Colony'}`,
       completed: isOutForDelivery,
     },
     {
@@ -1002,22 +1099,59 @@ export const TrackingPage: React.FC = () => {
             <h4 className="font-bold text-slate-900 border-b border-slate-100 pb-3 text-sm flex items-center gap-2">
               <MapPin className="w-4 h-4 text-brand-600" /> Delivery Address
             </h4>
-            <div className="space-y-2 text-slate-600">
-              <p>
-                <strong className="text-slate-800 font-semibold">Recipient:</strong> {order.customer_name || 'Rahul Sharma'}
-              </p>
-              <p>
-                <strong className="text-slate-800 font-semibold">Phone:</strong> {order.customer_mobile || '+91 8106970384'}
-              </p>
-              <p>
-                <strong className="text-slate-800 font-semibold">Payment:</strong>{' '}
-                <span className="font-bold uppercase text-brand-700">{order.payment_method || 'UPI'}</span> ({order.payment_status || 'paid'})
-              </p>
-              <p className="text-slate-500 pt-1 leading-relaxed">
-                <strong className="text-slate-800 font-semibold">Address:</strong>{' '}
-                {order.delivery_address?.area || 'Satellite Road, Sector 14'}, {order.delivery_address?.city || 'Ahmedabad'} - {order.delivery_address?.pincode || '380015'}
-              </p>
-            </div>
+            {(() => {
+              const addr = order.delivery_address || (order as any).address_snapshot || {};
+              const recipientName =
+                order.customer_name ||
+                addr.full_name ||
+                authUser?.name ||
+                'Customer';
+              const recipientPhone =
+                order.customer_mobile ||
+                addr.phone ||
+                authUser?.mobile ||
+                '';
+              const fullAddr =
+                addr.full_address ||
+                destination?.address ||
+                [
+                  addr.house_number
+                    ? (String(addr.house_number).toLowerCase().includes('flat') || String(addr.house_number).toLowerCase().includes('house')
+                        ? addr.house_number
+                        : `Flat/House ${addr.house_number}`)
+                    : '',
+                  addr.street,
+                  addr.area,
+                  addr.landmark ? `Near ${addr.landmark}` : '',
+                  addr.city || 'Hyderabad',
+                  addr.state || 'Telangana',
+                  addr.pincode ? `- ${addr.pincode}` : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ') ||
+                'KPHB Colony, Hyderabad, Telangana - 500072';
+
+              return (
+                <div className="space-y-2.5 text-slate-600">
+                  <p>
+                    <strong className="text-slate-800 font-semibold">Recipient:</strong> {recipientName}
+                  </p>
+                  {recipientPhone && (
+                    <p>
+                      <strong className="text-slate-800 font-semibold">Phone:</strong> {recipientPhone}
+                    </p>
+                  )}
+                  <p>
+                    <strong className="text-slate-800 font-semibold">Payment:</strong>{' '}
+                    <span className="font-bold uppercase text-brand-700">{order.payment_method || 'COD'}</span>{' '}
+                    <span className="text-slate-500">({order.payment_status || 'pending'})</span>
+                  </p>
+                  <p className="text-slate-500 pt-1 leading-relaxed">
+                    <strong className="text-slate-800 font-semibold">Address:</strong> {fullAddr}
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Need Help / Support Card */}

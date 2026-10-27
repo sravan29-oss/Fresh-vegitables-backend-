@@ -271,7 +271,7 @@ export const AdminDeliveriesPage: React.FC = () => {
                   >
                     <div>
                       <p className="font-mono font-bold text-white">#{ord.order_number}</p>
-                      <p className="text-[11px] text-slate-400">{ord.delivery_address?.area || 'Satellite Road'}</p>
+                      <p className="text-[11px] text-slate-400">{ord.delivery_address?.area || ord.address_snapshot?.area || 'KPHB Colony, Hyderabad'}</p>
                       <span className="text-[10px] uppercase font-bold text-amber-400">{ord.order_status}</span>
                     </div>
 

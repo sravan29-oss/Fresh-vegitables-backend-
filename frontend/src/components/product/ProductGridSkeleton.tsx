@@ -8,7 +8,7 @@ interface ProductGridSkeletonProps {
 
 export const ProductGridSkeleton: React.FC<ProductGridSkeletonProps> = ({
   count = 6,
-  className = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 sm:gap-6',
+  className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4 sm:gap-5',
 }) => {
   return (
     <div data-testid="product-grid-skeleton" className={className}>

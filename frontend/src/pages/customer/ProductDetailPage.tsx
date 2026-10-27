@@ -362,12 +362,12 @@ export const ProductDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Related Products Section */}
+      {/* Related Products Section (3 Cards per Row) */}
       {relatedProducts.length > 0 && (
         <section className="space-y-6">
           <h3 className="text-xl font-bold text-slate-900">Similar Farm Vegetables</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-            {relatedProducts.map((p) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {relatedProducts.slice(0, 6).map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>

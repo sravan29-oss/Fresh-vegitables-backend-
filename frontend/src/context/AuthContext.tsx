@@ -7,8 +7,8 @@ interface AuthContextType {
   user: User | null;
   adminUser: User | null;
   isLoading: boolean;
-  login: (token: string, user: User) => void;
-  adminLogin: (token: string, user: User) => void;
+  login: (token: string, user: User, refreshToken?: string) => void;
+  adminLogin: (token: string, user: User, refreshToken?: string) => void;
   logout: () => void;
   adminLogout: () => void;
   updateUser: (user: User) => void;
@@ -64,6 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('token');
+      const refreshToken = localStorage.getItem('refresh_token');
       const adminToken = localStorage.getItem('admin_token');
 
       if (token) {
@@ -77,7 +78,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch (error: any) {
           if (error?.response?.status === 401 || error?.response?.status === 404) {
+            if (refreshToken) {
+              try {
+                const refreshRes = await api.post('/auth/refresh', { refreshToken });
+                if (refreshRes.data?.data) {
+                  const d = refreshRes.data.data;
+                  localStorage.setItem('token', d.token || d.accessToken);
+                  if (d.refreshToken) localStorage.setItem('refresh_token', d.refreshToken);
+                  if (d.user) {
+                    setUser(d.user);
+                    localStorage.setItem('user', JSON.stringify(d.user));
+                    setIsLoading(false);
+                    return;
+                  }
+                }
+              } catch {}
+            }
             localStorage.removeItem('token');
+            localStorage.removeItem('refresh_token');
             localStorage.removeItem('user');
             setUser(null);
           }
@@ -99,28 +117,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     initAuth();
+
+    const handleAuthExpired = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+      setUser(null);
+    };
+    window.addEventListener('auth:expired', handleAuthExpired);
+    return () => window.removeEventListener('auth:expired', handleAuthExpired);
   }, []);
 
-  const login = (token: string, userData: User) => {
+  const login = (token: string, userData: User, refreshToken?: string) => {
     localStorage.setItem('token', token);
+    if (refreshToken) {
+      localStorage.setItem('refresh_token', refreshToken);
+    }
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   };
 
-  const adminLogin = (token: string, adminData: User) => {
+  const adminLogin = (token: string, adminData: User, refreshToken?: string) => {
     localStorage.setItem('admin_token', token);
+    if (refreshToken) {
+      localStorage.setItem('admin_refresh_token', refreshToken);
+    }
     localStorage.setItem('admin_user', JSON.stringify(adminData));
     setAdminUser(adminData);
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
     setUser(null);
   };
 
   const adminLogout = () => {
     localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_refresh_token');
     localStorage.removeItem('admin_user');
     setAdminUser(null);
   };

@@ -213,11 +213,41 @@ export async function getOrders(req: AuthRequest, res: Response, next: NextFunct
       );
     }
 
-    // Get items for each order
+    // Get items for each order and normalize address snapshot
     const orders = await Promise.all(
       result.rows.map(async (order) => {
         const items = await fetchOrderItemsWithProducts(order.id);
-        return { ...order, items };
+        let addrSnapshot: any = {};
+        if (order.address_snapshot) {
+          try {
+            addrSnapshot = typeof order.address_snapshot === 'string'
+              ? JSON.parse(order.address_snapshot)
+              : order.address_snapshot;
+          } catch {
+            addrSnapshot = order.address_snapshot || {};
+          }
+        }
+        const fullAddr = [
+          addrSnapshot.house_number ? (String(addrSnapshot.house_number).toLowerCase().includes('flat') || String(addrSnapshot.house_number).toLowerCase().includes('house') ? addrSnapshot.house_number : `Flat/House ${addrSnapshot.house_number}`) : '',
+          addrSnapshot.street,
+          addrSnapshot.area,
+          addrSnapshot.landmark ? `Near ${addrSnapshot.landmark}` : '',
+          addrSnapshot.city || 'Hyderabad',
+          addrSnapshot.state || 'Telangana',
+          addrSnapshot.pincode ? `- ${addrSnapshot.pincode}` : '',
+        ].filter(Boolean).join(', ');
+
+        return {
+          ...order,
+          customer_name: order.customer_name || addrSnapshot.full_name || req.user?.name || 'Customer',
+          customer_mobile: order.customer_mobile || addrSnapshot.phone || req.user?.mobile || '',
+          address_snapshot: addrSnapshot,
+          delivery_address: {
+            ...addrSnapshot,
+            full_address: fullAddr || 'Hyderabad Delivery Address',
+          },
+          items,
+        };
       })
     );
 
@@ -232,18 +262,50 @@ export async function getOrderById(req: AuthRequest, res: Response, next: NextFu
     const userId = req.user!.id;
     const { id } = req.params;
 
-    const result = await db.query(
-      'SELECT * FROM orders WHERE id = $1 AND user_id = $2',
-      [id, userId]
-    );
+    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'super_admin';
+    const result = isAdmin
+      ? await db.query('SELECT * FROM orders WHERE id = $1', [id])
+      : await db.query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [id, userId]);
 
     if (result.rows.length === 0) throw new NotFoundError('Order not found');
+
+    const rawOrder = result.rows[0];
+    let addrSnapshot: any = {};
+    if (rawOrder.address_snapshot) {
+      try {
+        addrSnapshot = typeof rawOrder.address_snapshot === 'string'
+          ? JSON.parse(rawOrder.address_snapshot)
+          : rawOrder.address_snapshot;
+      } catch {
+        addrSnapshot = rawOrder.address_snapshot || {};
+      }
+    }
+
+    const customerName = addrSnapshot.full_name || rawOrder.customer_name || req.user?.name || 'Customer';
+    const customerMobile = addrSnapshot.phone || rawOrder.customer_mobile || req.user?.mobile || '';
+
+    const fullAddr = [
+      addrSnapshot.house_number ? (String(addrSnapshot.house_number).toLowerCase().includes('flat') || String(addrSnapshot.house_number).toLowerCase().includes('house') ? addrSnapshot.house_number : `Flat/House ${addrSnapshot.house_number}`) : '',
+      addrSnapshot.street,
+      addrSnapshot.area,
+      addrSnapshot.landmark ? `Near ${addrSnapshot.landmark}` : '',
+      addrSnapshot.city || 'Hyderabad',
+      addrSnapshot.state || 'Telangana',
+      addrSnapshot.pincode ? `- ${addrSnapshot.pincode}` : '',
+    ].filter(Boolean).join(', ');
 
     const items = await fetchOrderItemsWithProducts(id);
     const payments = await db.query('SELECT * FROM payments WHERE order_id = $1', [id]);
 
     sendSuccess(res, 'Order fetched', {
-      ...result.rows[0],
+      ...rawOrder,
+      customer_name: customerName,
+      customer_mobile: customerMobile,
+      address_snapshot: addrSnapshot,
+      delivery_address: {
+        ...addrSnapshot,
+        full_address: fullAddr || 'Hyderabad Delivery Address',
+      },
       items,
       payments: payments.rows,
     });
@@ -564,6 +626,33 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
         "UPDATE orders SET payment_status = 'paid' WHERE id = $1",
         [id]
       );
+    }
+
+    // Automatically create in-app notification for the customer
+    try {
+      const orderData = result.rows[0];
+      const statusTitle = `Order Update #${orderData.order_number || id.slice(0, 8)}`;
+      const statusMsg = `Your order status has been updated to: ${String(order_status || 'updated').toUpperCase()}`;
+      
+      await db.query(
+        `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id, is_read, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+        [orderData.user_id || null, statusTitle, statusMsg, 'ORDER_UPDATE', 'order', id, false]
+      );
+
+      memoryStore.notifications.unshift({
+        id: `notif_${Date.now()}`,
+        user_id: orderData.user_id || 'all',
+        title: statusTitle,
+        message: statusMsg,
+        type: 'ORDER_UPDATE',
+        reference_type: 'order',
+        reference_id: id,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+    } catch (notifErr) {
+      console.warn('Could not save order notification:', notifErr);
     }
 
     sendSuccess(res, 'Order status updated', result.rows[0]);

@@ -201,7 +201,7 @@ export const WalletPage: React.FC = () => {
             </div>
             <a
               href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                `Hey! Get ₹50 off on organic farm-fresh vegetables using my code ${referral?.referral_code || 'PRIYA50'}: http://localhost:5173`
+                `Hey! Get ₹50 off on organic farm-fresh vegetables using my code ${referral?.referral_code || 'PRIYA50'}: ${typeof window !== 'undefined' ? window.location.origin : 'https://freshvegetables.com'}`
               )}`}
               target="_blank"
               rel="noreferrer"

@@ -51,10 +51,10 @@ export const AdminCMSPage: React.FC = () => {
     quality_badge: string;
   }>({
     support_phone: '+91 8106970384',
-    support_email: 'care@freshveggies.com',
-    announcement_text: 'Same-Day Farm Delivery available for orders before 2:00 PM',
-    store_address: 'Sector 14 Central Depot, Agro Valley',
-    quality_badge: '⚡ 100% Residue-Free & Organic',
+    support_email: 'freshvegitables29@gmail.com',
+    announcement_text: 'Same-Day Farm Delivery for orders placed before 2:00 PM',
+    store_address: 'Hyderabad, Telangana',
+    quality_badge: '100% Genuine Certified Organic Harvest',
   });
 
   const [isSavingSettings, setIsSavingSettings] = useState(false);

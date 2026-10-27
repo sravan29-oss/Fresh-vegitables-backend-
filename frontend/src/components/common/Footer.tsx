@@ -10,8 +10,8 @@ export const Footer: React.FC = () => {
     store_address?: string;
   }>({
     support_phone: '+91 8106970384',
-    support_email: 'care@freshveggies.com',
-    store_address: 'Sector 14 Central Depot, Agro Valley',
+    support_email: 'freshvegitables29@gmail.com',
+    store_address: 'Hyderabad, Telangana',
   });
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export const Footer: React.FC = () => {
               <Sparkles className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-white font-bold text-sm">100% Organic & Fresh</h4>
+              <h4 className="text-white font-bold text-sm">100% Genuine &amp; Organic</h4>
               <p className="text-xs text-slate-400">Zero harmful pesticides</p>
             </div>
           </div>
@@ -84,12 +84,12 @@ export const Footer: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              We connect local chemical-free vegetable farms directly to urban kitchens. Harvested at 4:00 AM, delivered fresh by noon.
+              We connect local chemical-free vegetable farms directly to urban kitchens. Harvested fresh daily, delivered with utmost care.
             </p>
-            <div className="text-xs text-slate-400 space-y-1.5 pt-2">
+            <div className="text-xs text-slate-400 space-y-2 pt-2">
               <div className="flex items-center gap-2">
                 <MapPin className="w-3.5 h-3.5 text-brand-400 shrink-0" />
-                <span>{storeSettings.store_address || 'Sector 14 Central Depot, Agro Valley'}</span>
+                <span>{storeSettings.store_address || 'Hyderabad, Telangana'}</span>
               </div>
               <a
                 href={`tel:${(storeSettings.support_phone || '+91 8106970384').replace(/[\s-]/g, '')}`}
@@ -99,11 +99,11 @@ export const Footer: React.FC = () => {
                 <span>{storeSettings.support_phone || '+91 8106970384'}</span>
               </a>
               <a
-                href={`mailto:${storeSettings.support_email || 'care@freshveggies.com'}`}
-                className="flex items-center gap-2 hover:text-brand-300 transition-colors"
+                href={`mailto:${storeSettings.support_email || 'freshvegitables29@gmail.com'}`}
+                className="flex items-center gap-2 hover:text-brand-300 transition-colors font-semibold"
               >
                 <Mail className="w-3.5 h-3.5 text-brand-400 shrink-0" />
-                <span>{storeSettings.support_email || 'care@freshveggies.com'}</span>
+                <span>{storeSettings.support_email || 'freshvegitables29@gmail.com'}</span>
               </a>
             </div>
           </div>
@@ -124,10 +124,10 @@ export const Footer: React.FC = () => {
           <div>
             <h4 className="text-white font-semibold text-sm mb-4">Popular Categories</h4>
             <ul className="space-y-2 text-xs text-slate-400">
-              <li><Link to="/products?category=leafy-greens" className="hover:text-brand-400 transition-colors">Leafy Greens & Herbs</Link></li>
+              <li><Link to="/products?category=leafy-greens" className="hover:text-brand-400 transition-colors">Leafy Greens &amp; Herbs</Link></li>
               <li><Link to="/products?category=daily-essentials" className="hover:text-brand-400 transition-colors">Daily Essentials (Potatoes, Onions)</Link></li>
-              <li><Link to="/products?category=exotic-veggies" className="hover:text-brand-400 transition-colors">Exotics & Salads</Link></li>
-              <li><Link to="/products?category=root-vegetables" className="hover:text-brand-400 transition-colors">Roots & Gourds</Link></li>
+              <li><Link to="/products?category=exotic-veggies" className="hover:text-brand-400 transition-colors">Exotics &amp; Salads</Link></li>
+              <li><Link to="/products?category=root-vegetables" className="hover:text-brand-400 transition-colors">Roots &amp; Gourds</Link></li>
               <li><Link to="/products?category=organic-certified" className="hover:text-brand-400 transition-colors">Certified Organic</Link></li>
             </ul>
           </div>
@@ -157,9 +157,14 @@ export const Footer: React.FC = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 border-t border-slate-800 text-center text-xs text-slate-500">
-        © {new Date().getFullYear()} Fresh Vegetables Marketplace. All rights reserved.
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+        <p>© 2026 Fresh Vegetables Marketplace. All rights reserved.</p>
+        <div className="flex items-center gap-2 text-emerald-400 font-semibold bg-emerald-950/60 border border-emerald-500/30 px-3.5 py-1.5 rounded-full shadow-xs">
+          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>EST. 2026 • 100% Genuine Certified Organic • Hyderabad, Telangana</span>
+        </div>
       </div>
     </footer>
   );
 };
+

@@ -30,8 +30,8 @@ export const env = {
   // JWT
   JWT_SECRET: process.env.JWT_SECRET || 'dev-secret',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '1d',
-  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '30d',
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '365d',
 
   // Server
   PORT: parseInt(process.env.PORT || '3000'),
@@ -46,4 +46,10 @@ export const env = {
 
   // Maps
   GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY || '',
+
+  // Meta WhatsApp Cloud API (Backend only)
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || '',
+  WHATSAPP_APP_SECRET: process.env.WHATSAPP_APP_SECRET || '',
+  WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+  WHATSAPP_BUSINESS_ACCOUNT_ID: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
 };

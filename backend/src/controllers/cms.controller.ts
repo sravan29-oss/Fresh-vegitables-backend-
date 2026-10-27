@@ -418,10 +418,10 @@ export async function getStoreSettings(req: Request, res: Response, next: NextFu
       CREATE TABLE IF NOT EXISTS store_settings (
         id VARCHAR(50) PRIMARY KEY DEFAULT 'global_store_settings',
         support_phone VARCHAR(50) DEFAULT '+91 8106970384',
-        support_email VARCHAR(100) DEFAULT 'care@freshveggies.com',
-        announcement_text VARCHAR(255) DEFAULT 'Same-Day Farm Delivery available for orders before 2:00 PM',
-        store_address VARCHAR(255) DEFAULT 'Sector 14 Central Depot, Agro Valley',
-        quality_badge VARCHAR(100) DEFAULT '⚡ 100% Residue-Free & Organic',
+        support_email VARCHAR(100) DEFAULT 'freshvegitables29@gmail.com',
+        announcement_text VARCHAR(255) DEFAULT 'Same-Day Farm Delivery for orders placed before 2:00 PM',
+        store_address VARCHAR(255) DEFAULT 'Hyderabad, Telangana',
+        quality_badge VARCHAR(100) DEFAULT '100% Genuine Certified Organic Harvest',
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
@@ -430,9 +430,28 @@ export async function getStoreSettings(req: Request, res: Response, next: NextFu
     if (result.rows.length === 0) {
       result = await db.query(`
         INSERT INTO store_settings (id, support_phone, support_email, announcement_text, store_address, quality_badge)
-        VALUES ('global_store_settings', '+91 8106970384', 'care@freshveggies.com', 'Same-Day Farm Delivery available for orders before 2:00 PM', 'Sector 14 Central Depot, Agro Valley', '⚡ 100% Residue-Free & Organic')
+        VALUES ('global_store_settings', '+91 8106970384', 'freshvegitables29@gmail.com', 'Same-Day Farm Delivery for orders placed before 2:00 PM', 'Hyderabad, Telangana', '100% Genuine Certified Organic Harvest')
         RETURNING *
       `);
+    } else {
+      // Auto-migrate legacy default values to real Hyderabad, Telangana address & genuine email
+      const row = result.rows[0];
+      if (
+        row.support_email === 'care@freshveggies.com' ||
+        !row.store_address ||
+        row.store_address.includes('Sector 14') ||
+        row.store_address.includes('Agro Valley')
+      ) {
+        result = await db.query(`
+          UPDATE store_settings
+          SET support_email = 'freshvegitables29@gmail.com',
+              store_address = 'Hyderabad, Telangana',
+              quality_badge = '100% Genuine Certified Organic Harvest',
+              updated_at = NOW()
+          WHERE id = 'global_store_settings'
+          RETURNING *
+        `);
+      }
     }
 
     sendSuccess(res, 'Store settings fetched', result.rows[0]);
@@ -457,10 +476,10 @@ export async function updateStoreSettings(req: Request, res: Response, next: Nex
       RETURNING *
     `, [
       support_phone || '+91 8106970384',
-      support_email || 'care@freshveggies.com',
-      announcement_text || 'Same-Day Farm Delivery available for orders before 2:00 PM',
-      store_address || 'Sector 14 Central Depot, Agro Valley',
-      quality_badge || '⚡ 100% Residue-Free & Organic'
+      support_email || 'freshvegitables29@gmail.com',
+      announcement_text || 'Same-Day Farm Delivery for orders placed before 2:00 PM',
+      store_address || 'Hyderabad, Telangana',
+      quality_badge || '100% Genuine Certified Organic Harvest'
     ]);
 
     sendSuccess(res, 'Store settings updated', result.rows[0]);
@@ -468,4 +487,5 @@ export async function updateStoreSettings(req: Request, res: Response, next: Nex
     next(error);
   }
 }
+
 

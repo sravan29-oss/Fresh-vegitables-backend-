@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import db from '../config/database';
 import { env } from '../config/env';
 import { AuthRequest, generateTokens } from '../middleware/auth';
@@ -183,3 +184,70 @@ export async function adminLogin(req: Request, res: Response, next: NextFunction
     next(error);
   }
 }
+
+export async function refreshToken(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawToken = req.body?.refreshToken || req.body?.token || (req.headers['x-refresh-token'] as string);
+    if (!rawToken || typeof rawToken !== 'string') {
+      throw new UnauthorizedError('Refresh token required');
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(rawToken, env.JWT_REFRESH_SECRET);
+    } catch {
+      try {
+        decoded = jwt.verify(rawToken, env.JWT_SECRET);
+      } catch {
+        throw new UnauthorizedError('Invalid or expired session');
+      }
+    }
+
+    const userId = decoded.id;
+    let userRow: any = null;
+    let role: 'customer' | 'admin' | 'super_admin' = (decoded.role as any) || 'customer';
+
+    try {
+      const userRes = await db.query('SELECT id, name, email, mobile, status FROM users WHERE id = $1', [userId]);
+      if (userRes.rows.length > 0) {
+        userRow = userRes.rows[0];
+        role = 'customer';
+      }
+    } catch {}
+
+    if (!userRow) {
+      try {
+        const adminRes = await db.query('SELECT id, name, email, role, status FROM admins WHERE id = $1', [userId]);
+        if (adminRes.rows.length > 0) {
+          userRow = adminRes.rows[0];
+          role = (userRow.role as any) || 'admin';
+        }
+      } catch {}
+    }
+
+    if (!userRow) {
+      userRow = { id: userId, name: decoded.name || 'User', email: decoded.email, role };
+    }
+
+    if (userRow.status && userRow.status !== 'active') {
+      throw new UnauthorizedError('Account is not active');
+    }
+
+    const tokens = generateTokens({
+      id: userRow.id,
+      email: userRow.email,
+      mobile: userRow.mobile,
+      name: userRow.name,
+      role,
+    });
+
+    sendSuccess(res, 'Session token refreshed', {
+      user: { id: userRow.id, name: userRow.name, email: userRow.email, mobile: userRow.mobile, role },
+      token: tokens.accessToken,
+      ...tokens,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

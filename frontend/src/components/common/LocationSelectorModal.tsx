@@ -12,21 +12,32 @@ import {
   Loader2,
   ChevronRight,
   Sparkles,
+  ShieldCheck,
+  Compass,
+  CheckCircle2,
 } from 'lucide-react';
 import api from '../../services/api';
 import { DeliveryZone } from '../../types';
+import {
+  InteractiveLocationMap,
+  AddressDetails,
+} from './InteractiveLocationMap';
+import {
+  HYDERABAD_COLONIES,
+  HyderabadArea,
+} from '../../data/hyderabadColonies';
 
 interface LocationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onZoneSelected?: (zone: DeliveryZone) => void;
+  onZoneSelected?: (zone: DeliveryZone, colonyName?: string) => void;
 }
 
 const DEFAULT_ZONES: DeliveryZone[] = [
   {
     id: 'zone-kphb',
     name: 'Kukatpally & KPHB Zone',
-    pincodes: ['500072', '500085', '500090', '500018'],
+    pincodes: ['500072', '500085', '500090', '500018', '500038'],
     delivery_radius_km: 8.5,
     delivery_fee: 20.0,
     min_order_amount: 199.0,
@@ -39,12 +50,12 @@ const DEFAULT_ZONES: DeliveryZone[] = [
   {
     id: 'zone-hitech',
     name: 'Hitech City, Madhapur & Gachibowli',
-    pincodes: ['500081', '500032', '500084', '500046'],
+    pincodes: ['500081', '500032', '500084', '500046', '500033', '500034', '500089'],
     delivery_radius_km: 10.0,
     delivery_fee: 25.0,
     min_order_amount: 199.0,
     free_delivery_threshold: 499.0,
-    estimated_delivery_time: '30–40 mins',
+    estimated_delivery_time: '25–35 mins',
     status: 'ACTIVE',
     latitude: 17.4474,
     longitude: 78.3762,
@@ -52,29 +63,30 @@ const DEFAULT_ZONES: DeliveryZone[] = [
   {
     id: 'zone-miyapur',
     name: 'Miyapur, Chandanagar & BHEL',
-    pincodes: ['500049', '500050', '500019'],
+    pincodes: ['500049', '500050', '500019', '502032'],
     delivery_radius_km: 9.0,
     delivery_fee: 25.0,
     min_order_amount: 249.0,
     free_delivery_threshold: 549.0,
-    estimated_delivery_time: '35–45 mins',
+    estimated_delivery_time: '30–40 mins',
     status: 'ACTIVE',
     latitude: 17.4968,
     longitude: 78.3547,
   },
-  {
-    id: 'zone-ahmedabad',
-    name: 'Ahmedabad Central & Navrangpura',
-    pincodes: ['380009', '380015', '380006', '380054'],
-    delivery_radius_km: 12.0,
-    delivery_fee: 30.0,
-    min_order_amount: 299.0,
-    free_delivery_threshold: 599.0,
-    estimated_delivery_time: '30–40 mins',
-    status: 'ACTIVE',
-    latitude: 23.0373,
-    longitude: 72.5613,
-  },
+];
+
+// Highlighted popular Hyderabad quick-picker colonies
+const POPULAR_QUICK_COLONIES = [
+  'KPHB Colony Phase 1',
+  'KPHB Colony Phase 3 & 4',
+  'Hitech City (Cyber Towers)',
+  'Madhapur Main Road',
+  'Gachibowli (DLF Cyber City)',
+  'Kondapur (Silpa Park & RTO)',
+  'Jubilee Hills Road No 36',
+  'Miyapur Metro Station & Allwyn',
+  'Banjara Hills Road No 12',
+  'Pragathi Nagar',
 ];
 
 export const LocationSelectorModal: React.FC<LocationModalProps> = ({
@@ -82,20 +94,25 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
   onClose,
   onZoneSelected,
 }) => {
-  const [pincodeInput, setPincodeInput] = useState('');
   const [zones, setZones] = useState<DeliveryZone[]>(DEFAULT_ZONES);
   const [selectedZone, setSelectedZone] = useState<DeliveryZone | null>(null);
+  const [selectedColony, setSelectedColony] = useState<string>('KPHB Phase 1');
+  const [selectedAddress, setSelectedAddress] = useState<string>(
+    'Phase 1, KPHB Main Road, Hyderabad - 500072'
+  );
+  const [currentCoords, setCurrentCoords] = useState<[number, number]>([
+    17.4938, 78.3995,
+  ]);
+  const [pincodeInput, setPincodeInput] = useState('');
+  const [isCheckingPincode, setIsCheckingPincode] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
-  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      // Prevent background body scrolling when modal is open
       document.body.style.overflow = 'hidden';
 
-      // Load active delivery zones from backend
+      // Fetch active delivery zones
       api
         .get('/zones/active')
         .then((res) => {
@@ -105,12 +122,25 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
         })
         .catch(() => {});
 
-      const saved = localStorage.getItem('fresh_delivery_zone');
-      if (saved) {
+      // Load cached delivery preferences
+      const savedZone = localStorage.getItem('fresh_delivery_zone');
+      const savedColony = localStorage.getItem('fresh_delivery_colony');
+      const savedAddr = localStorage.getItem('fresh_delivery_address');
+
+      if (savedZone) {
         try {
-          setSelectedZone(JSON.parse(saved));
+          const parsed = JSON.parse(savedZone);
+          setSelectedZone(parsed);
+          if (parsed.latitude && parsed.longitude) {
+            setCurrentCoords([parsed.latitude, parsed.longitude]);
+          }
         } catch (e) {}
+      } else {
+        setSelectedZone(DEFAULT_ZONES[0]);
       }
+
+      if (savedColony) setSelectedColony(savedColony);
+      if (savedAddr) setSelectedAddress(savedAddr);
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -120,125 +150,112 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
     };
   }, [isOpen]);
 
-  // Close on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  const selectZone = (zone: DeliveryZone, message?: string) => {
-    setSelectedZone(zone);
-    localStorage.setItem('fresh_delivery_zone', JSON.stringify(zone));
-    if (onZoneSelected) onZoneSelected(zone);
-    if (message) {
-      setSuccessMsg(message);
-      setTimeout(() => {
-        setSuccessMsg(null);
-        onClose();
-      }, 700);
-    } else {
-      setTimeout(() => onClose(), 400);
-    }
-  };
-
-  // GPS Current Location Detection
-  const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setErrorMsg('Geolocation is not supported by your browser.');
-      return;
-    }
-
-    setIsDetectingLocation(true);
+  // Handle location change from interactive map
+  const handleMapPositionChange = (
+    lat: number,
+    lng: number,
+    details?: AddressDetails
+  ) => {
+    setCurrentCoords([lat, lng]);
     setErrorMsg(null);
-    setSuccessMsg(null);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setIsDetectingLocation(false);
-        const { latitude, longitude } = position.coords;
+    if (details) {
+      if (details.colony) setSelectedColony(details.colony);
+      if (details.fullAddress) setSelectedAddress(details.fullAddress);
+      if (details.pincode) setPincodeInput(details.pincode);
 
-        // Calculate closest zone using Haversine distance
-        const R = 6371; // km
-        const toRad = (d: number) => (d * Math.PI) / 180;
-        let bestZone = zones[0] || DEFAULT_ZONES[0];
-        let minDistance = Infinity;
-
-        for (const zone of zones) {
-          if (zone.latitude && zone.longitude) {
-            const dLat = toRad(zone.latitude - latitude);
-            const dLng = toRad(zone.longitude - longitude);
-            const a =
-              Math.sin(dLat / 2) ** 2 +
-              Math.cos(toRad(latitude)) * Math.cos(toRad(zone.latitude)) * Math.sin(dLng / 2) ** 2;
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            const distance = R * c;
-
-            if (distance < minDistance) {
-              minDistance = distance;
-              bestZone = zone;
-            }
-          }
-        }
-
-        selectZone(bestZone, `GPS Located! Selected ${bestZone.name}`);
-      },
-      (err) => {
-        setIsDetectingLocation(false);
-        if (err.code === err.PERMISSION_DENIED) {
-          setErrorMsg('Location permission denied. Please enter your pincode or choose your area below.');
-        } else if (err.code === err.TIMEOUT) {
-          // Fallback to primary express hub
-          selectZone(DEFAULT_ZONES[1], 'Auto-selected express delivery hub (Hitech City)');
-        } else {
-          // Fallback gracefully
-          selectZone(DEFAULT_ZONES[1], 'Auto-selected express delivery hub');
-        }
-      },
-      {
-        timeout: 9000,
-        enableHighAccuracy: true,
+      if (details.matchedZone) {
+        setSelectedZone(details.matchedZone);
       }
-    );
+    }
   };
 
-  const handleCheckPincode = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  // Quick picker click
+  const handleQuickColonyClick = (colonyName: string) => {
+    const found = HYDERABAD_COLONIES.find((c) => c.name === colonyName);
+    if (found) {
+      setCurrentCoords([found.lat, found.lng]);
+      setSelectedColony(found.colony);
+      setSelectedAddress(`${found.colony}, Hyderabad - ${found.pincode}`);
+      setPincodeInput(found.pincode);
+
+      const matched = zones.find(
+        (z) => z.id === found.zoneId || (Array.isArray(z.pincodes) && z.pincodes.includes(found.pincode))
+      ) || zones[0];
+
+      setSelectedZone(matched);
+      setErrorMsg(null);
+    }
+  };
+
+  // Direct Pincode Search
+  const handlePincodeSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!pincodeInput.trim()) return;
 
     try {
-      setIsChecking(true);
+      setIsCheckingPincode(true);
       setErrorMsg(null);
       setSuccessMsg(null);
-      const res = await api.post('/zones/check-pincode', { pincode: pincodeInput.trim() });
+
+      const res = await api.post('/zones/check-pincode', {
+        pincode: pincodeInput.trim(),
+      });
       const data = res.data?.data;
 
       if (data?.serviceable && data?.zone) {
-        selectZone(data.zone, `Pincode ${pincodeInput.trim()} serviceable! Zone: ${data.zone.name}`);
+        setSelectedZone(data.zone);
+        if (data.zone.latitude && data.zone.longitude) {
+          setCurrentCoords([data.zone.latitude, data.zone.longitude]);
+        }
+        setSuccessMsg(`Pincode ${pincodeInput} is serviceable!`);
       } else {
-        setErrorMsg(data?.message || `Pincode ${pincodeInput.trim()} is outside our current express zone.`);
+        // Fallback local check
+        const local = zones.find(
+          (z) => Array.isArray(z.pincodes) && z.pincodes.includes(pincodeInput.trim())
+        );
+        if (local) {
+          setSelectedZone(local);
+          setSuccessMsg(`Pincode matched: ${local.name}`);
+        } else {
+          setErrorMsg(
+            data?.message || `Pincode ${pincodeInput} is outside current express zone.`
+          );
+        }
       }
     } catch (err: any) {
-      // Local fallback lookup
-      const found = zones.find((z) => z.pincodes.includes(pincodeInput.trim()));
-      if (found) {
-        selectZone(found, `Pincode found in ${found.name}!`);
+      const local = zones.find(
+        (z) => Array.isArray(z.pincodes) && z.pincodes.includes(pincodeInput.trim())
+      );
+      if (local) {
+        setSelectedZone(local);
       } else {
-        setErrorMsg(err.response?.data?.message || 'Pincode not currently serviceable. Expanding soon!');
+        setErrorMsg('Pincode not currently serviceable. Expanding to your area soon!');
       }
     } finally {
-      setIsChecking(false);
+      setIsCheckingPincode(false);
     }
+  };
+
+  // Final Confirmation
+  const handleConfirmLocation = () => {
+    const finalZone = selectedZone || DEFAULT_ZONES[0];
+    localStorage.setItem('fresh_delivery_zone', JSON.stringify(finalZone));
+    localStorage.setItem('fresh_delivery_colony', selectedColony);
+    localStorage.setItem('fresh_delivery_address', selectedAddress);
+
+    if (onZoneSelected) {
+      onZoneSelected(finalZone, selectedColony);
+    }
+
+    setSuccessMsg(`Delivering to ${selectedColony}!`);
+    setTimeout(() => {
+      onClose();
+    }, 450);
   };
 
   if (!isOpen) return null;
 
-  // Use createPortal to mount directly on document.body so that header backdrop-filter
-  // never clips or traps the modal viewport position.
   return createPortal(
     <div
       role="dialog"
@@ -246,174 +263,191 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto"
       style={{ minHeight: '100vh', width: '100vw' }}
     >
       <div
-        className="bg-slate-900 border border-slate-700/80 text-white w-full max-w-lg rounded-3xl p-6 shadow-2xl relative space-y-5 my-auto max-h-[92vh] overflow-y-auto"
+        className="bg-[#05180f] border border-emerald-500/40 text-white w-full max-w-4xl rounded-3xl p-5 sm:p-6 shadow-[0_25px_80px_rgba(0,0,0,0.9)] relative space-y-4 my-auto max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header with Title and Close Button */}
-        <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
+        {/* Header with Title, Live Status and Close Button */}
+        <div className="flex items-center justify-between pb-3.5 border-b border-emerald-500/20">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-brand-500/20 text-brand-400 border border-brand-500/30 flex items-center justify-center shadow-inner">
-              <MapPin className="w-6 h-6" />
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-inner">
+              <MapPin className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h3 className="font-extrabold text-white text-lg tracking-tight">Select Delivery Location</h3>
-              <p className="text-xs text-slate-400">Accurate delivery fees, express farm store & live ETA</p>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-white text-base sm:text-lg tracking-tight">
+                  Choose Exact Delivery Colony &amp; Area
+                </h3>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Hyderabad Live Maps
+                </span>
+              </div>
+              <p className="text-xs text-emerald-200/60 mt-0.5">
+                Search or move pin to your building, colony, or road for fast 30-min farm delivery
+              </p>
             </div>
           </div>
           <button
             onClick={onClose}
             aria-label="Close location selector"
-            className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all shadow-sm"
+            className="w-9 h-9 rounded-full bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 hover:text-white flex items-center justify-center transition-all border border-emerald-500/30 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* PROMINENT "USE CURRENT LOCATION" BUTTON */}
-        <button
-          type="button"
-          onClick={handleUseCurrentLocation}
-          disabled={isDetectingLocation}
-          className="w-full flex items-center justify-between p-3.5 bg-gradient-to-r from-brand-600/25 via-emerald-600/20 to-slate-800/40 hover:from-brand-600/35 hover:via-emerald-600/30 border border-brand-500/50 hover:border-brand-400 rounded-2xl group transition-all shadow-md shadow-brand-500/10 cursor-pointer"
-        >
-          <div className="flex items-center gap-3.5 text-left">
-            <div className="w-11 h-11 rounded-xl bg-brand-500 text-slate-950 flex items-center justify-center shadow-lg shadow-brand-500/30 group-hover:scale-105 transition-transform flex-shrink-0 font-bold">
-              {isDetectingLocation ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Navigation className="w-5 h-5 fill-current" />
-              )}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-sm text-white group-hover:text-brand-300 transition-colors">
-                  Use Current Location
-                </span>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  GPS Detect
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                {isDetectingLocation ? 'Detecting your coordinates...' : 'Pinpoint nearest farm hub & fastest ETA'}
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-white group-hover:translate-x-1 transition-all flex-shrink-0" />
-        </button>
-
-        {/* Divider */}
-        <div className="relative flex items-center justify-center">
-          <div className="border-t border-slate-800 w-full"></div>
-          <span className="bg-slate-900 px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider absolute">
-            or enter pincode
-          </span>
-        </div>
-
-        {/* Pincode Search Input */}
-        <form onSubmit={handleCheckPincode} className="space-y-2">
-          <div className="relative flex items-center">
-            <input
-              type="text"
-              value={pincodeInput}
-              onChange={(e) => setPincodeInput(e.target.value)}
-              placeholder="e.g. 500081, 500072, 500049..."
-              maxLength={6}
-              className="w-full bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-2xl pl-4 pr-28 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all font-mono"
-            />
-            <button
-              type="submit"
-              disabled={isChecking}
-              className="absolute right-1.5 bg-brand-500 hover:bg-brand-400 text-slate-950 text-xs font-black px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-brand-500/20 disabled:opacity-50 cursor-pointer"
-            >
-              {isChecking ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Checking...</span>
-                </>
-              ) : (
-                <>
-                  <Search className="w-3.5 h-3.5" />
-                  <span>Check</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {errorMsg && (
-            <div className="flex items-center gap-2 text-rose-400 text-xs pt-1 px-1">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          {successMsg && (
-            <div className="flex items-center gap-2 text-emerald-400 text-xs pt-1 px-1 font-bold">
-              <Check className="w-4 h-4 flex-shrink-0" />
-              <span>{successMsg}</span>
-            </div>
-          )}
-        </form>
-
-        {/* Selected Zone Pill if set */}
-        {selectedZone && (
-          <div className="p-3.5 bg-brand-500/10 border border-brand-500/35 rounded-2xl flex items-center justify-between shadow-inner">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] uppercase font-black text-brand-400 tracking-wider">
-                  Currently Selected Zone
-                </span>
-                <Sparkles className="w-3 h-3 text-brand-400" />
-              </div>
-              <p className="text-sm font-black text-white">{selectedZone.name}</p>
-              <p className="text-xs text-brand-200">
-                Delivery: ₹{selectedZone.delivery_fee} • Free on ₹{selectedZone.free_delivery_threshold}+ • ETA: {selectedZone.estimated_delivery_time}
-              </p>
-            </div>
-            <div className="w-8 h-8 rounded-full bg-brand-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-brand-500/30 flex-shrink-0">
-              <Check className="w-5 h-5 stroke-[2.5]" />
-            </div>
-          </div>
-        )}
-
-        {/* Available Popular Zones List */}
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
-              Popular Delivery Zones
+        {/* Quick Hyderabad Colony Chips Carousel */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-emerald-400/80 font-bold uppercase tracking-wider">
+            <span className="flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5" />
+              Quick Select Popular Colonies
             </span>
-            <span className="text-[11px] text-slate-500">Fast 30-min express fulfillment</span>
+            <span className="text-[10px] text-emerald-200/50 lowercase">tap any area to pinpoint</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
-            {zones.map((zone) => {
-              const isSelected = selectedZone?.id === zone.id;
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
+            {POPULAR_QUICK_COLONIES.map((colName) => {
+              const isSelected = selectedColony.toLowerCase().includes(colName.toLowerCase().split(' ')[0]);
               return (
                 <button
-                  key={zone.id}
-                  onClick={() => selectZone(zone, `Selected ${zone.name}`)}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                  key={colName}
+                  type="button"
+                  onClick={() => handleQuickColonyClick(colName)}
+                  className={`h-7 px-3 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
                     isSelected
-                      ? 'bg-brand-500/20 border-brand-400 text-white shadow-md shadow-brand-500/10 ring-1 ring-brand-400/50'
-                      : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-950'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md font-black ring-2 ring-emerald-400'
+                      : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-500/25'
                   }`}
                 >
-                  <p className="font-bold text-xs text-white leading-tight">{zone.name}</p>
-                  <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400">
-                    <span className="flex items-center gap-1 font-semibold text-brand-300">
-                      <Truck className="w-3 h-3 text-brand-400" /> ₹{zone.delivery_fee}
-                    </span>
-                    <span className="flex items-center gap-1 font-semibold text-emerald-300">
-                      <Clock className="w-3 h-3 text-emerald-400" /> {zone.estimated_delivery_time}
-                    </span>
-                  </div>
+                  <MapPin className="w-3 h-3 text-emerald-400" />
+                  <span>{colName}</span>
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* ─── Interactive Map & Details Split Container ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          
+          {/* Interactive Map Section (7 cols on desktop) */}
+          <div className="lg:col-span-7 space-y-2">
+            <InteractiveLocationMap
+              initialCenter={currentCoords}
+              markerPosition={currentCoords}
+              onPositionChange={handleMapPositionChange}
+              zones={zones}
+              selectedZoneId={selectedZone?.id}
+              height="350px"
+              showSearchBar={true}
+              showDetectLocationBtn={true}
+              placeholder="Search colony (e.g. KPHB, Madhapur, DLF Gachibowli, Kondapur...)"
+            />
+          </div>
+
+          {/* Right Sidebar: Location Intel & Confirmation (5 cols on desktop) */}
+          <div className="lg:col-span-5 space-y-3.5 flex flex-col justify-between">
+            
+            {/* Selected Location Card */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/60 to-[#071f14] border border-emerald-500/35 space-y-2 shadow-inner">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  Exact Delivery Area
+                </span>
+                <span className="text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  {pincodeInput || '500072'}
+                </span>
+              </div>
+
+              <div>
+                <h4 className="text-base font-extrabold text-white leading-snug">
+                  {selectedColony || 'KPHB Colony Phase 1'}
+                </h4>
+                <p className="text-xs text-emerald-200/70 mt-0.5 line-clamp-2">
+                  {selectedAddress || 'Phase 1, KPHB Main Road, Hyderabad'}
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{selectedZone?.estimated_delivery_time || '25–35 mins'}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                  <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>₹{selectedZone?.delivery_fee || 20} Delivery</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Matched Zone Badge & Policy */}
+            <div className="p-3.5 rounded-2xl bg-[#04150c] border border-emerald-500/25 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Assigned Hub Zone:</span>
+                <span className="font-extrabold text-white">{selectedZone?.name || 'Kukatpally & KPHB Zone'}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Free Delivery Above:</span>
+                <span className="font-bold text-emerald-300">₹{selectedZone?.free_delivery_threshold || 499}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Min Order Requirement:</span>
+                <span className="font-bold text-slate-300">₹{selectedZone?.min_order_amount || 199}</span>
+              </div>
+            </div>
+
+            {/* Direct Pincode Lookup Fallback */}
+            <form onSubmit={handlePincodeSearch} className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-400/80">
+                Or Verify by Hyderabad Pincode
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="e.g. 500072, 500081, 500049"
+                  value={pincodeInput}
+                  onChange={(e) => setPincodeInput(e.target.value)}
+                  className="w-full h-9 pl-3 pr-20 text-xs bg-[#04150c] border border-emerald-500/25 rounded-xl text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+                />
+                <button
+                  type="submit"
+                  disabled={isCheckingPincode}
+                  className="absolute right-1 h-7 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
+                >
+                  {isCheckingPincode ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Check'}
+                </button>
+              </div>
+
+              {errorMsg && (
+                <p className="text-[11px] text-rose-400 flex items-center gap-1 pt-0.5">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  <span>{errorMsg}</span>
+                </p>
+              )}
+              {successMsg && (
+                <p className="text-[11px] text-emerald-300 font-bold flex items-center gap-1 pt-0.5">
+                  <Check className="w-3 h-3 shrink-0" />
+                  <span>{successMsg}</span>
+                </p>
+              )}
+            </form>
+
+            {/* Primary Confirm CTA Button */}
+            <button
+              type="button"
+              onClick={handleConfirmLocation}
+              className="w-full h-12 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-[0_6px_25px_rgba(16,185,129,0.4)] transition-all cursor-pointer active:scale-98"
+            >
+              <Check className="w-4.5 h-4.5 stroke-[2.5]" />
+              <span>Confirm &amp; Deliver to {selectedColony.split(',')[0]}</span>
+            </button>
           </div>
         </div>
       </div>

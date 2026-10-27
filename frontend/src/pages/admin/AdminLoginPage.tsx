@@ -21,8 +21,8 @@ export const AdminLoginPage: React.FC = () => {
 
       const res = await api.post('/auth/admin/login', { email, password });
       if (res.data?.data) {
-        const { token, accessToken, user } = res.data.data;
-        adminLogin(accessToken || token, user);
+        const { token, accessToken, user, refreshToken } = res.data.data;
+        adminLogin(accessToken || token, user, refreshToken);
         showLoginSuccess(user, true, () => {
           navigate('/admin');
         });

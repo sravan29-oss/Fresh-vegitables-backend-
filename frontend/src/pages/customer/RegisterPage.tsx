@@ -25,8 +25,8 @@ export const RegisterPage: React.FC = () => {
 
       const res = await api.post('/auth/register', { name, email, mobile, password });
       if (res.data?.data) {
-        const { token, user } = res.data.data;
-        login(token, user);
+        const { token, accessToken, user, refreshToken } = res.data.data;
+        login(accessToken || token, user, refreshToken);
         showLoginSuccess(user, false, () => {
           navigate(redirect);
         });

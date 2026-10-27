@@ -17,10 +17,32 @@ import {
   Zap,
   Info,
   RefreshCw,
+  Sparkles,
+  X,
+  Crosshair,
+  Compass,
+  CheckCircle2,
+  Navigation,
 } from 'lucide-react';
 import api from '../../services/api';
 import { DeliveryZone, Store, DeliverySettings } from '../../types';
 import { useCart } from '../../context/CartContext';
+import { notifyLiveUpdate } from '../../services/liveSync';
+import {
+  InteractiveLocationMap,
+  AddressDetails,
+} from '../../components/common/InteractiveLocationMap';
+
+const HYDERABAD_ZONE_PRESETS = [
+  { label: 'KPHB Phase 1–4', name: 'KPHB Colony & Kukatpally Zone', colony: 'KPHB Colony', pincode: '500072', lat: 17.4938, lng: 78.3995, radius: 8.5 },
+  { label: 'Madhapur & Hitech', name: 'Madhapur & Cyber Towers Zone', colony: 'Madhapur', pincode: '500081', lat: 17.4474, lng: 78.3762, radius: 10.0 },
+  { label: 'Gachibowli DLF', name: 'Gachibowli & Financial District Zone', colony: 'Gachibowli', pincode: '500032', lat: 17.4401, lng: 78.3489, radius: 10.0 },
+  { label: 'Kondapur & Botanical', name: 'Kondapur & Silpa Park Zone', colony: 'Kondapur', pincode: '500084', lat: 17.4682, lng: 78.3639, radius: 8.0 },
+  { label: 'Jubilee Hills Rd 36', name: 'Jubilee Hills & Film Nagar Zone', colony: 'Jubilee Hills', pincode: '500033', lat: 17.4319, lng: 78.4073, radius: 9.0 },
+  { label: 'Banjara Hills Rd 12', name: 'Banjara Hills & Panjagutta Zone', colony: 'Banjara Hills', pincode: '500034', lat: 17.4156, lng: 78.4357, radius: 8.5 },
+  { label: 'Miyapur & Allwyn', name: 'Miyapur, Chandanagar & BHEL Zone', colony: 'Miyapur', pincode: '500049', lat: 17.4968, lng: 78.3547, radius: 9.0 },
+  { label: 'Pragathi Nagar', name: 'Pragathi Nagar & JNTU Zone', colony: 'Pragathi Nagar', pincode: '500090', lat: 17.5142, lng: 78.3887, radius: 7.5 },
+];
 
 export const AdminZonesPage: React.FC = () => {
   const { fetchDeliverySettings: syncCartDeliverySettings } = useCart();
@@ -54,44 +76,21 @@ export const AdminZonesPage: React.FC = () => {
       surge_charge: 0,
     };
   });
-
-  // String-based input states so typing and backspacing are silky smooth
-  const [chargeInput, setChargeInput] = useState<string>(() => String(deliverySettings.default_delivery_charge));
-  const [thresholdInput, setThresholdInput] = useState<string>(() => String(deliverySettings.free_delivery_threshold));
-  const [minOrderInput, setMinOrderInput] = useState<string>(() => String(deliverySettings.min_order_amount));
-  const [expressFeeInput, setExpressFeeInput] = useState<string>(() => String(deliverySettings.express_delivery_fee));
-  const [surgeInput, setSurgeInput] = useState<string>(() => String(deliverySettings.surge_charge || 0));
-  const [etaInput, setEtaInput] = useState<string>(() => deliverySettings.estimated_delivery_time || '25–35 mins');
-  const [enableFreeDelivery, setEnableFreeDelivery] = useState<boolean>(() => deliverySettings.enable_free_delivery !== false);
-  const [isDeliveryActive, setIsDeliveryActive] = useState<boolean>(() => deliverySettings.is_delivery_active !== false);
-
-  // Dynamic effective values for calculations & live simulation
-  const effectiveCharge = chargeInput === '' ? 0 : Math.max(0, Number(chargeInput));
-  const effectiveThreshold = thresholdInput === '' ? 0 : Math.max(0, Number(thresholdInput));
-  const effectiveMinOrder = minOrderInput === '' ? 0 : Math.max(0, Number(minOrderInput));
-  const effectiveExpressFee = expressFeeInput === '' ? 0 : Math.max(0, Number(expressFeeInput));
-  const effectiveSurge = surgeInput === '' ? 0 : Math.max(0, Number(surgeInput));
+  const [savedSettings, setSavedSettings] = useState<DeliverySettings>(deliverySettings);
 
   // Determine if draft inputs have unsaved changes
   const isDirty =
-    chargeInput !== String(deliverySettings.default_delivery_charge) ||
-    thresholdInput !== String(deliverySettings.free_delivery_threshold) ||
-    minOrderInput !== String(deliverySettings.min_order_amount) ||
-    expressFeeInput !== String(deliverySettings.express_delivery_fee) ||
-    surgeInput !== String(deliverySettings.surge_charge || 0) ||
-    etaInput.trim() !== String(deliverySettings.estimated_delivery_time || '').trim() ||
-    enableFreeDelivery !== deliverySettings.enable_free_delivery ||
-    isDeliveryActive !== deliverySettings.is_delivery_active;
+    Number(deliverySettings.default_delivery_charge) !== Number(savedSettings.default_delivery_charge) ||
+    Number(deliverySettings.free_delivery_threshold) !== Number(savedSettings.free_delivery_threshold) ||
+    Number(deliverySettings.min_order_amount) !== Number(savedSettings.min_order_amount) ||
+    Number(deliverySettings.express_delivery_fee) !== Number(savedSettings.express_delivery_fee) ||
+    Number(deliverySettings.surge_charge) !== Number(savedSettings.surge_charge) ||
+    String(deliverySettings.estimated_delivery_time || '').trim() !== String(savedSettings.estimated_delivery_time || '').trim() ||
+    Boolean(deliverySettings.enable_free_delivery) !== Boolean(savedSettings.enable_free_delivery) ||
+    Boolean(deliverySettings.is_delivery_active) !== Boolean(savedSettings.is_delivery_active);
 
   const handleResetSettings = () => {
-    setChargeInput(String(deliverySettings.default_delivery_charge));
-    setThresholdInput(String(deliverySettings.free_delivery_threshold));
-    setMinOrderInput(String(deliverySettings.min_order_amount));
-    setExpressFeeInput(String(deliverySettings.express_delivery_fee));
-    setSurgeInput(String(deliverySettings.surge_charge || 0));
-    setEtaInput(deliverySettings.estimated_delivery_time || '25–35 mins');
-    setEnableFreeDelivery(deliverySettings.enable_free_delivery !== false);
-    setIsDeliveryActive(deliverySettings.is_delivery_active !== false);
+    setDeliverySettings(savedSettings);
   };
 
   // Simulator State
@@ -104,6 +103,11 @@ export const AdminZonesPage: React.FC = () => {
   const [minOrder, setMinOrder] = useState(199);
   const [freeThreshold, setFreeThreshold] = useState(499);
   const [eta, setEta] = useState('25–35 mins');
+  const [zoneLat, setZoneLat] = useState<number>(17.4938);
+  const [zoneLng, setZoneLng] = useState<number>(78.3995);
+  const [zoneRadius, setZoneRadius] = useState<number>(8.5);
+  const [detectedAddress, setDetectedAddress] = useState<string>('KPHB Colony Phase 1, Kukatpally, Hyderabad - 500072');
+  const [detectedColony, setDetectedColony] = useState<string>('KPHB Colony');
 
   const fetchData = async () => {
     try {
@@ -129,17 +133,10 @@ export const AdminZonesPage: React.FC = () => {
           surge_charge: Number(s.surge_charge || 0),
         };
         setDeliverySettings(normalized);
+        setSavedSettings(normalized);
         try {
           localStorage.setItem('fresh_veg_delivery_settings', JSON.stringify(normalized));
         } catch {}
-        setChargeInput(String(normalized.default_delivery_charge));
-        setThresholdInput(String(normalized.free_delivery_threshold));
-        setMinOrderInput(String(normalized.min_order_amount));
-        setExpressFeeInput(String(normalized.express_delivery_fee));
-        setSurgeInput(String(normalized.surge_charge));
-        setEtaInput(normalized.estimated_delivery_time);
-        setEnableFreeDelivery(normalized.enable_free_delivery);
-        setIsDeliveryActive(normalized.is_delivery_active);
       }
     } catch (err) {
       console.error('Error fetching delivery data', err);
@@ -159,38 +156,45 @@ export const AdminZonesPage: React.FC = () => {
 
   // ================= SAVE GLOBAL DELIVERY CHARGES =================
   const handleSaveGlobalSettings = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     try {
       setIsSavingSettings(true);
       const payload = {
-        default_delivery_charge: effectiveCharge,
-        free_delivery_threshold: effectiveThreshold,
-        min_order_amount: effectiveMinOrder,
-        enable_free_delivery: Boolean(enableFreeDelivery),
-        express_delivery_fee: effectiveExpressFee,
-        estimated_delivery_time: etaInput.trim(),
-        surge_charge: effectiveSurge,
-        is_delivery_active: Boolean(isDeliveryActive),
+        default_delivery_charge: Math.max(0, Number(deliverySettings.default_delivery_charge) || 0),
+        free_delivery_threshold: Math.max(0, Number(deliverySettings.free_delivery_threshold) || 0),
+        min_order_amount: Math.max(0, Number(deliverySettings.min_order_amount) || 0),
+        enable_free_delivery: Boolean(deliverySettings.enable_free_delivery),
+        express_delivery_fee: Math.max(0, Number(deliverySettings.express_delivery_fee) || 0),
+        estimated_delivery_time: String(deliverySettings.estimated_delivery_time || '25–35 mins').trim(),
+        surge_charge: Math.max(0, Number(deliverySettings.surge_charge) || 0),
+        is_delivery_active: Boolean(deliverySettings.is_delivery_active),
       };
 
       const res = await api.put('/delivery/settings', payload);
       if (res.data?.data) {
         const updated = res.data.data;
-        setDeliverySettings(updated);
+        const normalized: DeliverySettings = {
+          default_delivery_charge: Number(updated.default_delivery_charge),
+          free_delivery_threshold: Number(updated.free_delivery_threshold),
+          min_order_amount: Number(updated.min_order_amount),
+          enable_free_delivery: Boolean(updated.enable_free_delivery),
+          express_delivery_fee: Number(updated.express_delivery_fee),
+          estimated_delivery_time: String(updated.estimated_delivery_time || '25–35 mins'),
+          is_delivery_active: updated.is_delivery_active !== false,
+          surge_charge: Number(updated.surge_charge || 0),
+        };
+        setDeliverySettings(normalized);
+        setSavedSettings(normalized);
         try {
-          localStorage.setItem('fresh_veg_delivery_settings', JSON.stringify(updated));
+          localStorage.setItem('fresh_veg_delivery_settings', JSON.stringify(normalized));
         } catch {}
-        setChargeInput(String(updated.default_delivery_charge));
-        setThresholdInput(String(updated.free_delivery_threshold));
-        setMinOrderInput(String(updated.min_order_amount));
-        setExpressFeeInput(String(updated.express_delivery_fee));
-        setSurgeInput(String(updated.surge_charge || 0));
-        setEtaInput(updated.estimated_delivery_time);
-        setEnableFreeDelivery(updated.enable_free_delivery);
-        setIsDeliveryActive(updated.is_delivery_active);
 
         await syncCartDeliverySettings();
-        showToast(`Store delivery charges saved successfully! (₹${updated.default_delivery_charge} base fee, ₹${updated.free_delivery_threshold} free threshold)`);
+        notifyLiveUpdate('all');
+        showToast(`Store delivery charges saved successfully! (₹${normalized.default_delivery_charge} base fee, ₹${normalized.free_delivery_threshold} free threshold)`);
       }
     } catch (err: any) {
       showToast(err.response?.data?.message || 'Failed to update delivery settings', 'error');
@@ -209,18 +213,41 @@ export const AdminZonesPage: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    effectiveCharge,
-    effectiveThreshold,
-    effectiveMinOrder,
-    effectiveExpressFee,
-    effectiveSurge,
-    etaInput,
-    enableFreeDelivery,
-    isDeliveryActive,
-  ]);
+  }, [deliverySettings]);
 
   // ================= ZONE ACTIONS =================
+  const handleMapPositionChange = (lat: number, lng: number, details?: AddressDetails) => {
+    setZoneLat(lat);
+    setZoneLng(lng);
+    if (details) {
+      if (details.fullAddress) setDetectedAddress(details.fullAddress);
+      if (details.colony) setDetectedColony(details.colony);
+      if (details.pincode) {
+        setPincodes((prev) => {
+          if (!prev.trim()) return details.pincode!;
+          const arr = prev.split(',').map((p) => p.trim());
+          if (!arr.includes(details.pincode!)) {
+            return `${prev}, ${details.pincode}`;
+          }
+          return prev;
+        });
+      }
+      if (!editingZone && details.colony && (!name || name === 'Kukatpally & KPHB Zone')) {
+        setName(`${details.colony} & Surrounding Zone`);
+      }
+    }
+  };
+
+  const handleSelectPreset = (preset: typeof HYDERABAD_ZONE_PRESETS[0]) => {
+    setZoneLat(preset.lat);
+    setZoneLng(preset.lng);
+    setZoneRadius(preset.radius);
+    setName(preset.name);
+    setPincodes(preset.pincode);
+    setDetectedColony(preset.colony);
+    setDetectedAddress(`${preset.colony}, Hyderabad - ${preset.pincode}`);
+  };
+
   const handleSaveZone = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -231,6 +258,9 @@ export const AdminZonesPage: React.FC = () => {
         min_order_amount: minOrder,
         free_delivery_threshold: freeThreshold,
         estimated_delivery_time: eta,
+        latitude: zoneLat,
+        longitude: zoneLng,
+        delivery_radius_km: zoneRadius,
       };
 
       if (editingZone) {
@@ -262,23 +292,33 @@ export const AdminZonesPage: React.FC = () => {
 
   const openCreate = () => {
     setEditingZone(null);
-    setName('');
+    setName('Kukatpally & KPHB Zone');
     setPincodes('500072, 500085');
     setFee(20);
     setMinOrder(199);
     setFreeThreshold(499);
     setEta('25–35 mins');
+    setZoneLat(17.4938);
+    setZoneLng(78.3995);
+    setZoneRadius(8.5);
+    setDetectedColony('KPHB Colony');
+    setDetectedAddress('KPHB Colony Phase 1, Kukatpally, Hyderabad - 500072');
     setIsModalOpen(true);
   };
 
   const openEdit = (zone: DeliveryZone) => {
     setEditingZone(zone);
     setName(zone.name);
-    setPincodes(zone.pincodes.join(', '));
+    setPincodes(Array.isArray(zone.pincodes) ? zone.pincodes.join(', ') : String(zone.pincodes || ''));
     setFee(zone.delivery_fee);
     setMinOrder(zone.min_order_amount);
     setFreeThreshold(zone.free_delivery_threshold);
     setEta(zone.estimated_delivery_time);
+    setZoneLat(zone.latitude ? Number(zone.latitude) : 17.4474);
+    setZoneLng(zone.longitude ? Number(zone.longitude) : 78.3762);
+    setZoneRadius(Number(zone.delivery_radius_km) || 8.5);
+    setDetectedColony(zone.name);
+    setDetectedAddress(`${zone.name}, Hyderabad`);
     setIsModalOpen(true);
   };
 
@@ -665,20 +705,36 @@ export const AdminZonesPage: React.FC = () => {
               </div>
 
               {/* Submit Button */}
-              <div className="pt-4 flex items-center justify-between">
+              <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 text-brand-400 shrink-0" />
                   Saves directly to database and updates all online customer checkouts immediately.
                 </span>
 
-                <button
-                  type="submit"
-                  disabled={isSavingSettings}
-                  className="bg-brand-500 hover:bg-brand-400 active:scale-98 text-slate-950 font-black text-xs px-6 py-3 rounded-2xl flex items-center gap-2 shadow-xl shadow-brand-500/20 transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{isSavingSettings ? 'Saving Charges...' : 'Save Delivery Charges'}</span>
-                </button>
+                <div className="flex items-center gap-3 self-end sm:self-auto">
+                  {isDirty && (
+                    <button
+                      type="button"
+                      onClick={handleResetSettings}
+                      className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-bold transition-all border border-slate-800 cursor-pointer"
+                    >
+                      Discard Changes
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSavingSettings}
+                    className={`text-slate-950 font-black text-xs px-6 py-3 rounded-2xl flex items-center gap-2 shadow-xl transition-all disabled:opacity-50 cursor-pointer ${
+                      isDirty
+                        ? 'bg-brand-500 hover:bg-brand-400 shadow-brand-500/30 ring-2 ring-brand-400 animate-pulse'
+                        : 'bg-brand-500 hover:bg-brand-400 shadow-brand-500/20'
+                    }`}
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingSettings ? 'Saving Charges...' : isDirty ? 'Save Delivery Charges *' : 'Save Delivery Charges'}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -842,7 +898,17 @@ export const AdminZonesPage: React.FC = () => {
                     <td className="py-3 px-3 font-bold text-white text-sm">
                       <div className="flex items-center gap-2">
                         <MapPin className="w-3.5 h-3.5 text-brand-400 shrink-0" />
-                        <span>{zone.name}</span>
+                        <div>
+                          <span>{zone.name}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-brand-400 bg-brand-500/10 border border-brand-500/20 px-1.5 py-0.2 rounded font-mono">
+                              {zone.latitude ? `${Number(zone.latitude).toFixed(3)}, ${Number(zone.longitude).toFixed(3)}` : '17.493, 78.399'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-semibold">
+                              {zone.delivery_radius_km || 8.5} km coverage
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="py-3 px-3">
@@ -908,106 +974,284 @@ export const AdminZonesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Zone Edit/Create Modal */}
+      {/* Zone Edit/Create Modal with Interactive Hyderabad Geofence Map */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 text-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
-            <h3 className="font-extrabold text-white text-base">
-              {editingZone ? 'Edit Delivery Zone' : 'Create Custom Delivery Zone'}
-            </h3>
-
-            <form onSubmit={handleSaveZone} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">Zone Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Kukatpally & KPHB Zone"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">
-                  Covered Pincodes (comma separated)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="500072, 500085, 500090"
-                  value={pincodes}
-                  onChange={(e) => setPincodes(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 font-mono text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">Zone Delivery Fee (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={fee}
-                    onChange={(e) => setFee(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-brand-500"
-                  />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 text-white w-full max-w-5xl rounded-3xl p-5 sm:p-7 shadow-2xl space-y-4 my-auto max-h-[92vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3.5 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand-500/15 border border-brand-500/30 flex items-center justify-center text-brand-400 shrink-0">
+                  <MapPin className="w-5 h-5" />
                 </div>
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">Minimum Order (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={minOrder}
-                    onChange={(e) => setMinOrder(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-brand-500"
-                  />
+                  <h3 className="font-extrabold text-white text-lg tracking-tight flex items-center gap-2">
+                    <span>{editingZone ? 'Edit Delivery Zone & Map Geofence' : 'Create Custom Delivery Zone with Live Map'}</span>
+                    <span className="text-[11px] bg-brand-500/20 text-brand-400 px-2.5 py-0.5 rounded-full font-bold border border-brand-500/30">
+                      Hyderabad Coverage
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Select the exact colony, area, or landmark on the map. Adjust coverage radius and order economics.
+                  </p>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">Free Delivery At (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={freeThreshold}
-                    onChange={(e) => setFreeThreshold(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-brand-500"
-                  />
+            {/* Modal Content Scrollable Area */}
+            <div className="overflow-y-auto pr-1 flex-1 space-y-4">
+              {/* Quick Select Popular Hyderabad Colony Hubs */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                  <span className="flex items-center gap-1.5 uppercase tracking-wider text-[10px] text-brand-400 font-black">
+                    <Sparkles className="w-3.5 h-3.5" /> Popular Colony Hub Presets
+                  </span>
+                  <span className="text-slate-500 text-[10.5px]">Click any colony to jump pin &amp; pre-fill</span>
                 </div>
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">Estimated Speed ETA</label>
-                  <input
-                    type="text"
-                    required
-                    value={eta}
-                    onChange={(e) => setEta(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
-                  />
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                  {HYDERABAD_ZONE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => handleSelectPreset(preset)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                        Math.abs(zoneLat - preset.lat) < 0.005 && Math.abs(zoneLng - preset.lng) < 0.005
+                          ? 'bg-brand-500 text-slate-950 border-brand-400 font-extrabold shadow-md shadow-brand-500/20'
+                          : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-brand-500/40 hover:text-white'
+                      }`}
+                    >
+                      <MapPin className="w-3 h-3" />
+                      <span>{preset.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black cursor-pointer"
-                >
-                  Save Delivery Zone
-                </button>
+              {/* Main 2-Column Split: Map on Left, Zone Parameters on Right */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* ── LEFT COLUMN: Interactive Map & Geofence (7 cols) ── */}
+                <div className="lg:col-span-7 space-y-3 flex flex-col">
+                  {/* Interactive Leaflet Map */}
+                  <div className="relative">
+                    <InteractiveLocationMap
+                      height="290px"
+                      initialCenter={[zoneLat, zoneLng]}
+                      markerPosition={[zoneLat, zoneLng]}
+                      circleRadiusKm={zoneRadius}
+                      onPositionChange={handleMapPositionChange}
+                      placeholder="Search Hyderabad colony, street, area..."
+                      showSearchBar={true}
+                      showDetectLocationBtn={true}
+                    />
+                  </div>
+
+                  {/* Geofence Delivery Radius Slider */}
+                  <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Crosshair className="w-3.5 h-3.5 text-brand-400" />
+                        <span>Coverage Radius:</span>
+                        <span className="text-brand-400 font-black font-mono text-sm">{zoneRadius} km</span>
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Diameter: {(zoneRadius * 2).toFixed(1)} km
+                      </span>
+                    </div>
+
+                    <input
+                      type="range"
+                      min="2"
+                      max="25"
+                      step="0.5"
+                      value={zoneRadius}
+                      onChange={(e) => setZoneRadius(Number(e.target.value))}
+                      className="w-full accent-emerald-400 cursor-pointer h-2 bg-slate-800 rounded-lg appearance-none"
+                    />
+
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>2 km (Hyperlocal)</span>
+                      <button
+                        type="button"
+                        onClick={() => setZoneRadius(5)}
+                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 5 ? 'text-brand-400 font-bold' : ''}`}
+                      >
+                        5 km
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setZoneRadius(8.5)}
+                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 8.5 ? 'text-brand-400 font-bold' : ''}`}
+                      >
+                        8.5 km (Standard)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setZoneRadius(15)}
+                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 15 ? 'text-brand-400 font-bold' : ''}`}
+                      >
+                        15 km
+                      </button>
+                      <span>25 km (Regional)</span>
+                    </div>
+                  </div>
+
+                  {/* Selected Colony / Center Coordinates Banner */}
+                  <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+                        <Compass className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase font-black tracking-wider text-slate-400">Epicenter Location</p>
+                        <p className="text-white font-bold truncate text-xs">{detectedAddress}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-slate-500 font-mono">GPS Coordinates</p>
+                      <p className="text-[11px] font-mono font-bold text-brand-400">
+                        {zoneLat.toFixed(4)}, {zoneLng.toFixed(4)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── RIGHT COLUMN: Zone Form & Financials (5 cols) ── */}
+                <form id="zone-form" onSubmit={handleSaveZone} className="lg:col-span-5 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-300 font-bold">Zone Name</label>
+                        {detectedColony && (
+                          <button
+                            type="button"
+                            onClick={() => setName(`${detectedColony} & Surrounding Zone`)}
+                            className="text-[10px] text-brand-400 hover:text-brand-300 font-bold cursor-pointer"
+                          >
+                            Use "{detectedColony}"
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Kukatpally & KPHB Zone"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-medium focus:outline-none focus:border-brand-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">
+                        Covered Pincodes (comma separated)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="500072, 500085, 500090"
+                        value={pincodes}
+                        onChange={(e) => setPincodes(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-white focus:outline-none focus:border-brand-500"
+                      />
+                      <p className="text-[10.5px] text-slate-500 mt-1">
+                        Pincodes mapped to this zone for address lookup &amp; dispatch.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">Zone Delivery Fee (₹)</label>
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          value={fee}
+                          onChange={(e) => setFee(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">Minimum Order (₹)</label>
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          value={minOrder}
+                          onChange={(e) => setMinOrder(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">Free Delivery At (₹)</label>
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          value={freeThreshold}
+                          onChange={(e) => setFreeThreshold(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">Speed ETA</label>
+                        <input
+                          type="text"
+                          required
+                          value={eta}
+                          onChange={(e) => setEta(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Operational Summary Card */}
+                    <div className="p-3 bg-brand-500/10 border border-brand-500/20 rounded-2xl space-y-1 text-[11px] text-slate-300">
+                      <p className="font-bold text-brand-300 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Zone Economics Summary
+                      </p>
+                      <p className="text-slate-400">
+                        • Flat fee: <strong className="text-white">₹{fee}</strong> (Free on orders ≥ <strong className="text-emerald-400">₹{freeThreshold}</strong>)
+                      </p>
+                      <p className="text-slate-400">
+                        • Min cart: <strong className="text-white">₹{minOrder}</strong> • Promise: <strong className="text-white">{eta}</strong>
+                      </p>
+                      <p className="text-slate-400">
+                        • Coverage: <strong className="text-white">{zoneRadius} km</strong> radius from epicenter
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-brand-500/25 flex items-center gap-1.5 transition-all"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{editingZone ? 'Save Changes' : 'Create Delivery Zone'}</span>
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

@@ -12,20 +12,49 @@ const app = express();
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, or same origin)
+      // Allow requests with no origin (e.g. server-to-server webhooks from Meta, mobile apps, curl)
       if (!origin) return callback(null, true);
-      const allowedOrigins = [env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'];
-      if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+
+      const allowedOrigins = [env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'].filter(Boolean);
+
+      const isAllowed =
+        allowedOrigins.includes(origin) ||
+        (env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:')) ||
+        (env.FRONTEND_URL && origin === env.FRONTEND_URL) ||
+        (env.FRONTEND_URL && origin.endsWith('.vercel.app') && env.FRONTEND_URL.includes('.vercel.app'));
+
+      if (isAllowed) {
         return callback(null, true);
       }
-      return callback(null, true); // Allow all in development
+
+      if (env.NODE_ENV === 'production') {
+        return callback(new Error(`CORS blocked for origin: ${origin}`), false);
+      }
+
+      return callback(null, true); // Permissive in local development
     },
     credentials: true,
   })
 );
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Body parsers with raw body retention for HMAC signature verification
+app.use(
+  express.json({
+    limit: '50mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: '50mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 // Serve static uploaded files
 const uploadPath = path.resolve(__dirname, '../', env.UPLOAD_DIR);

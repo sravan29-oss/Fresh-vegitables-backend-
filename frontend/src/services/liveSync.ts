@@ -1,5 +1,5 @@
 // Real-time cross-tab & live update synchronization
-export type SyncEventType = 'products' | 'categories' | 'orders' | 'cart' | 'cms' | 'all';
+export type SyncEventType = 'products' | 'categories' | 'orders' | 'cart' | 'cms' | 'notification' | 'all';
 
 let broadcastChannel: BroadcastChannel | null = null;
 try {
@@ -13,13 +13,16 @@ try {
 /**
  * Trigger an update event across all tabs and windows
  */
-export function notifyLiveUpdate(type: SyncEventType = 'all') {
+export function notifyLiveUpdate(type: SyncEventType = 'all', payload?: any) {
   try {
     if (broadcastChannel) {
-      broadcastChannel.postMessage({ type, timestamp: Date.now() });
+      broadcastChannel.postMessage({ type, payload, timestamp: Date.now() });
     }
     if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem('fresh_veg_live_sync', `${type}:${Date.now()}`);
+      localStorage.setItem(
+        'fresh_veg_live_sync',
+        JSON.stringify({ type, payload, timestamp: Date.now() })
+      );
     }
   } catch (err) {
     console.warn('Live sync notification error', err);
@@ -31,26 +34,34 @@ export function notifyLiveUpdate(type: SyncEventType = 'all') {
  */
 export function subscribeLiveUpdates(
   targetTypes: SyncEventType[] | 'all',
-  callback: (type: SyncEventType) => void
+  callback: (type: SyncEventType, payload?: any) => void
 ): () => void {
   if (typeof window === 'undefined') return () => {};
 
-  const handleMessage = (type: SyncEventType) => {
+  const handleMessage = (type: SyncEventType, payload?: any) => {
     if (targetTypes === 'all' || targetTypes.includes(type) || type === 'all') {
-      callback(type);
+      callback(type, payload);
     }
   };
 
   const channelListener = (event: MessageEvent) => {
     if (event.data?.type) {
-      handleMessage(event.data.type);
+      handleMessage(event.data.type, event.data.payload);
     }
   };
 
   const storageListener = (event: StorageEvent) => {
     if (event.key === 'fresh_veg_live_sync' && event.newValue) {
-      const type = event.newValue.split(':')[0] as SyncEventType;
-      handleMessage(type);
+      try {
+        const parsed = JSON.parse(event.newValue);
+        if (parsed?.type) {
+          handleMessage(parsed.type, parsed.payload);
+          return;
+        }
+      } catch {
+        const type = event.newValue.split(':')[0] as SyncEventType;
+        handleMessage(type);
+      }
     }
   };
 
@@ -66,3 +77,4 @@ export function subscribeLiveUpdates(
     window.removeEventListener('storage', storageListener);
   };
 }
+

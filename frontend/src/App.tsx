@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
 import { CartDrawer } from './components/cart/CartDrawer';
@@ -21,7 +22,6 @@ import { ProfilePage } from './pages/customer/ProfilePage';
 import { LoginPage } from './pages/customer/LoginPage';
 import { RegisterPage } from './pages/customer/RegisterPage';
 import { WalletPage } from './pages/customer/WalletPage';
-import { SubscriptionsPage } from './pages/customer/SubscriptionsPage';
 
 // Admin Pages
 import { AdminLayout } from './pages/admin/AdminLayout';
@@ -40,7 +40,6 @@ import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 
 // Phases 13–20 Admin Pages
 import { AdminCMSPage } from './pages/admin/AdminCMSPage';
-import { AdminSubscriptionsPage } from './pages/admin/AdminSubscriptionsPage';
 import { AdminSellersPage } from './pages/admin/AdminSellersPage';
 import { AdminZonesPage } from './pages/admin/AdminZonesPage';
 import { AdminLoyaltyPage } from './pages/admin/AdminLoyaltyPage';
@@ -74,54 +73,54 @@ export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <CartProvider>
-        <BrowserRouter>
-          <Routes>
-            {/* Customer Routes */}
-            <Route path="/" element={<CustomerLayout />}>
-              <Route index element={<HomePage />} />
-              <Route path="products" element={<ProductsPage />} />
-              <Route path="products/:slug" element={<ProductDetailPage />} />
-              <Route path="checkout" element={<CheckoutPage />} />
-              <Route path="order-success/:id" element={<OrderSuccessPage />} />
-              <Route path="orders" element={<OrdersPage />} />
-              <Route path="orders/:id/track" element={<TrackingPage />} />
-              <Route path="profile" element={<ProfilePage />} />
-              <Route path="wallet" element={<WalletPage />} />
-              <Route path="subscriptions" element={<SubscriptionsPage />} />
-              <Route path="login" element={<LoginPage />} />
-              <Route path="register" element={<RegisterPage />} />
-            </Route>
+        <NotificationProvider>
+          <CartProvider>
+            <BrowserRouter>
+              <Routes>
+                {/* Customer Routes */}
+                <Route path="/" element={<CustomerLayout />}>
+                  <Route index element={<HomePage />} />
+                  <Route path="products" element={<ProductsPage />} />
+                  <Route path="products/:slug" element={<ProductDetailPage />} />
+                  <Route path="checkout" element={<CheckoutPage />} />
+                  <Route path="order-success/:id" element={<OrderSuccessPage />} />
+                  <Route path="orders" element={<OrdersPage />} />
+                  <Route path="orders/:id/track" element={<TrackingPage />} />
+                  <Route path="profile" element={<ProfilePage />} />
+                  <Route path="wallet" element={<WalletPage />} />
+                  <Route path="login" element={<LoginPage />} />
+                  <Route path="register" element={<RegisterPage />} />
+                </Route>
 
-            {/* Admin Auth */}
-            <Route path="/admin/login" element={<AdminLoginPage />} />
+                {/* Admin Auth */}
+                <Route path="/admin/login" element={<AdminLoginPage />} />
 
-            {/* Admin Management Protected Routes */}
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<AdminDashboardPage />} />
-              <Route path="analytics" element={<AdminAnalyticsPage />} />
-              <Route path="cms" element={<AdminCMSPage />} />
-              <Route path="products" element={<AdminProductsPage />} />
-              <Route path="categories" element={<AdminCategoriesPage />} />
-              <Route path="orders" element={<AdminOrdersPage />} />
-              <Route path="subscriptions" element={<AdminSubscriptionsPage />} />
-              <Route path="deliveries" element={<AdminDeliveriesPage />} />
-              <Route path="delivery-charges" element={<AdminZonesPage />} />
-              <Route path="zones" element={<AdminZonesPage />} />
-              <Route path="sellers" element={<AdminSellersPage />} />
-              <Route path="payments" element={<AdminPaymentsPage />} />
-              <Route path="loyalty" element={<AdminLoyaltyPage />} />
-              <Route path="coupons" element={<AdminCouponsPage />} />
-              <Route path="notifications" element={<AdminNotificationsPage />} />
-              <Route path="customers" element={<AdminCustomersPage />} />
-              <Route path="inventory" element={<AdminInventoryPage />} />
-              <Route path="audit-logs" element={<AdminAuditLogsPage />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </CartProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+                {/* Admin Management Protected Routes */}
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<AdminDashboardPage />} />
+                  <Route path="analytics" element={<AdminAnalyticsPage />} />
+                  <Route path="cms" element={<AdminCMSPage />} />
+                  <Route path="products" element={<AdminProductsPage />} />
+                  <Route path="categories" element={<AdminCategoriesPage />} />
+                  <Route path="orders" element={<AdminOrdersPage />} />
+                  <Route path="deliveries" element={<AdminDeliveriesPage />} />
+                  <Route path="delivery-charges" element={<AdminZonesPage />} />
+                  <Route path="zones" element={<AdminZonesPage />} />
+                  <Route path="sellers" element={<AdminSellersPage />} />
+                  <Route path="payments" element={<AdminPaymentsPage />} />
+                  <Route path="loyalty" element={<AdminLoyaltyPage />} />
+                  <Route path="coupons" element={<AdminCouponsPage />} />
+                  <Route path="notifications" element={<AdminNotificationsPage />} />
+                  <Route path="customers" element={<AdminCustomersPage />} />
+                  <Route path="inventory" element={<AdminInventoryPage />} />
+                  <Route path="audit-logs" element={<AdminAuditLogsPage />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </CartProvider>
+        </NotificationProvider>
+      </AuthProvider>
+    </QueryClientProvider>
 );
 };
 
