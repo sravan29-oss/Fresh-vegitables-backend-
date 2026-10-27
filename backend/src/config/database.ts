@@ -6,16 +6,18 @@ import { getPersistedDeliverySettings, savePersistedDeliverySettings } from '../
 import { savePersistedProducts, savePersistedVariants, getPersistedProducts, getPersistedVariants } from '../services/productStore.service';
 import { savePersistedOrders, savePersistedOrderItems, getPersistedOrders } from '../services/orderStore.service';
 
-const useSsl =
-  (env.DATABASE_URL && (env.DATABASE_URL.includes('sslmode=require') || env.DATABASE_URL.includes('render.com'))) ||
-  (env.NODE_ENV === 'production' && !env.DATABASE_URL.includes('localhost') && !env.DATABASE_URL.includes('127.0.0.1'));
+const isInternalRender = env.DATABASE_URL.includes('dpg-') && !env.DATABASE_URL.includes('.render.com');
+const requiresSsl =
+  env.DATABASE_URL.includes('sslmode=require') ||
+  env.DATABASE_URL.includes('.render.com') ||
+  (env.NODE_ENV === 'production' && !isInternalRender && !env.DATABASE_URL.includes('localhost') && !env.DATABASE_URL.includes('127.0.0.1'));
 
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
   max: 10,
   idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 8000,
-  ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  connectionTimeoutMillis: 5000,
+  ...(requiresSsl ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 
 let isPgHealthy = false;
@@ -41,9 +43,8 @@ async function checkPgHealth(): Promise<boolean> {
     if (now - lastWarnTime > 30000) {
       lastWarnTime = now;
       if (env.NODE_ENV === 'production') {
-        console.error('❌ [FATAL DATABASE ERROR] PostgreSQL connection failed in PRODUCTION mode. In-memory fallback is strictly disabled in production.');
+        console.error('❌ [DATABASE WARNING] PostgreSQL connection check failed in production mode:');
         console.error(`❌ Details: ${e.message} (Code: ${e.code || 'UNKNOWN'})`);
-        process.exit(1);
       } else {
         console.warn(`⚠️ [DEV WARNING] Local PostgreSQL is not reachable on port ${env.DB_PORT}: ${e.message}`);
         console.warn('⚠️ [DEV WARNING] Running in development mode with in-memory store.');

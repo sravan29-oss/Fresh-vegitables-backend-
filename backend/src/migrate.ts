@@ -12,14 +12,16 @@ async function runMigrations() {
     process.exit(1);
   }
 
-  const useSsl =
-    (env.DATABASE_URL && (env.DATABASE_URL.includes('sslmode=require') || env.DATABASE_URL.includes('render.com'))) ||
-    (env.NODE_ENV === 'production' && !env.DATABASE_URL.includes('localhost') && !env.DATABASE_URL.includes('127.0.0.1'));
+  const isInternalRender = env.DATABASE_URL.includes('dpg-') && !env.DATABASE_URL.includes('.render.com');
+  const requiresSsl =
+    env.DATABASE_URL.includes('sslmode=require') ||
+    env.DATABASE_URL.includes('.render.com') ||
+    (env.NODE_ENV === 'production' && !isInternalRender && !env.DATABASE_URL.includes('localhost') && !env.DATABASE_URL.includes('127.0.0.1'));
 
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
     connectionTimeoutMillis: 8000,
-    ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    ...(requiresSsl ? { ssl: { rejectUnauthorized: false } } : {}),
   });
 
   let client;
