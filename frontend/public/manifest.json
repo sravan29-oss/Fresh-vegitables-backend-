@@ -1,0 +1,24 @@
+{
+  "short_name": "FreshVeggies",
+  "name": "Fresh Vegetables — Daily Farm Harvest",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#090d16",
+  "theme_color": "#10b981",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "description": "Farm-fresh vegetables, crisp greens, and native harvest delivered straight from farmers to your kitchen in 30 minutes.",
+  "categories": ["shopping", "food", "lifestyle"]
+}

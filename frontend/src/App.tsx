@@ -1,0 +1,128 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { CartProvider } from './context/CartContext';
+import { Header } from './components/common/Header';
+import { Footer } from './components/common/Footer';
+import { CartDrawer } from './components/cart/CartDrawer';
+import { AnimatedBackground } from './components/common/AnimatedBackground';
+import { PWAInstallPrompt } from './components/common/PWAInstallPrompt';
+import { MobileBottomNav } from './components/common/MobileBottomNav';
+
+// Customer Pages
+import { HomePage } from './pages/customer/HomePage';
+import { ProductsPage } from './pages/customer/ProductsPage';
+import { ProductDetailPage } from './pages/customer/ProductDetailPage';
+import { CheckoutPage } from './pages/customer/CheckoutPage';
+import { OrderSuccessPage } from './pages/customer/OrderSuccessPage';
+import { OrdersPage } from './pages/customer/OrdersPage';
+import { TrackingPage } from './pages/customer/TrackingPage';
+import { ProfilePage } from './pages/customer/ProfilePage';
+import { LoginPage } from './pages/customer/LoginPage';
+import { RegisterPage } from './pages/customer/RegisterPage';
+import { WalletPage } from './pages/customer/WalletPage';
+import { SubscriptionsPage } from './pages/customer/SubscriptionsPage';
+
+// Admin Pages
+import { AdminLayout } from './pages/admin/AdminLayout';
+import { AdminLoginPage } from './pages/admin/AdminLoginPage';
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import { AdminProductsPage } from './pages/admin/AdminProductsPage';
+import { AdminCategoriesPage } from './pages/admin/AdminCategoriesPage';
+import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
+import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
+import { AdminInventoryPage } from './pages/admin/AdminInventoryPage';
+import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage';
+import { AdminDeliveriesPage } from './pages/admin/AdminDeliveriesPage';
+import { AdminCouponsPage } from './pages/admin/AdminCouponsPage';
+import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage';
+import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
+
+// Phases 13–20 Admin Pages
+import { AdminCMSPage } from './pages/admin/AdminCMSPage';
+import { AdminSubscriptionsPage } from './pages/admin/AdminSubscriptionsPage';
+import { AdminSellersPage } from './pages/admin/AdminSellersPage';
+import { AdminZonesPage } from './pages/admin/AdminZonesPage';
+import { AdminLoyaltyPage } from './pages/admin/AdminLoyaltyPage';
+import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
+
+const CustomerLayout: React.FC = () => {
+  return (
+    <div className="flex flex-col min-h-screen relative pb-14 md:pb-0">
+      {/* 3D Animated Background Canvas */}
+      <AnimatedBackground />
+
+      {/* All content floats above the canvas */}
+      <div className="content-layer flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1">
+          <Outlet />
+        </main>
+        <Footer />
+        <CartDrawer />
+        <MobileBottomNav />
+        <PWAInstallPrompt />
+      </div>
+    </div>
+  );
+};
+
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './services/queryClient';
+
+export const App: React.FC = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <CartProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Customer Routes */}
+            <Route path="/" element={<CustomerLayout />}>
+              <Route index element={<HomePage />} />
+              <Route path="products" element={<ProductsPage />} />
+              <Route path="products/:slug" element={<ProductDetailPage />} />
+              <Route path="checkout" element={<CheckoutPage />} />
+              <Route path="order-success/:id" element={<OrderSuccessPage />} />
+              <Route path="orders" element={<OrdersPage />} />
+              <Route path="orders/:id/track" element={<TrackingPage />} />
+              <Route path="profile" element={<ProfilePage />} />
+              <Route path="wallet" element={<WalletPage />} />
+              <Route path="subscriptions" element={<SubscriptionsPage />} />
+              <Route path="login" element={<LoginPage />} />
+              <Route path="register" element={<RegisterPage />} />
+            </Route>
+
+            {/* Admin Auth */}
+            <Route path="/admin/login" element={<AdminLoginPage />} />
+
+            {/* Admin Management Protected Routes */}
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminDashboardPage />} />
+              <Route path="analytics" element={<AdminAnalyticsPage />} />
+              <Route path="cms" element={<AdminCMSPage />} />
+              <Route path="products" element={<AdminProductsPage />} />
+              <Route path="categories" element={<AdminCategoriesPage />} />
+              <Route path="orders" element={<AdminOrdersPage />} />
+              <Route path="subscriptions" element={<AdminSubscriptionsPage />} />
+              <Route path="deliveries" element={<AdminDeliveriesPage />} />
+              <Route path="delivery-charges" element={<AdminZonesPage />} />
+              <Route path="zones" element={<AdminZonesPage />} />
+              <Route path="sellers" element={<AdminSellersPage />} />
+              <Route path="payments" element={<AdminPaymentsPage />} />
+              <Route path="loyalty" element={<AdminLoyaltyPage />} />
+              <Route path="coupons" element={<AdminCouponsPage />} />
+              <Route path="notifications" element={<AdminNotificationsPage />} />
+              <Route path="customers" element={<AdminCustomersPage />} />
+              <Route path="inventory" element={<AdminInventoryPage />} />
+              <Route path="audit-logs" element={<AdminAuditLogsPage />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </CartProvider>
+    </AuthProvider>
+  </QueryClientProvider>
+);
+};
+
+export default App;
