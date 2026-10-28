@@ -88,6 +88,20 @@ export async function autoMigrateAndSeed(): Promise<void> {
       console.warn('⚠️ [AutoMigrate] Seeding check note:', seedErr.message);
     }
 
+    // 4. Ensure production super admin user exists
+    try {
+      const sravanHash = '$2b$10$fN7C1aZpT7qefZRzrnjWouSTAmq/uJyNKfXcVIcUjXWYt7D4f.uY6';
+      await client.query(`
+        INSERT INTO admins (name, email, password, role, status)
+        VALUES ('Sravan Kumar', 'naredlasravankumar29@gmail.com', $1, 'super_admin', 'active')
+        ON CONFLICT (email) 
+        DO UPDATE SET password = $1, role = 'super_admin', status = 'active';
+      `, [sravanHash]);
+      console.log('✅ [AutoMigrate] Production admin user (naredlasravankumar29@gmail.com) verified/upserted.');
+    } catch (adminErr: any) {
+      console.warn('⚠️ [AutoMigrate] Admin user upsert note:', adminErr.message);
+    }
+
     console.log('🎉 [AutoMigrate] PostgreSQL database schema is fully initialized and up-to-date!');
   } catch (err: any) {
     console.warn(`⚠️ [AutoMigrate] Database auto-migration note: ${err.message}`);

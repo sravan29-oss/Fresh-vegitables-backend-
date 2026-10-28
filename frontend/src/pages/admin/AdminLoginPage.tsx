@@ -8,8 +8,8 @@ export const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { adminLogin, showLoginSuccess } = useAuth();
 
-  const [email, setEmail] = useState('admin@freshveggies.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('naredlasravankumar29@gmail.com');
+  const [password, setPassword] = useState('Sravan29');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -100,19 +100,19 @@ export const AdminLoginPage: React.FC = () => {
 
         <div
           onClick={() => {
-            setEmail('admin@freshveggies.com');
-            setPassword('admin123');
+            setEmail('naredlasravankumar29@gmail.com');
+            setPassword('Sravan29');
             setErrorMsg('');
           }}
           className="p-3 bg-slate-800/60 hover:bg-slate-800 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1 cursor-pointer transition-colors"
           title="Click to fill credentials"
         >
           <div className="flex items-center justify-between">
-            <p className="font-bold text-slate-300">Default Seed Credentials:</p>
+            <p className="font-bold text-slate-300">Super Admin Credentials:</p>
             <span className="text-[10px] bg-brand-500/20 text-brand-300 px-2 py-0.5 rounded font-bold">1-Click Auto Fill</span>
           </div>
-          <p>Email: <code className="text-brand-400 font-bold">admin@freshveggies.com</code></p>
-          <p>Password: <code className="text-brand-400 font-bold">admin123</code></p>
+          <p>Email: <code className="text-brand-400 font-bold">naredlasravankumar29@gmail.com</code></p>
+          <p>Password: <code className="text-brand-400 font-bold">Sravan29</code></p>
         </div>
       </div>
     </div>

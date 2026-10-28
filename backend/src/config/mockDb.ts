@@ -11,6 +11,14 @@ export const memoryStore = {
   admins: [
     {
       id: '00000000-0000-0000-0000-000000000001',
+      name: 'Sravan Kumar',
+      email: 'naredlasravankumar29@gmail.com',
+      password: '$2b$10$fN7C1aZpT7qefZRzrnjWouSTAmq/uJyNKfXcVIcUjXWYt7D4f.uY6',
+      role: 'super_admin',
+      status: 'active',
+    },
+    {
+      id: '00000000-0000-0000-0000-000000000002',
       name: 'Super Admin',
       email: 'admin@freshveggies.com',
       password: adminHash,
@@ -18,7 +26,7 @@ export const memoryStore = {
       status: 'active',
     },
     {
-      id: '00000000-0000-0000-0000-000000000002',
+      id: '00000000-0000-0000-0000-000000000003',
       name: 'Super Admin',
       email: 'admin@freshvegetables.com',
       password: adminHash,

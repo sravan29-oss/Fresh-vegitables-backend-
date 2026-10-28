@@ -5,9 +5,10 @@
 -- ADMIN USER (password: admin123)
 -- ============================================================
 INSERT INTO admins (name, email, password, role) VALUES
+('Sravan Kumar', 'naredlasravankumar29@gmail.com', '$2b$10$fN7C1aZpT7qefZRzrnjWouSTAmq/uJyNKfXcVIcUjXWYt7D4f.uY6', 'super_admin'),
 ('Super Admin', 'admin@freshvegetables.com', '$2b$10$8K1p/YKGqXqYxLzVoP3Yyu.g5xEH7K3/.XUz8eO/kQM3gLtYXvqKe', 'super_admin'),
 ('Admin', 'admin@freshveggies.com', '$2b$10$8K1p/YKGqXqYxLzVoP3Yyu.g5xEH7K3/.XUz8eO/kQM3gLtYXvqKe', 'admin')
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password;
 
 -- ============================================================
 -- CATEGORIES
