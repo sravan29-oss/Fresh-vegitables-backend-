@@ -85,10 +85,16 @@ export function writeVariantsToFile(variants: PersistedVariant[]): void {
 
 // Initial hydration on module load
 const initialProducts = readProductsFromFile();
-memoryStore.products = initialProducts;
+if (initialProducts && initialProducts.length > 0) {
+  memoryStore.products = initialProducts;
+} else if (memoryStore.products && memoryStore.products.length > 0) {
+  writeProductsToFile(memoryStore.products);
+}
 
 const initialVariants = readVariantsFromFile();
-memoryStore.product_variants = initialVariants;
+if (initialVariants && initialVariants.length > 0) {
+  memoryStore.product_variants = initialVariants;
+}
 
 export function getPersistedProducts(): PersistedProduct[] {
   return memoryStore.products;

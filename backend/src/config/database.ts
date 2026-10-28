@@ -45,6 +45,10 @@ async function checkPgHealth(): Promise<boolean> {
       if (env.NODE_ENV === 'production') {
         console.error('❌ [DATABASE WARNING] PostgreSQL connection check failed in production mode:');
         console.error(`❌ Details: ${e.message} (Code: ${e.code || 'UNKNOWN'})`);
+        if (!process.env.DATABASE_URL || isLocalhost) {
+          console.error('⚠️ [ACTION REQUIRED ON RENDER]: DATABASE_URL is not set or defaults to localhost.');
+          console.error('👉 Please go to Render Dashboard -> Web Service -> Environment -> Add "DATABASE_URL" with your Render or Supabase PostgreSQL Connection String.');
+        }
       } else {
         console.warn(`⚠️ [DEV WARNING] Local PostgreSQL is not reachable on port ${env.DB_PORT}: ${e.message}`);
         console.warn('⚠️ [DEV WARNING] Running in development mode with in-memory store.');

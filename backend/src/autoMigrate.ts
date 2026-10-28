@@ -25,6 +25,12 @@ export async function autoMigrateAndSeed(): Promise<void> {
     env.DATABASE_URL.includes('localhost') ||
     env.DATABASE_URL.includes('127.0.0.1');
 
+  if (isLocalhost && process.env.NODE_ENV === 'production') {
+    console.warn('⚠️ [AutoMigrate] DATABASE_URL is not configured in Render Environment Variables (defaults to localhost). Running with persistent store.');
+    console.warn('👉 To connect PostgreSQL, set the DATABASE_URL environment variable in your Render Dashboard.');
+    return;
+  }
+
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
     connectionTimeoutMillis: 10000,
