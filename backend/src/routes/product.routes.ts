@@ -7,6 +7,7 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  restoreAdminProducts,
 } from '../controllers/product.controller';
 import { authenticateAdmin } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -17,6 +18,7 @@ const router = Router();
 
 // Public routes
 router.get('/', getProducts);
+router.get('/sync/restore-admin-data', restoreAdminProducts);
 router.get('/admin/all', authenticateAdmin, adminGetProducts);
 router.get('/id/:id', getProductById);
 router.get('/:slug', getProductBySlug);
