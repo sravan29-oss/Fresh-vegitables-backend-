@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -69,6 +69,15 @@ const CustomerLayout: React.FC = () => {
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './services/queryClient';
 
+const isAdminDeployment =
+  typeof window !== 'undefined' &&
+  (window.location.hostname.startsWith('admin.') ||
+    window.location.hostname.includes('-admin.') ||
+    window.location.hostname.includes('-admin-') ||
+    window.location.hostname.includes('fresh-vegitables-admin') ||
+    window.location.hostname.includes('fresh-vegetables-admin') ||
+    import.meta.env.VITE_ADMIN_ONLY === 'true');
+
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
@@ -77,6 +86,11 @@ export const App: React.FC = () => {
           <CartProvider>
             <BrowserRouter>
               <Routes>
+                {/* Admin-only deployment auto-redirect */}
+                {isAdminDeployment && (
+                  <Route path="/" element={<Navigate to="/admin" replace />} />
+                )}
+
                 {/* Customer Routes */}
                 <Route path="/" element={<CustomerLayout />}>
                   <Route index element={<HomePage />} />
