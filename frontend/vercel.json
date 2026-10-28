@@ -1,7 +1,16 @@
 {
+  "headers": [
+    {
+      "source": "/manifest.json",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Content-Type", "value": "application/manifest+json" }
+      ]
+    }
+  ],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!assets|videos|manifest\\.json|favicon\\.png|apple-touch-icon\\.png|logo\\.png|logo\\.jpg|icon-192\\.png|icon-512\\.png|sw\\.js).*)",
       "destination": "/index.html"
     }
   ]
