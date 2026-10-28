@@ -212,10 +212,11 @@ export const TrackingPage: React.FC = () => {
   useEffect(() => {
     fetchTracking();
 
-    // Auto-poll tracking every 6s for live driver and delivery updates
+    // Auto-poll tracking every 20s for live driver and delivery updates
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchTracking(true);
-    }, 6000);
+    }, 20000);
 
     const handleFocus = () => fetchTracking(true);
     window.addEventListener('focus', handleFocus);

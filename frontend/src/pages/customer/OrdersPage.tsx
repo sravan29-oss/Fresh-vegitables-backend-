@@ -41,10 +41,11 @@ export const OrdersPage: React.FC = () => {
 
     fetchOrders();
 
-    // Auto-poll orders every 8 seconds for real-time status updates
+    // Auto-poll orders every 30 seconds for real-time status updates
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchOrders(true);
-    }, 8000);
+    }, 30000);
 
     const handleFocus = () => fetchOrders(true);
     window.addEventListener('focus', handleFocus);

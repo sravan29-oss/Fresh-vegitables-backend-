@@ -130,7 +130,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // 3. Lightweight polling check for new notifications across clients
   useEffect(() => {
+    let nextAllowedPollTime = 0;
+
     const pollInterval = setInterval(async () => {
+      // Skip if tab is in the background or backoff is active
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (Date.now() < nextAllowedPollTime) return;
+
       try {
         const res = await api.get('/notifications/latest');
         const latest: Notification | null = res.data?.data;
@@ -141,10 +147,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             triggerLiveNotification(latest);
           }
         }
-      } catch {
-        // Silently skip if network blip
+      } catch (err: any) {
+        // If throttled (429) or network issue, back off for 60 seconds
+        const status = err?.response?.status;
+        nextAllowedPollTime = Date.now() + (status === 429 ? 60000 : 30000);
       }
-    }, 4500); // Check every 4.5 seconds
+    }, 30000); // Check every 30 seconds
 
     return () => clearInterval(pollInterval);
   }, [triggerLiveNotification]);

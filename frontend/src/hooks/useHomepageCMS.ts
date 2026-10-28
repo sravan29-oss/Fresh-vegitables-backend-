@@ -16,9 +16,10 @@ export function useHomepageCMS() {
       const res = await api.get('/cms/homepage');
       return res.data?.data || { sections: [], banners: [] };
     },
-    staleTime: 0,
-    refetchInterval: 12000, // Poll every 12s for automatic updates without manual refresh
-    refetchOnWindowFocus: true,
+    staleTime: 60000,
+    retry: 1,
+    refetchInterval: 60000,
+    refetchOnWindowFocus: false,
   });
 
   // Listen for instant live updates from admin or other tabs

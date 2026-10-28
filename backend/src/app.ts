@@ -15,25 +15,27 @@ app.use(
       // Allow requests with no origin (e.g. server-to-server webhooks from Meta, mobile apps, curl)
       if (!origin) return callback(null, true);
 
-      const allowedOrigins = [env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'].filter(Boolean);
+      const isVercel = origin.endsWith('.vercel.app');
+      const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+      const isConfiguredFrontend =
+        Boolean(env.FRONTEND_URL) &&
+        (origin === env.FRONTEND_URL ||
+          origin === env.FRONTEND_URL.replace(/\/$/, '') ||
+          origin.startsWith(env.FRONTEND_URL.replace(/\/$/, '')));
 
-      const isAllowed =
-        allowedOrigins.includes(origin) ||
-        (env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:')) ||
-        (env.FRONTEND_URL && origin === env.FRONTEND_URL) ||
-        (env.FRONTEND_URL && origin.endsWith('.vercel.app') && env.FRONTEND_URL.includes('.vercel.app'));
-
-      if (isAllowed) {
+      if (isVercel || isLocalhost || isConfiguredFrontend) {
         return callback(null, true);
       }
 
-      if (env.NODE_ENV === 'production') {
-        return callback(new Error(`CORS blocked for origin: ${origin}`), false);
+      if (env.NODE_ENV !== 'production') {
+        return callback(null, true);
       }
 
-      return callback(null, true); // Permissive in local development
+      return callback(null, false);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Hub-Signature-256'],
   })
 );
 
@@ -59,6 +61,17 @@ app.use(
 // Serve static uploaded files
 const uploadPath = path.resolve(__dirname, '../', env.UPLOAD_DIR);
 app.use('/uploads', express.static(uploadPath));
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    service: 'Fresh Vegetables API',
+    health: '/health',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

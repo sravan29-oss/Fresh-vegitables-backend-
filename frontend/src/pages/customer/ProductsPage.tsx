@@ -82,8 +82,9 @@ export const ProductsPage: React.FC = () => {
     fetchProducts();
 
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchProducts(true);
-    }, 12000);
+    }, 60000);
 
     const handleFocus = () => fetchProducts(true);
     window.addEventListener('focus', handleFocus);
