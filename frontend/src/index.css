@@ -194,3 +194,53 @@
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* ─── Google Maps Theme & Custom FreshVegetables Map Branding ────────── */
+@keyframes pulseRadar {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes pingSlow {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.animate-pulse-radar {
+  animation: pulseRadar 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Custom leaflet tooltip for Google Maps style */
+.leaflet-tooltip.fresh-zone-tooltip {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  color: #ffffff !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25) !important;
+  padding: 6px 10px !important;
+  font-family: inherit !important;
+}
+
+.leaflet-tooltip.fresh-zone-tooltip::before {
+  border-top-color: rgba(15, 23, 42, 0.92) !important;
+}
+
+/* Custom subtle watermark overlay across map canvas */
+.fresh-map-watermark-overlay {
+  pointer-events: none;
+  background-image: radial-gradient(rgba(16, 185, 129, 0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+

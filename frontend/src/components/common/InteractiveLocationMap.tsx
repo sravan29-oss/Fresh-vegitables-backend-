@@ -11,6 +11,11 @@ import {
   Sparkles,
   Loader2,
   X,
+  Plus,
+  Minus,
+  Maximize2,
+  ShieldCheck,
+  Radio,
 } from 'lucide-react';
 import { DeliveryZone } from '../../types';
 import { HYDERABAD_COLONIES, HyderabadArea } from '../../data/hyderabadColonies';
@@ -40,22 +45,47 @@ interface InteractiveLocationMapProps {
   placeholder?: string;
 }
 
+// Google Maps Tile Layer Variants (Reliable, high-speed, 100% Google Maps Theme)
+const GOOGLE_TILE_LAYERS = {
+  roadmap: {
+    url: 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 20,
+    name: 'Map',
+  },
+  satellite: {
+    url: 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 20,
+    name: 'Satellite',
+  },
+  terrain: {
+    url: 'https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+    subdomains: ['0', '1', '2', '3'],
+    maxZoom: 20,
+    name: 'Terrain',
+  },
+};
+
+type MapTheme = keyof typeof GOOGLE_TILE_LAYERS;
+
 export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
   initialCenter = [17.4474, 78.3762], // Hyderabad central IT corridor
-  zoom = 13,
+  zoom = 14,
   markerPosition,
   onPositionChange,
   zones = [],
   selectedZoneId,
   interactive = true,
   circleRadiusKm,
-  height = '360px',
+  height = '370px',
   showSearchBar = true,
   showDetectLocationBtn = true,
   placeholder = 'Search Colony, Area or Landmark in Hyderabad...',
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const activeTileLayerRef = useRef<L.TileLayer | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const adminCircleRef = useRef<L.Circle | null>(null);
   const zonesLayerGroupRef = useRef<L.LayerGroup | null>(null);
@@ -63,6 +93,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
   const [currentCoords, setCurrentCoords] = useState<[number, number]>(
     markerPosition || initialCenter
   );
+  const [activeTheme, setActiveTheme] = useState<MapTheme>('roadmap');
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<HyderabadArea[]>([]);
   const [isSearchingOnline, setIsSearchingOnline] = useState(false);
@@ -109,13 +140,68 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     [zones]
   );
 
-  // Reverse Geocoding with OpenStreetMap Nominatim and local directory fallback
+  // Reverse Geocoding: Tries Google Geocoding (if key enabled) -> OSM Nominatim -> Local Colony Directory
   const reverseGeocode = useCallback(
     async (lat: number, lng: number) => {
       const roundedLat = Number(lat.toFixed(6));
       const roundedLng = Number(lng.toFixed(6));
 
-      // 1. Fetch exact street/colony/area from OpenStreetMap Nominatim
+      // 1. Attempt Google Geocoding API if key configured
+      const googleApiKey =
+        import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
+        import.meta.env.GOOGLE_MAPS_API_KEY;
+
+      if (googleApiKey) {
+        try {
+          const gRes = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${roundedLat},${roundedLng}&key=${googleApiKey}`
+          );
+          const gData = await gRes.json();
+          if (gData.status === 'OK' && gData.results && gData.results.length > 0) {
+            const first = gData.results[0];
+            let colony = '';
+            let area = 'Hyderabad';
+            let pincode = '';
+
+            for (const comp of first.address_components) {
+              if (
+                comp.types.includes('sublocality') ||
+                comp.types.includes('neighborhood') ||
+                comp.types.includes('sublocality_level_1')
+              ) {
+                colony = comp.long_name;
+              }
+              if (comp.types.includes('locality') || comp.types.includes('administrative_area_level_2')) {
+                area = comp.long_name;
+              }
+              if (comp.types.includes('postal_code')) {
+                pincode = comp.long_name;
+              }
+            }
+
+            if (!colony) colony = first.address_components[0]?.long_name || 'Hyderabad Colony';
+            const full = first.formatted_address || `${colony}, ${area}`;
+
+            const matched = matchZone(roundedLat, roundedLng, pincode);
+            const details: AddressDetails = {
+              colony,
+              area,
+              pincode,
+              fullAddress: full,
+              latitude: roundedLat,
+              longitude: roundedLng,
+              matchedZone: matched,
+            };
+            setResolvedAddress(full);
+            onPositionChange(roundedLat, roundedLng, details);
+            return;
+          }
+        } catch (e) {
+          // Google API failed or denied billing, seamlessly fallback to Nominatim
+        }
+      }
+
+      // 2. High-precision OpenStreetMap Nominatim reverse geocode
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=json&lat=${roundedLat}&lon=${roundedLng}&zoom=18&addressdetails=1`,
@@ -156,7 +242,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
         // Fallback to local directory
       }
 
-      // 2. Fallback: Match nearest named reference for labeling
+      // 3. Fallback: Match nearest named reference in Hyderabad directory
       let closestColony = HYDERABAD_COLONIES[0];
       let minDistance = Infinity;
 
@@ -184,12 +270,77 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     [matchZone, onPositionChange]
   );
 
-  // Initialize Leaflet Map
+  // Switch Google Maps Layer Theme
+  const switchMapTheme = (theme: MapTheme) => {
+    setActiveTheme(theme);
+    if (!mapInstanceRef.current) return;
+
+    if (activeTileLayerRef.current) {
+      mapInstanceRef.current.removeLayer(activeTileLayerRef.current);
+    }
+
+    const config = GOOGLE_TILE_LAYERS[theme];
+    const newLayer = L.tileLayer(config.url, {
+      subdomains: config.subdomains,
+      maxZoom: config.maxZoom,
+      attribution: 'Google Maps &bull; FreshVegetables Network',
+    }).addTo(mapInstanceRef.current);
+
+    activeTileLayerRef.current = newLayer;
+  };
+
+  // Create Google Maps Inspired Custom Pin with FreshVegetables Branding
+  const createGoogleStyledPin = () => {
+    return L.divIcon({
+      className: 'custom-google-pin',
+      html: `
+        <div style="position: relative; width: 48px; height: 56px; display: flex; align-items: center; justify-content: center; transform: translate(-2px, -6px);">
+          <!-- Outer Pulsing Radar Waves -->
+          <div style="position: absolute; bottom: 0px; width: 42px; height: 42px; border-radius: 9999px; background: rgba(16, 185, 129, 0.4); animation: pulseRadar 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+          <div style="position: absolute; bottom: 6px; width: 30px; height: 30px; border-radius: 9999px; background: rgba(5, 150, 105, 0.25); animation: pingSlow 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+          
+          <!-- Google Maps Teardrop Marker Pin with Fresh Vegetables Emerald Gradient -->
+          <div style="position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 8px 16px rgba(5, 150, 105, 0.45));">
+            <svg width="40" height="48" viewBox="0 0 384 512" fill="none">
+              <defs>
+                <linearGradient id="freshPinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#10b981" />
+                  <stop offset="60%" stop-color="#059669" />
+                  <stop offset="100%" stop-color="#047857" />
+                </linearGradient>
+                <filter id="pinShadow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000" flood-opacity="0.3"/>
+                </filter>
+              </defs>
+              <path 
+                d="M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0z" 
+                fill="url(#freshPinGrad)"
+                stroke="#ffffff"
+                stroke-width="12"
+              />
+              <!-- White Inner Circle -->
+              <circle cx="192" cy="192" r="92" fill="#ffffff" />
+              <!-- Emerald Fresh Leaf Centerpiece -->
+              <path 
+                d="M192 136c-30.9 0-56 25.1-56 56 0 12.4 4 23.9 10.9 33.1L192 268l45.1-42.9c6.9-9.2 10.9-20.7 10.9-33.1 0-30.9-25.1-56-56-56z" 
+                fill="#059669" 
+              />
+              <circle cx="192" cy="192" r="18" fill="#ffffff" />
+            </svg>
+          </div>
+        </div>
+      `,
+      iconSize: [48, 56],
+      iconAnchor: [24, 52],
+    });
+  };
+
+  // Initialize Map with Google Maps Theme
   useEffect(() => {
     if (!mapContainerRef.current) return;
     if (mapInstanceRef.current) return;
 
-    // Fix default marker icon assets issue in bundlers
+    // Reset default icon assets
     delete (L.Icon.Default.prototype as any)._getIconUrl;
     L.Icon.Default.mergeOptions({
       iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -204,40 +355,21 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
       attributionControl: false,
     });
 
-    // High-resolution clean OpenStreetMap Standard Tiles (100% Free, No API Key Required)
-    L.tileLayer(
-      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {
-        maxZoom: 19,
-        subdomains: ['a', 'b', 'c'],
-        attribution: '&copy; OpenStreetMap contributors',
-      }
-    ).addTo(map);
+    // Default: Official Google Maps Roadmap Theme Layer
+    const tileConfig = GOOGLE_TILE_LAYERS[activeTheme];
+    const initialTileLayer = L.tileLayer(tileConfig.url, {
+      subdomains: tileConfig.subdomains,
+      maxZoom: tileConfig.maxZoom,
+      attribution: 'Google Maps &bull; FreshVegetables Delivery',
+    }).addTo(map);
 
-    // Zoom control in bottom right
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    activeTileLayerRef.current = initialTileLayer;
 
-    // Neon Emerald Custom Marker Pin
-    const customIcon = L.divIcon({
-      className: 'custom-leaflet-pin',
-      html: `
-        <div style="position: relative; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px;">
-          <div style="position: absolute; width: 40px; height: 40px; border-radius: 9999px; background: rgba(52, 211, 153, 0.35); animation: pingSlow 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-          <div style="width: 34px; height: 34px; border-radius: 9999px; background: #061c11; border: 2.5px solid #10b981; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.5); z-index: 10;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
-              <circle cx="12" cy="10" r="3"></circle>
-            </svg>
-          </div>
-        </div>
-      `,
-      iconSize: [44, 44],
-      iconAnchor: [22, 38],
-    });
-
+    // Create & Add Google Styled Pin
     const marker = L.marker(currentCoords, {
-      icon: customIcon,
+      icon: createGoogleStyledPin(),
       draggable: interactive,
+      autoPan: true,
     }).addTo(map);
 
     markerRef.current = marker;
@@ -268,13 +400,13 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
       });
     }
 
-    // Layer group for active delivery zones
+    // Delivery zones overlay layer group
     const zonesGroup = L.layerGroup().addTo(map);
     zonesLayerGroupRef.current = zonesGroup;
 
     mapInstanceRef.current = map;
 
-    // Trigger initial reverse geocode
+    // Initial reverse geocode
     reverseGeocode(currentCoords[0], currentCoords[1]);
 
     const resizeTimer = setTimeout(() => {
@@ -288,7 +420,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     };
   }, []);
 
-  // Sync markerPosition prop if changed externally
+  // Sync external markerPosition prop
   useEffect(() => {
     if (markerPosition && mapInstanceRef.current && markerRef.current) {
       const [lat, lng] = markerPosition;
@@ -305,7 +437,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     }
   }, [markerPosition]);
 
-  // Update Zones Geofence Circles on map
+  // Update Zones Geofence Circles on Google Maps canvas
   useEffect(() => {
     if (!mapInstanceRef.current || !zonesLayerGroupRef.current) return;
     const group = zonesLayerGroupRef.current;
@@ -320,21 +452,21 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
           radius: radiusMeters,
           color: isSelected ? '#10b981' : '#059669',
           weight: isSelected ? 2.5 : 1.5,
-          opacity: 0.8,
+          opacity: 0.85,
           fillColor: isSelected ? '#34d399' : '#10b981',
-          fillOpacity: isSelected ? 0.16 : 0.08,
+          fillOpacity: isSelected ? 0.18 : 0.08,
           dashArray: isSelected ? '6, 6' : undefined,
         }).addTo(group);
 
         circle.bindTooltip(
           `<div style="font-family: inherit; font-size: 11px; padding: 2px;">
-            <strong style="color: #064e3b;">${zone.name}</strong><br/>
-            <span style="color: #047857;">${zone.estimated_delivery_time} • ₹${zone.delivery_fee} Fee</span>
+            <strong style="color: #ffffff;">${zone.name}</strong><br/>
+            <span style="color: #34d399;">${zone.estimated_delivery_time} • ₹${zone.delivery_fee} Delivery Fee</span>
           </div>`,
           {
             permanent: false,
             direction: 'top',
-            className: 'zone-tooltip-glass',
+            className: 'fresh-zone-tooltip',
           }
         );
 
@@ -367,22 +499,22 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
       const circle = L.circle(centerCoords, {
         radius: circleRadiusKm * 1000,
         color: '#10b981',
-        weight: 2,
-        dashArray: '5, 5',
+        weight: 2.2,
+        dashArray: '6, 6',
         fillColor: '#34d399',
-        fillOpacity: 0.16,
+        fillOpacity: 0.18,
       }).addTo(map);
 
       circle.bindTooltip(
-        `<div style="font-size: 11px; font-weight: bold; color: #047857; padding: 2px 4px;">Coverage Radius: ${circleRadiusKm} km</div>`,
-        { permanent: true, direction: 'right' }
+        `<div style="font-size: 11px; font-weight: bold; color: #ffffff; padding: 2px 6px;">Coverage Radius: ${circleRadiusKm} km</div>`,
+        { permanent: true, direction: 'right', className: 'fresh-zone-tooltip' }
       );
 
       adminCircleRef.current = circle;
     }
   }, [circleRadiusKm, currentCoords, markerPosition]);
 
-  // Handle colony search input
+  // Colony search suggestions
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     if (!value.trim()) {
@@ -401,7 +533,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     setSuggestions(matched);
   };
 
-  // Jump to selected Hyderabad colony or search result
+  // Select Hyderabad colony
   const handleSelectColony = (colony: HyderabadArea) => {
     setSearchQuery(colony.name);
     setSuggestions([]);
@@ -414,7 +546,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     }
   };
 
-  // Online Nominatim Search fallback if user types an unlisted colony
+  // Search online fallback
   const handleOnlineSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
@@ -446,7 +578,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     }
   };
 
-  // Detect Live GPS Location
+  // Detect GPS location
   const handleDetectGPS = () => {
     if (!navigator.geolocation) return;
 
@@ -469,9 +601,28 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     );
   };
 
+  // Custom Google Maps Zoom Controls
+  const handleZoomIn = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.zoomIn();
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.zoomOut();
+    }
+  };
+
+  const handleRecenter = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.panTo(currentCoords);
+    }
+  };
+
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-emerald-500/25 bg-[#06180f] shadow-xl flex flex-col">
-      {/* ─── Map Search & Location Header ─── */}
+    <div className="relative rounded-2xl overflow-hidden border border-emerald-500/25 bg-[#06180f] shadow-2xl flex flex-col">
+      {/* ─── Google Maps Style Search & Location Header ─── */}
       {showSearchBar && (
         <div className="p-3 bg-[#071f13] border-b border-emerald-500/20 relative z-20">
           <form onSubmit={handleOnlineSearch} className="relative">
@@ -481,7 +632,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
               placeholder={placeholder}
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full h-10 pl-9 pr-24 text-xs sm:text-sm bg-[#04140c] border border-emerald-500/30 focus:border-emerald-400 rounded-xl text-white placeholder:text-emerald-100/40 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              className="w-full h-10 pl-9 pr-24 text-xs sm:text-sm bg-[#04140c] border border-emerald-500/30 focus:border-emerald-400 rounded-xl text-white placeholder:text-emerald-100/40 focus:outline-none focus:ring-1 focus:ring-emerald-400 shadow-inner"
             />
             <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {searchQuery && (
@@ -499,7 +650,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
               <button
                 type="submit"
                 disabled={isSearchingOnline}
-                className="h-7 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] flex items-center gap-1 transition-all"
+                className="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] flex items-center gap-1 transition-all shadow-sm cursor-pointer"
               >
                 {isSearchingOnline ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -510,11 +661,11 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
             </div>
           </form>
 
-          {/* Autocomplete Colony Suggestions Dropdown */}
+          {/* Autocomplete Suggestions */}
           {suggestions.length > 0 && (
             <div className="absolute left-3 right-3 top-14 bg-[#081e13] border border-emerald-500/30 rounded-xl shadow-2xl overflow-hidden z-50 animate-fade-in max-h-56 overflow-y-auto divide-y divide-emerald-950/60">
               <div className="p-2 text-[10px] font-black uppercase tracking-wider text-emerald-400/80 bg-[#05160d]">
-                Hyderabad Colonies &amp; Areas
+                Hyderabad Colonies &amp; Landmarks
               </div>
               {suggestions.map((col, idx) => (
                 <div
@@ -539,36 +690,134 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
         </div>
       )}
 
-      {/* ─── Leaflet Map Canvas ─── */}
+      {/* ─── Map Canvas & Overlay Elements ─── */}
       <div className="relative w-full" style={{ height }}>
+        {/* Leaflet Canvas with Google Roadmap Tiles */}
         <div ref={mapContainerRef} className="w-full h-full z-10" />
 
-        {/* Floating Controls: Detect GPS Location */}
-        {showDetectLocationBtn && (
+        {/* ─── Fresh Vegetables Watermark & Branding Badge (Top-Left) ─── */}
+        <div className="absolute top-3 left-3 z-[400] bg-slate-950/90 backdrop-blur-md border border-emerald-500/35 rounded-xl px-2.5 py-1.5 shadow-xl flex items-center gap-2 pointer-events-none">
+          <div className="w-5 h-5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+            <span className="text-xs">🌿</span>
+          </div>
+          <div className="leading-tight">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-black text-white tracking-tight">
+                Fresh<span className="text-emerald-400">Vegetables</span>
+              </span>
+              <span className="text-[8.5px] font-bold text-emerald-300 bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-500/30">
+                LIVE MAP
+              </span>
+            </div>
+            <p className="text-[9px] text-emerald-200/70">15–25 Mins Hyperlocal Express</p>
+          </div>
+        </div>
+
+        {/* ─── Google Maps Theme Switcher Pill (Top-Right) ─── */}
+        <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
+          {/* Map / Satellite / Terrain Mode Pills */}
+          <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-xl p-0.5 border border-slate-200 dark:border-slate-800 shadow-md flex items-center gap-0.5 text-[11px] font-bold">
+            <button
+              type="button"
+              onClick={() => switchMapTheme('roadmap')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                activeTheme === 'roadmap'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-emerald-500'
+              }`}
+            >
+              Map
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMapTheme('satellite')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                activeTheme === 'satellite'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-emerald-500'
+              }`}
+            >
+              Satellite
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMapTheme('terrain')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer hidden sm:block ${
+                activeTheme === 'terrain'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-emerald-500'
+              }`}
+            >
+              Terrain
+            </button>
+          </div>
+
+          {/* Detect GPS Button */}
+          {showDetectLocationBtn && (
+            <button
+              type="button"
+              onClick={handleDetectGPS}
+              disabled={isDetectingLocation}
+              className="h-8 px-2.5 rounded-xl bg-white/95 dark:bg-slate-900/95 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200 dark:border-slate-800 text-emerald-600 dark:text-emerald-400 text-xs font-bold shadow-md flex items-center gap-1.5 backdrop-blur-md transition-all cursor-pointer"
+              title="Locate my position"
+            >
+              {isDetectingLocation ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+              ) : (
+                <Navigation className="w-3.5 h-3.5 text-emerald-500" />
+              )}
+              <span className="hidden md:inline">My Location</span>
+            </button>
+          )}
+        </div>
+
+        {/* ─── Google Maps Style Vertical Floating Controls (Bottom-Right) ─── */}
+        <div className="absolute bottom-4 right-3 z-[400] flex flex-col items-center gap-2">
+          {/* Re-center Button */}
           <button
             type="button"
-            onClick={handleDetectGPS}
-            disabled={isDetectingLocation}
-            className="absolute top-3 right-3 z-[400] h-9 px-3 rounded-xl bg-[#071f13]/95 hover:bg-[#0c311f] border border-emerald-500/40 text-emerald-200 hover:text-white text-xs font-bold shadow-lg flex items-center gap-1.5 backdrop-blur-md transition-all cursor-pointer"
-            title="Locate my current position"
+            onClick={handleRecenter}
+            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:text-emerald-500 shadow-lg flex items-center justify-center transition-all cursor-pointer"
+            title="Re-center on pin"
           >
-            {isDetectingLocation ? (
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-            ) : (
-              <Navigation className="w-4 h-4 text-emerald-400" />
-            )}
-            <span className="hidden sm:inline">Use My Location</span>
+            <Compass className="w-4 h-4 text-emerald-500" />
           </button>
-        )}
 
-        {/* Floating Map Helper Badge */}
-        <div className="absolute bottom-3 left-3 z-[400] bg-[#071f13]/90 backdrop-blur-md border border-emerald-500/30 rounded-xl px-2.5 py-1.5 text-[10.5px] text-emerald-200/90 shadow-md flex items-center gap-1.5 pointer-events-none">
-          <Compass className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Click anywhere or drag pin to choose exact colony</span>
+          {/* Zoom In & Zoom Out Column */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg flex flex-col overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="w-8 h-8 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Zoom In"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="w-8 h-8 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Zoom Out"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* ─── Bottom-Left: Subtle Brand Watermark Tag & Instruction ─── */}
+        <div className="absolute bottom-3 left-3 z-[400] flex items-center gap-2">
+          <div className="bg-slate-950/85 backdrop-blur-md border border-emerald-500/30 rounded-xl px-2.5 py-1 text-[10px] text-emerald-200/90 shadow-md flex items-center gap-1.5 pointer-events-none">
+            <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
+            <span>Click or drag pin to select colony</span>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-1 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border border-slate-200/50 dark:border-slate-800/50 rounded-lg px-2 py-0.5 text-[9px] text-slate-500 dark:text-slate-400 pointer-events-none">
+            <span>Powered by Google Maps &bull; FreshVegetables</span>
+          </div>
         </div>
       </div>
 
-      {/* ─── Selected Colony/Location Status Pill ─── */}
+      {/* ─── Selected Location Footer Bar ─── */}
       {resolvedAddress && (
         <div className="p-3 bg-[#06180f] border-t border-emerald-500/20 flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 min-w-0">
@@ -576,7 +825,9 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
               <CheckCircle2 className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0 leading-tight">
-              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Selected Location</p>
+              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                Selected Delivery Location
+              </p>
               <p className="text-white font-bold truncate text-xs">{resolvedAddress}</p>
             </div>
           </div>
