@@ -246,6 +246,8 @@ async function sendViaGoogleRelay(options: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: options.to,
+        recipient: options.to,
+        email: options.to,
         subject: options.subject,
         html: options.html,
         text: options.text,
