@@ -29,16 +29,18 @@ api.interceptors.request.use((config) => {
     config.url?.startsWith('/sellers/admin') ||
     config.url?.startsWith('/audit-logs');
 
-  if (isAdminPage || isAdminEndpoint) {
-    if (adminToken) {
-      config.headers.Authorization = `Bearer ${adminToken}`;
+  if (!config.headers.Authorization) {
+    if (isAdminPage || isAdminEndpoint) {
+      if (adminToken) {
+        config.headers.Authorization = `Bearer ${adminToken}`;
+      } else if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     } else if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (adminToken) {
+      config.headers.Authorization = `Bearer ${adminToken}`;
     }
-  } else if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  } else if (adminToken) {
-    config.headers.Authorization = `Bearer ${adminToken}`;
   }
 
   return config;

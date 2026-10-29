@@ -66,8 +66,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const token = localStorage.getItem('token');
       const refreshToken = localStorage.getItem('refresh_token');
       const adminToken = localStorage.getItem('admin_token');
+      const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
 
-      if (token) {
+      if (adminToken) {
+        try {
+          const savedAdmin = localStorage.getItem('admin_user');
+          if (savedAdmin && !adminUser) {
+            setAdminUser(JSON.parse(savedAdmin));
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (token && !isAdminPage) {
         try {
           const res = await api.get('/auth/profile', {
             headers: { Authorization: `Bearer ${token}` },
@@ -99,17 +111,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.removeItem('user');
             setUser(null);
           }
-        }
-      }
-
-      if (adminToken) {
-        try {
-          const savedAdmin = localStorage.getItem('admin_user');
-          if (savedAdmin && !adminUser) {
-            setAdminUser(JSON.parse(savedAdmin));
-          }
-        } catch {
-          // ignore
         }
       }
 
