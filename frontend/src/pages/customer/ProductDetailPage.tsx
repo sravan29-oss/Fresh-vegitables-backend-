@@ -146,7 +146,7 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-8 sm:space-y-12 pb-24 md:pb-12">
       {/* Back button & Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
         <Link to="/products" className="hover:text-brand-600 flex items-center gap-1">
@@ -156,11 +156,11 @@ export const ProductDetailPage: React.FC = () => {
         <span>/</span>
         <span className="text-slate-400">{product.category_name || 'Greens'}</span>
         <span>/</span>
-        <span className="text-slate-800 font-bold">{product.name}</span>
+        <span className="text-slate-800 font-bold truncate max-w-[140px] sm:max-w-none">{product.name}</span>
       </div>
 
       {/* Main Product Showcase */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 bg-white p-6 sm:p-10 rounded-3xl border border-slate-200/80 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 bg-white p-4 sm:p-10 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm">
         {/* Left Column: Image Gallery */}
         <div className="lg:col-span-5 space-y-4">
           <div className="aspect-square bg-[#f8fafc] rounded-3xl border border-slate-200/80 flex items-center justify-center overflow-hidden relative p-6">
@@ -377,11 +377,11 @@ export const ProductDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Related Products Section (3 Cards per Row) */}
+      {/* Related Products Section (2 Columns on Phone, 4 on Desktop) */}
       {relatedProducts.length > 0 && (
-        <section className="space-y-6">
-          <h3 className="text-xl font-bold text-slate-900">Similar Farm Vegetables</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <section className="space-y-4 sm:space-y-6">
+          <h3 className="text-lg sm:text-xl font-bold text-slate-900">Similar Farm Vegetables</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-5">
             {relatedProducts.slice(0, 6).map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}

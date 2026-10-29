@@ -48,7 +48,7 @@ import { PermissionsPromptModal } from './components/common/PermissionsPromptMod
 
 const CustomerLayout: React.FC = () => {
   return (
-    <div className="flex flex-col min-h-screen bg-[#f8fafc] text-slate-900 relative pb-20 md:pb-0">
+    <div className="flex flex-col min-h-screen min-h-[100dvh] bg-[#f8fafc] text-slate-900 relative pb-safe-nav md:pb-0">
       <Header />
       <main className="flex-1">
         <Outlet />

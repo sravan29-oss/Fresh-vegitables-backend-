@@ -57,7 +57,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ section }) => {
   return (
     <section
       key={section?.id || 'hero-main'}
-      className="relative overflow-hidden bg-gradient-to-r from-[#0c831f] via-[#0f9426] to-[#086317] text-white rounded-3xl mx-4 sm:mx-6 lg:mx-8 mt-5 shadow-lg border border-emerald-600/40 animate-slide-up"
+      className="relative overflow-hidden bg-gradient-to-r from-[#0c831f] via-[#0f9426] to-[#086317] text-white rounded-2xl sm:rounded-3xl mx-3 sm:mx-6 lg:mx-8 mt-3 sm:mt-5 shadow-lg border border-emerald-600/40 animate-slide-up"
     >
       {/* Decorative ambient patterns */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
@@ -67,51 +67,51 @@ const HeroSection: React.FC<HeroSectionProps> = ({ section }) => {
       </div>
 
       {/* Hero Foreground Content Layer */}
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 py-12 sm:py-16 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-        <div className="lg:col-span-7 space-y-5">
-          <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 px-3.5 py-1.5 rounded-full text-xs font-black text-white shadow-xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-10 py-7 sm:py-16 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 items-center">
+        <div className="lg:col-span-7 space-y-4 sm:space-y-5">
+          <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-black text-white shadow-xs">
             <span className="w-2 h-2 rounded-full bg-[#ffc72c] animate-pulse"></span>
             <Sparkles className="w-3.5 h-3.5 text-[#ffc72c]" />
             <span>{subtitle}</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.1] text-white">
+          <h1 className="text-2xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.15] text-white">
             {title}
           </h1>
 
-          <p className="text-emerald-50 text-sm sm:text-base max-w-xl font-medium leading-relaxed">
+          <p className="text-emerald-50 text-xs sm:text-base max-w-xl font-medium leading-relaxed">
             {description}
           </p>
 
-          <div className="flex flex-wrap gap-3.5 pt-2">
+          <div className="flex flex-wrap gap-2.5 sm:gap-3.5 pt-1 sm:pt-2">
             <Link
               to={buttonLink}
-              className="bg-[#ffc72c] hover:bg-[#f5b81a] active:scale-95 text-slate-950 font-black px-7 py-3.5 rounded-xl shadow-md flex items-center gap-2 transition-all transform hover:-translate-y-0.5 text-sm"
+              className="bg-[#ffc72c] hover:bg-[#f5b81a] active:scale-95 text-slate-950 font-black px-5 py-2.5 sm:px-7 sm:py-3.5 rounded-xl shadow-md flex items-center gap-2 transition-all transform hover:-translate-y-0.5 text-xs sm:text-sm"
             >
               <span>{buttonText}</span>
               <ArrowRight className="w-4 h-4 stroke-[2.5]" />
             </Link>
             <Link
               to={section?.configuration?.secondary_button_link || '/products?best_seller=true'}
-              className="bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold px-6 py-3.5 rounded-xl transition-all shadow-xs active:scale-95 text-sm"
+              className="bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold px-4 py-2.5 sm:px-6 sm:py-3.5 rounded-xl transition-all shadow-xs active:scale-95 text-xs sm:text-sm"
             >
               {section?.configuration?.secondary_button_text || "Today's Deals 🔥"}
             </Link>
           </div>
 
           {/* Proof points */}
-          <div className="pt-6 border-t border-emerald-500/40 grid grid-cols-3 gap-4 text-xs">
+          <div className="pt-4 sm:pt-6 border-t border-emerald-500/40 grid grid-cols-3 gap-2 sm:gap-4 text-xs">
             {stats.map((st: any, idx: number) => (
               <div key={idx} className="space-y-0.5">
-                <p className="font-extrabold text-2xl text-white tracking-tight">{st.value}</p>
-                <p className="text-emerald-100 font-medium">{st.label}</p>
+                <p className="font-extrabold text-lg sm:text-2xl text-white tracking-tight">{st.value}</p>
+                <p className="text-emerald-100 text-[10px] sm:text-xs font-medium">{st.label}</p>
               </div>
             ))}
           </div>
         </div>
 
         {/* Visual illustration / Solid White Feature Card */}
-        <div className="lg:col-span-5 relative flex justify-center">
+        <div className="lg:col-span-5 relative flex justify-center hidden sm:flex">
           <div className="w-full max-w-sm bg-white text-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-100 flex flex-col justify-between">
             <div className="flex justify-between items-center pb-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
@@ -211,33 +211,33 @@ export const HomePage: React.FC = () => {
       case 'categories': {
         const catList: Category[] = (section.categories && section.categories.length > 0) ? section.categories : fallbackCategories;
         return (
-          <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="flex items-center justify-between mb-8">
+          <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+            <div className="flex items-center justify-between mb-4 sm:mb-8">
               <div>
-                <span className="text-brand-600 font-extrabold text-xs uppercase tracking-wider">
+                <span className="text-[#0c831f] font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
                   {section.subtitle || 'Organized Harvest'}
                 </span>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
                   {section.title}
                 </h2>
               </div>
               <Link
                 to={section.button_link || '/products'}
-                className="text-sm font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
               >
-                <span>{section.button_text || 'View All Categories'}</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>{section.button_text || 'View All'}</span>
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-4">
               {catList.map((cat: Category) => (
                 <Link
                   key={cat.id}
                   to={`/products?category=${cat.slug}`}
-                  className="group p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer"
+                  className="shrink-0 w-24 sm:w-auto p-3 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer select-none"
                 >
-                  <div className="w-16 h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-3xl mb-3 transition-colors">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-2xl sm:text-3xl mb-2 sm:mb-3 transition-colors">
                     {cat.slug.includes('leaf')
                       ? '🥬'
                       : cat.slug.includes('root')
@@ -250,10 +250,10 @@ export const HomePage: React.FC = () => {
                       ? '🌿'
                       : '🍅'}
                   </div>
-                  <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0c831f] transition-colors">
+                  <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm group-hover:text-[#0c831f] transition-colors truncate max-w-full">
                     {cat.name}
                   </h3>
-                  <span className="text-[11px] text-slate-400 mt-1 font-medium">Fresh Harvest</span>
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 font-medium">Fresh Harvest</span>
                 </Link>
               ))}
             </div>
@@ -265,22 +265,22 @@ export const HomePage: React.FC = () => {
       case 'featured_products': {
         const prodList: Product[] = (section.products && section.products.length > 0) ? section.products : fallbackProducts;
         return (
-          <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="flex items-center justify-between mb-8">
+          <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+            <div className="flex items-center justify-between mb-4 sm:mb-8">
               <div>
-                <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
+                <span className="text-[#0c831f] font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
                   {section.subtitle || 'Hand-Picked At Dawn'}
                 </span>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
                   {section.title}
                 </h2>
               </div>
               <Link
                 to={section.button_link || '/products'}
-                className="text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
+                className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
               >
-                <span>{section.button_text || 'Explore Produce'}</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>{section.button_text || 'Explore'}</span>
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </Link>
             </div>
 
@@ -290,7 +290,7 @@ export const HomePage: React.FC = () => {
                 <p className="text-xs text-slate-400">Our farmers are currently preparing fresh seasonal vegetables for this rail.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
                 {prodList.map((p: Product) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
@@ -306,22 +306,22 @@ export const HomePage: React.FC = () => {
           ? section.products
           : (bestProds.length > 0 ? bestProds : fallbackProducts);
         return (
-          <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="flex items-center justify-between mb-8">
+          <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+            <div className="flex items-center justify-between mb-4 sm:mb-8">
               <div>
-                <span className="text-amber-600 font-extrabold text-xs uppercase tracking-wider">
+                <span className="text-amber-600 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
                   {section.subtitle || 'Trending In Kitchens'}
                 </span>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
                   {section.title}
                 </h2>
               </div>
               <Link
                 to={section.button_link || '/products?best_seller=true'}
-                className="text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
+                className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
               >
-                <span>{section.button_text || 'View All Best Sellers'}</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>{section.button_text || 'View All'}</span>
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </Link>
             </div>
 
@@ -331,7 +331,7 @@ export const HomePage: React.FC = () => {
                 <p className="text-xs text-slate-400">Our farmers are currently preparing fresh seasonal vegetables for this rail.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
                 {prodList.map((p: Product) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
@@ -494,7 +494,7 @@ export const HomePage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-12 pb-24">
+    <div className="space-y-8 sm:space-y-12 pb-24 md:pb-12">
       {/* Dynamic SEO Meta & Structured Data */}
       <SEOHead
         title="Fresh Vegetables — Farm-Fresh Organic Greens in 30 Mins"
@@ -510,33 +510,33 @@ export const HomePage: React.FC = () => {
 
           {/* Harvest Categories Rail */}
           {fallbackCategories.length > 0 && (
-            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-              <div className="flex items-center justify-between mb-8">
+            <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+              <div className="flex items-center justify-between mb-4 sm:mb-8">
                 <div>
-                  <span className="text-brand-600 font-extrabold text-xs uppercase tracking-wider">
+                  <span className="text-[#0c831f] font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
                     Organized Harvest
                   </span>
-                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
                     Shop by Harvest Category
                   </h2>
                 </div>
                 <Link
                   to="/products"
-                  className="text-sm font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                  className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
                 >
-                  <span>View All Categories</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>View All</span>
+                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </Link>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-4">
                 {fallbackCategories.map((cat: Category) => (
                   <Link
                     key={cat.id}
                     to={`/products?category=${cat.slug}`}
-                    className="group p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer"
+                    className="shrink-0 w-24 sm:w-auto p-3 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer select-none"
                   >
-                    <div className="w-16 h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-3xl mb-3 transition-colors">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-2xl sm:text-3xl mb-2 sm:mb-3 transition-colors">
                       {cat.slug.includes('leaf')
                         ? '🥬'
                         : cat.slug.includes('root')
@@ -549,10 +549,10 @@ export const HomePage: React.FC = () => {
                         ? '🌿'
                         : '🍅'}
                     </div>
-                    <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0c831f] transition-colors">
+                    <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm group-hover:text-[#0c831f] transition-colors truncate max-w-full">
                       {cat.name}
                     </h3>
-                    <span className="text-[11px] text-slate-400 mt-1 font-medium">Fresh Harvest</span>
+                    <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 font-medium">Fresh Harvest</span>
                   </Link>
                 ))}
               </div>
@@ -561,26 +561,26 @@ export const HomePage: React.FC = () => {
 
           {/* Featured Fresh Harvest Produce Rail */}
           {fallbackProducts.length > 0 && (
-            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-              <div className="flex items-center justify-between mb-8">
+            <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+              <div className="flex items-center justify-between mb-4 sm:mb-8">
                 <div>
-                  <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
+                  <span className="text-[#0c831f] font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
                     Hand-Picked At Dawn
                   </span>
-                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
                     Handpicked Fresh Today
                   </h2>
                 </div>
                 <Link
                   to="/products"
-                  className="text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
+                  className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
                 >
-                  <span>Explore Produce</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>Explore</span>
+                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </Link>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
                 {fallbackProducts.map((p: Product) => (
                   <ProductCard key={p.id} product={p} />
                 ))}

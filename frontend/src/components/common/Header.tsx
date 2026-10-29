@@ -214,7 +214,7 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/98 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300 w-full max-w-[100vw] overflow-x-hidden">
+    <header className="sticky top-0 z-40 bg-white/98 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300 w-full max-w-[100vw] overflow-x-hidden safe-area-pt">
       {/* ─── Top Announcement Bar (Vibrant Quick-Commerce Green) ─── */}
       <div className="bg-[#0c831f] text-white text-[11px] font-medium h-7.5 sm:h-8.5 flex items-center overflow-hidden w-full">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full flex items-center justify-between gap-3 min-w-0">
@@ -257,13 +257,13 @@ export const Header: React.FC = () => {
       {/* ═══════════════════════════════════════════════════════════════════════
           MOBILE NAVBAR (< md: Phone / Small Screens) - Zepto/Blinkit Native App Style
           ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="md:hidden w-full px-3 pt-2 pb-2">
+      <div className="md:hidden w-full px-3 pt-2 pb-2.5">
         {/* Row 1: Brand & Location (Left) + Notification & Quick Cart / Profile (Right) */}
-        <div className="flex items-center justify-between gap-2 h-12 w-full">
+        <div className="flex items-center justify-between gap-2 h-11 w-full">
           
           {/* Left: Brand Icon + Delivery Time & Location Stack */}
           <div className="flex items-center gap-2 min-w-0">
-            <Link to="/" className="shrink-0 flex items-center">
+            <Link to="/" className="shrink-0 flex items-center" aria-label="Fresh Vegetables Home">
               <img
                 src="/logo.png"
                 alt="Fresh Vegetables"
@@ -276,12 +276,13 @@ export const Header: React.FC = () => {
               onClick={() => setIsLocationModalOpen(true)}
               className="flex flex-col text-left justify-center cursor-pointer min-w-0 pr-1 group"
               title="Change delivery location"
+              aria-label={`Delivery location: ${displayLocationName}`}
             >
               <span className="text-[10px] font-black uppercase text-[#0c831f] flex items-center gap-1 leading-none tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
                 <span>15 MINS DELIVERY</span>
               </span>
-              <span className="text-xs font-black text-slate-900 truncate max-w-[155px] xs:max-w-[200px] flex items-center gap-0.5 mt-0.5 leading-tight group-hover:text-[#0c831f] transition-colors">
+              <span className="text-xs font-black text-slate-900 truncate max-w-[140px] xs:max-w-[190px] flex items-center gap-0.5 mt-0.5 leading-tight group-hover:text-[#0c831f] transition-colors">
                 <span className="truncate">{displayLocationName}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 group-hover:translate-y-0.5 transition-transform" />
               </span>
@@ -294,7 +295,7 @@ export const Header: React.FC = () => {
             <div className="relative" ref={notifRef}>
               <button
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
-                className="w-8.5 h-8.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-700 flex items-center justify-center transition-all cursor-pointer relative"
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-700 flex items-center justify-center transition-all cursor-pointer relative"
                 title="Notifications"
                 aria-label="Notifications"
               >
@@ -309,7 +310,7 @@ export const Header: React.FC = () => {
               {/* Mobile Notification Dropdown */}
               {isNotifOpen && (
                 <div
-                  className="fixed right-2 top-20 w-[calc(100vw-16px)] max-w-sm rounded-2xl z-[80] animate-fade-in shadow-2xl border border-slate-200 bg-white overflow-hidden"
+                  className="fixed right-2 top-24 w-[calc(100vw-16px)] max-w-sm rounded-2xl z-[80] animate-fade-in shadow-2xl border border-slate-200 bg-white overflow-hidden"
                 >
                   <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -374,16 +375,18 @@ export const Header: React.FC = () => {
             {user ? (
               <Link
                 to="/profile"
-                className="w-8.5 h-8.5 rounded-xl bg-[#0c831f] text-white font-black text-xs flex items-center justify-center shadow-xs ring-1 ring-emerald-600/30 shrink-0"
+                className="w-9 h-9 rounded-xl bg-[#0c831f] text-white font-black text-xs flex items-center justify-center shadow-xs ring-1 ring-emerald-600/30 shrink-0"
                 title="Profile & Orders"
+                aria-label="Account Profile"
               >
                 {user.name.charAt(0).toUpperCase()}
               </Link>
             ) : (
               <Link
                 to="/login"
-                className="w-8.5 h-8.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-700 flex items-center justify-center transition-all shrink-0"
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-700 flex items-center justify-center transition-all shrink-0"
                 title="Sign In"
+                aria-label="Sign In"
               >
                 <User className="w-4 h-4" />
               </Link>
@@ -393,8 +396,9 @@ export const Header: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsCartOpen(true)}
-              className="h-8.5 px-2.5 rounded-xl bg-[#0c831f] active:bg-[#0a701a] text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+              className="h-9 px-3 rounded-xl bg-[#0c831f] active:bg-[#0a701a] text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
               title="View Cart"
+              aria-label={`Cart with ${itemCount} items`}
             >
               <ShoppingBag className="w-3.5 h-3.5" />
               <span>{itemCount}</span>
@@ -403,7 +407,7 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Row 2: Mobile Search Input */}
-        <div className="pt-1.5 w-full">
+        <div className="pt-2 w-full">
           <form onSubmit={handleSearchSubmit} className="w-full">
             <div className="relative flex items-center w-full">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -412,14 +416,15 @@ export const Header: React.FC = () => {
                 placeholder={DYNAMIC_PLACEHOLDERS[placeholderIdx]}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 pl-9 pr-8 text-xs bg-slate-100 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#0c831f] focus:ring-1 focus:ring-emerald-500 rounded-xl text-slate-900 placeholder:text-slate-400 font-medium transition-all"
+                className="w-full h-10 pl-9 pr-8 text-xs bg-slate-100 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#0c831f] focus:ring-1 focus:ring-emerald-500 rounded-xl text-slate-900 placeholder:text-slate-400 font-medium transition-all"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-700 rounded-full cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-full cursor-pointer"
                   title="Clear search"
+                  aria-label="Clear search"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
