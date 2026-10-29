@@ -30,11 +30,11 @@ import { LocationSelectorModal } from './LocationSelectorModal';
 import { useNotifications } from '../../context/NotificationContext';
 
 const DYNAMIC_PLACEHOLDERS = [
-  'Search organic spinach, tomatoes, broccoli...',
-  'Search fresh methi, coriander, mint & herbs...',
-  'Search crunchy capsicum, cucumbers, zucchini...',
-  'Search farm potatoes, red onions & ginger...',
-  'Search daily sunrise harvest & green veggies...',
+  'Search "organic spinach, tomatoes, broccoli..."',
+  'Search "fresh methi, coriander, mint & herbs..."',
+  'Search "crunchy capsicum, cucumbers, zucchini..."',
+  'Search "farm potatoes, red onions & ginger..."',
+  'Search "daily sunrise harvest & green veggies..."',
 ];
 
 export const Header: React.FC = () => {
@@ -304,39 +304,35 @@ export const Header: React.FC = () => {
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 group-hover:translate-y-0.5 transition-all ml-1.5 shrink-0" />
           </button>
 
-          {/* Center Search Input (Clean, Spacious Blinkit/Zepto Light Search Bar) */}
+          {/* Center Search Input (Clean, Spacious Blinkit/Zepto Light Search Bar - Single Search Icon) */}
           <form onSubmit={handleSearchSubmit} className="flex-1 max-w-xl mx-2 lg:mx-4 hidden md:block">
             <div className="relative flex items-center w-full">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <button
+                type="submit"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0c831f] transition-colors cursor-pointer p-0.5 rounded-md"
+                title="Search"
+              >
+                <Search className="w-4.5 h-4.5" />
+              </button>
               
               <input
                 type="text"
                 placeholder={DYNAMIC_PLACEHOLDERS[placeholderIdx]}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-10 pr-24 text-xs sm:text-sm bg-slate-100 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#0c831f] focus:ring-2 focus:ring-emerald-500/20 rounded-xl transition-all text-slate-900 placeholder:text-slate-400 font-medium"
+                className="w-full h-10 pl-10 pr-10 text-xs sm:text-sm bg-slate-100 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#0c831f] focus:ring-2 focus:ring-emerald-500/20 rounded-xl transition-all text-slate-900 placeholder:text-slate-400 font-medium"
               />
               
-              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="p-1 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-200 transition-colors cursor-pointer mr-0.5"
-                    title="Clear search"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+              {searchQuery && (
                 <button
-                  type="submit"
-                  className="h-7.5 px-3 rounded-lg bg-[#0c831f] hover:bg-[#0a701a] text-white font-extrabold text-xs shadow-xs flex items-center gap-1 transition-all cursor-pointer active:scale-95"
-                  title="Search Catalog"
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                  title="Clear search"
                 >
-                  <Search className="w-3 h-3 stroke-[2.5]" />
-                  <span>Search</span>
+                  <X className="w-3.5 h-3.5" />
                 </button>
-              </div>
+              )}
             </div>
           </form>
 
