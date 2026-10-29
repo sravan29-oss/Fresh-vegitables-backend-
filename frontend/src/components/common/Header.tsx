@@ -175,10 +175,13 @@ export const Header: React.FC = () => {
         setIsNotifOpen(false);
       }
     };
+    const handleOpenLoc = () => setIsLocationModalOpen(true);
+    window.addEventListener('fresh_open_location_modal', handleOpenLoc);
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('fresh_delivery_location_changed', handleLocationChanged);
+      window.removeEventListener('fresh_open_location_modal', handleOpenLoc);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [user]);
@@ -250,29 +253,43 @@ export const Header: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 gap-3 md:gap-5">
           
-          {/* Brand Logo & Wordmark */}
-          <Link to="/" className="flex items-center gap-3 flex-shrink-0 group">
-            <div className="relative">
-              <img
-                src="/logo.png"
-                alt="Fresh Vegetables Logo"
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm group-hover:scale-105 transition-all duration-300"
-              />
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#0c831f] border-2 border-white flex items-center justify-center">
-                <Leaf className="w-2.5 h-2.5 text-white" />
-              </span>
-            </div>
-
-            <div className="flex flex-col justify-center leading-none">
-              <span className="text-2xl sm:text-[26px] font-black tracking-tight text-slate-900 group-hover:text-emerald-800 transition-colors">
-                Fresh<span className="text-[#0c831f]">Vegetables</span>
-              </span>
-              <div className="text-[9.5px] font-extrabold uppercase tracking-[0.14em] text-slate-500 mt-1 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                <span>⚡ 15 MINS QUICK COMMERCE • 100% ORGANIC</span>
+          {/* Brand Logo & Wordmark + Mobile Location Pill */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
+              <div className="relative">
+                <img
+                  src="/logo.png"
+                  alt="Fresh Vegetables Logo"
+                  className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm group-hover:scale-105 transition-all duration-300"
+                />
+                <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#0c831f] border-2 border-white flex items-center justify-center">
+                  <Leaf className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" />
+                </span>
               </div>
-            </div>
-          </Link>
+
+              <div className="flex flex-col justify-center leading-none">
+                <span className="text-lg sm:text-2xl lg:text-[26px] font-black tracking-tight text-slate-900 group-hover:text-emerald-800 transition-colors">
+                  Fresh<span className="text-[#0c831f]">Vegetables</span>
+                </span>
+                <div className="hidden sm:flex text-[9.5px] font-extrabold uppercase tracking-[0.14em] text-slate-500 mt-1 items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
+                  <span>⚡ 15 MINS QUICK COMMERCE • 100% ORGANIC</span>
+                </div>
+              </div>
+            </Link>
+
+            {/* Mobile Location Trigger Pill (< lg) */}
+            <button
+              type="button"
+              onClick={() => setIsLocationModalOpen(true)}
+              className="flex lg:hidden items-center gap-1 text-[11px] font-bold text-slate-700 hover:text-[#0c831f] bg-slate-100/90 border border-slate-200/90 px-2 py-1 rounded-lg ml-0.5 cursor-pointer truncate max-w-[120px] xs:max-w-[145px]"
+              title="Change Delivery Location"
+            >
+              <MapPin className="w-3 h-3 text-[#0c831f] shrink-0" />
+              <span className="truncate font-extrabold text-slate-900 text-[10.5px]">{displayLocationName}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+            </button>
+          </div>
 
           {/* Location & Express Zone Capsule */}
           <button
@@ -336,19 +353,19 @@ export const Header: React.FC = () => {
             </div>
           </form>
 
-          {/* Right Action Bar (Bell, User, Cart) - Spacious & Balanced Layout */}
-          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
+          {/* Right Action Bar (Bell, User, Cart) - Fully Responsive for Mobile & Desktop */}
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             
             {/* Notification Bell */}
             <div className="relative" ref={notifRef}>
               <button
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
-                className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-all duration-200 group cursor-pointer relative"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-all duration-200 group cursor-pointer relative"
                 title="Notifications"
               >
-                <Bell className="w-4.5 h-4.5" />
+                <Bell className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[9.5px] font-black min-w-[19px] h-[19px] px-1 rounded-full flex items-center justify-center ring-2 ring-white shadow-xs">
+                  <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-black min-w-[17px] h-[17px] px-1 rounded-full flex items-center justify-center ring-2 ring-white shadow-xs">
                     {unreadCount}
                   </span>
                 )}
@@ -423,9 +440,10 @@ export const Header: React.FC = () => {
               {user ? (
                 <button
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="h-10 flex items-center gap-2 pl-2 pr-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-900 transition-all cursor-pointer group"
+                  className="h-9 sm:h-10 flex items-center gap-1.5 pl-1.5 pr-2 sm:pl-2 sm:pr-3 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-900 transition-all cursor-pointer group"
+                  title="Account"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-[#0c831f] text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0 ring-1 ring-emerald-600/30">
+                  <div className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-[#0c831f] text-white font-black text-[11px] sm:text-xs flex items-center justify-center shadow-xs shrink-0 ring-1 ring-emerald-600/30">
                     {user.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex flex-col text-left leading-none hidden sm:flex">
@@ -439,7 +457,8 @@ export const Header: React.FC = () => {
               ) : (
                 <Link
                   to="/login"
-                  className="h-10 flex items-center gap-2 px-3.5 text-xs font-bold text-slate-800 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-all"
+                  className="h-9 sm:h-10 flex items-center gap-1.5 px-2.5 sm:px-3.5 text-xs font-bold text-slate-800 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg sm:rounded-xl transition-all"
+                  title="Sign In"
                 >
                   <User className="w-4 h-4 text-slate-600 shrink-0" />
                   <span className="hidden sm:inline">Sign In</span>
@@ -511,13 +530,13 @@ export const Header: React.FC = () => {
             {/* Cart Button: Iconic Quick Commerce Green Centerpiece */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className="h-10 px-4 rounded-xl bg-[#0c831f] hover:bg-[#0a701a] text-white font-extrabold text-xs sm:text-sm flex items-center gap-2.5 shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 cursor-pointer shrink-0"
+              className="h-9 sm:h-10 px-2.5 sm:px-4 rounded-lg sm:rounded-xl bg-[#0c831f] hover:bg-[#0a701a] text-white font-extrabold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2.5 shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 cursor-pointer shrink-0"
               title="View Cart & Checkout"
             >
               <div className="relative flex items-center justify-center">
                 <ShoppingBag className="w-4 h-4" />
                 {itemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-white text-[#0c831f] text-[9.5px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center ring-2 ring-[#0c831f] shadow-xs">
+                  <span className="absolute -top-1.5 -right-2 bg-white text-[#0c831f] text-[9px] font-black min-w-[17px] h-[17px] px-0.5 rounded-full flex items-center justify-center ring-2 ring-[#0c831f] shadow-xs">
                     {itemCount}
                   </span>
                 )}
@@ -528,10 +547,10 @@ export const Header: React.FC = () => {
             {/* Mobile menu toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden w-10 h-10 flex items-center justify-center text-slate-700 hover:text-slate-950 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors cursor-pointer"
+              className="md:hidden w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-slate-700 hover:text-slate-950 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors cursor-pointer"
               aria-label="Toggle mobile menu"
             >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {isMobileMenuOpen ? <X className="w-4.5 h-4.5" /> : <Menu className="w-4.5 h-4.5" />}
             </button>
           </div>
         </div>

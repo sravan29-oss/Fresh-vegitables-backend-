@@ -44,10 +44,11 @@ import { AdminSellersPage } from './pages/admin/AdminSellersPage';
 import { AdminZonesPage } from './pages/admin/AdminZonesPage';
 import { AdminLoyaltyPage } from './pages/admin/AdminLoyaltyPage';
 import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
+import { PermissionsPromptModal } from './components/common/PermissionsPromptModal';
 
 const CustomerLayout: React.FC = () => {
   return (
-    <div className="flex flex-col min-h-screen bg-[#f8fafc] text-slate-900 relative pb-14 md:pb-0">
+    <div className="flex flex-col min-h-screen bg-[#f8fafc] text-slate-900 relative pb-20 md:pb-0">
       <Header />
       <main className="flex-1">
         <Outlet />
@@ -55,6 +56,7 @@ const CustomerLayout: React.FC = () => {
       <Footer />
       <CartDrawer />
       <MobileBottomNav />
+      <PermissionsPromptModal />
       <PWAInstallPrompt />
     </div>
   );

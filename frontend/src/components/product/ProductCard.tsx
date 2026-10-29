@@ -85,16 +85,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       }`}
     >
       {/* ─── Top Showcase Stage (Blinkit & Zepto Pro Image Fit) ─── */}
-      <div className="relative w-full h-44 sm:h-48 rounded-xl bg-[#f8fafc] group-hover:bg-[#f0fdf4]/50 flex items-center justify-center p-2 overflow-hidden transition-colors border border-slate-100">
+      <div className="relative w-full h-40 sm:h-48 rounded-xl bg-[#f8fafc] group-hover:bg-[#f0fdf4]/50 flex items-center justify-center p-2 overflow-hidden transition-colors border border-slate-100">
         {/* Floating Badges Header - Layered high so image NEVER overlaps */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-30 pointer-events-none">
           {/* Top Left: Discount Badge */}
           {discount > 0 ? (
-            <span className="bg-[#256fef] text-white font-black text-[10px] sm:text-[10.5px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
+            <span className="bg-[#256fef] text-white font-black text-[9.5px] sm:text-[10.5px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
               {discount}% OFF
             </span>
           ) : (
-            <span className="bg-emerald-600 text-white font-extrabold text-[9.5px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
+            <span className="bg-emerald-600 text-white font-extrabold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
               FRESH
             </span>
           )}
@@ -109,18 +109,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Delivery ETA Pill (Iconic Quick Commerce Badge) - High Z-Index */}
-        <div className="absolute bottom-2 left-2 z-30 flex items-center gap-1 bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-md border border-slate-200/90 shadow-xs text-[10px] font-extrabold text-slate-800 tracking-tight pointer-events-none">
+        <div className="absolute bottom-2 left-2 z-30 flex items-center gap-1 bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-md border border-slate-200/90 shadow-xs text-[9.5px] sm:text-[10px] font-extrabold text-slate-800 tracking-tight pointer-events-none">
           <Clock className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
           <span>15 MINS</span>
         </div>
 
-        {/* Vegetable Image - Perfectly Centered, Scaled & Confined inside stage */}
-        <div className="w-full h-full flex items-center justify-center p-3 relative z-10 overflow-hidden">
+        {/* Vegetable Image - Strictly bounded within stage bounds */}
+        <div className="w-full h-28 sm:h-36 flex items-center justify-center relative z-10 overflow-hidden">
           {product.images && product.images.length > 0 ? (
             <img
               src={getProductImageUrl(product.images[0], product.name)}
               alt={product.name}
-              className={`w-auto h-auto max-w-full max-h-32 sm:max-h-36 object-contain rounded-lg filter drop-shadow-xs group-hover:scale-105 transition-transform duration-300 ease-out ${
+              className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain rounded-lg filter drop-shadow-xs group-hover:scale-105 transition-transform duration-300 ease-out select-none ${
                 isOutOfStock ? 'opacity-50 grayscale' : ''
               }`}
               loading="lazy"
@@ -129,7 +129,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               }}
             />
           ) : (
-            <span className="text-5xl select-none transform group-hover:scale-105 transition-transform duration-300">
+            <span className="text-4xl sm:text-5xl select-none transform group-hover:scale-105 transition-transform duration-300">
               🥬
             </span>
           )}
