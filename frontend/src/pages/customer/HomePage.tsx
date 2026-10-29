@@ -20,6 +20,7 @@ import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { SEOHead } from '../../components/common/SEOHead';
 
 import { useHomepageCMS } from '../../hooks/useHomepageCMS';
+import { useQuery } from '@tanstack/react-query';
 
 interface HeroSectionProps {
   section?: Partial<HomepageSection>;
@@ -187,12 +188,30 @@ const HeroSection: React.FC<HeroSectionProps> = ({ section }) => {
 };
 
 export const HomePage: React.FC = () => {
-  const { data: cmsData, isLoading, error, refetch } = useHomepageCMS();
+  const { data: cmsData, isLoading: isCmsLoading, error, refetch } = useHomepageCMS();
   const sections = cmsData?.sections || [];
+
+  const { data: fallbackProducts = [], isLoading: isProdsLoading } = useQuery<Product[]>({
+    queryKey: ['home-fallback-products'],
+    queryFn: async () => {
+      const res = await api.get('/products', { params: { limit: 12 } });
+      return res.data?.data || [];
+    },
+    staleTime: 60000,
+  });
+
+  const { data: fallbackCategories = [], isLoading: isCatsLoading } = useQuery<Category[]>({
+    queryKey: ['home-fallback-categories'],
+    queryFn: async () => {
+      const res = await api.get('/categories');
+      return res.data?.data || [];
+    },
+    staleTime: 60000,
+  });
 
   const isServerFailure = Boolean(error && (!(error as any)?.response || ((error as any)?.response?.status >= 500)));
 
-  if (isServerFailure) {
+  if (isServerFailure && fallbackProducts.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <ServerMaintenance onRetry={async () => { await refetch(); }} />
@@ -200,8 +219,8 @@ export const HomePage: React.FC = () => {
     );
   }
 
-
-  if (isLoading) {
+  // Only show loading if we don't even have fallback data yet
+  if (isCmsLoading && fallbackProducts.length === 0 && fallbackCategories.length === 0) {
     return (
       <div className="space-y-12 pb-24">
         <HeroSection />
@@ -224,7 +243,7 @@ export const HomePage: React.FC = () => {
         return <HeroSection key={section.id} section={section} />;
 
       case 'categories': {
-        const catList: Category[] = section.categories || [];
+        const catList: Category[] = (section.categories && section.categories.length > 0) ? section.categories : fallbackCategories;
         return (
           <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
             <div className="flex items-center justify-between mb-8">
@@ -250,7 +269,7 @@ export const HomePage: React.FC = () => {
                 <Link
                   key={cat.id}
                   to={`/products?category=${cat.slug}`}
-                  className="group p-5 rounded-3xl glass-card flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-brand-300"
+                  className="group p-5 rounded-3xl glass-card flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-brand-300 cursor-pointer"
                 >
                   <div className="w-16 h-16 rounded-2xl bg-brand-50 group-hover:bg-brand-100 flex items-center justify-center text-3xl mb-3 transition-colors shadow-inner">
                     {cat.slug.includes('leaf')
@@ -261,6 +280,8 @@ export const HomePage: React.FC = () => {
                       ? '🥦'
                       : cat.slug.includes('gourd')
                       ? '🥒'
+                      : cat.slug.includes('herb')
+                      ? '🌿'
                       : '🍅'}
                   </div>
                   <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-brand-700 transition-colors">
@@ -276,7 +297,7 @@ export const HomePage: React.FC = () => {
 
       case 'fresh_arrivals':
       case 'featured_products': {
-        const prodList: Product[] = section.products || [];
+        const prodList: Product[] = (section.products && section.products.length > 0) ? section.products : fallbackProducts;
         return (
           <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
             <div className="flex items-center justify-between mb-8">
@@ -314,7 +335,10 @@ export const HomePage: React.FC = () => {
       }
 
       case 'best_sellers': {
-        const prodList: Product[] = section.products || [];
+        const bestProds = fallbackProducts.filter((p: Product) => p.best_seller);
+        const prodList: Product[] = (section.products && section.products.length > 0)
+          ? section.products
+          : (bestProds.length > 0 ? bestProds : fallbackProducts);
         return (
           <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
             <div className="flex items-center justify-between mb-8">
@@ -517,15 +541,150 @@ export const HomePage: React.FC = () => {
       ) : (
         <>
           <HeroSection />
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-            <div className="animate-pulse space-y-6">
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-4">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="h-28 bg-slate-200/50 rounded-2xl"></div>
+
+          {/* Harvest Categories Rail */}
+          {fallbackCategories.length > 0 && (
+            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <span className="text-brand-600 font-extrabold text-xs uppercase tracking-wider">
+                    Organized Harvest
+                  </span>
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    Shop by Harvest Category
+                  </h2>
+                </div>
+                <Link
+                  to="/products"
+                  className="text-sm font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                >
+                  <span>View All Categories</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                {fallbackCategories.map((cat: Category) => (
+                  <Link
+                    key={cat.id}
+                    to={`/products?category=${cat.slug}`}
+                    className="group p-5 rounded-3xl glass-card flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-brand-300 cursor-pointer"
+                  >
+                    <div className="w-16 h-16 rounded-2xl bg-brand-50 group-hover:bg-brand-100 flex items-center justify-center text-3xl mb-3 transition-colors shadow-inner">
+                      {cat.slug.includes('leaf')
+                        ? '🥬'
+                        : cat.slug.includes('root')
+                        ? '🥕'
+                        : cat.slug.includes('exotic')
+                        ? '🥦'
+                        : cat.slug.includes('gourd')
+                        ? '🥒'
+                        : cat.slug.includes('herb')
+                        ? '🌿'
+                        : '🍅'}
+                    </div>
+                    <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-brand-700 transition-colors">
+                      {cat.name}
+                    </h3>
+                    <span className="text-[11px] text-slate-400 mt-1 font-medium">Fresh Harvest</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Featured Fresh Harvest Produce Rail */}
+          {fallbackProducts.length > 0 && (
+            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <span className="text-emerald-600 font-extrabold text-xs uppercase tracking-wider">
+                    Hand-Picked At Dawn
+                  </span>
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    Handpicked Fresh Today
+                  </h2>
+                </div>
+                <Link
+                  to="/products"
+                  className="text-sm font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                >
+                  <span>Explore Produce</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-5">
+                {fallbackProducts.map((p: Product) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Promotional Special Offer */}
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
+            <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-slate-900 glass-banner rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-2xl">
+              <div className="space-y-3 z-10 text-center md:text-left">
+                <span className="inline-flex items-center gap-1.5 bg-emerald-400 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider">
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>Limited Time Special</span>
+                </span>
+                <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+                  Super Saver Farm Offer
+                </h3>
+                <p className="text-emerald-100/90 text-sm max-w-lg">
+                  Use promo coupon code <strong className="text-emerald-300">FRESH20</strong> at checkout for 20% instant savings on your fresh morning harvest.
+                </p>
+                <div className="inline-block bg-white/10 border border-white/20 backdrop-blur-md px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-emerald-200">
+                  Code: <strong className="text-white underline">FRESH20</strong>
+                </div>
+              </div>
+
+              <div className="z-10 flex-shrink-0">
+                <Link
+                  to="/products"
+                  className="bg-brand-400 hover:bg-brand-300 text-slate-950 font-black px-8 py-4 rounded-2xl text-sm shadow-xl inline-block transition-transform hover:scale-105"
+                >
+                  Claim Offer Now
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          {/* Farm-to-Fork Trust Pillars */}
+          <section className="glass-section mx-4 sm:mx-6 lg:mx-8 py-16 animate-slide-up rounded-3xl">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="text-center max-w-2xl mx-auto mb-12">
+                <span className="text-brand-600 font-extrabold text-xs uppercase tracking-wider">
+                  The Pure Farm Promise
+                </span>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight mt-1">
+                  Why Choose Fresh Vegetables?
+                </h2>
+                <p className="text-slate-500 text-sm mt-2">
+                  From farm soil to your kitchen within 12 hours.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[
+                  { title: 'Harvested at 4 AM', desc: 'Directly sourced from trusted regional partner farmers.' },
+                  { title: 'Ozone Washed & Safe', desc: 'Gentle sanitization eliminating dust and bacteria without heat.' },
+                  { title: 'Eco Biodegradable Bags', desc: '100% plastic-free compostable kraft packaging.' },
+                  { title: '30-Minute Speed Dispatch', desc: 'Temperature controlled EV delivery straight to your doorstep.' },
+                ].map((pil, idx) => (
+                  <div key={idx} className="p-6 rounded-3xl glass-card space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center font-bold">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <h4 className="font-extrabold text-sm text-slate-900">{pil.title}</h4>
+                    <p className="text-xs text-slate-500 leading-relaxed">{pil.desc}</p>
+                  </div>
                 ))}
               </div>
             </div>
-          </div>
+          </section>
         </>
       )}
     </div>

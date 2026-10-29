@@ -21,11 +21,22 @@ export async function getHomepageData(req: Request, res: Response, next: NextFun
     );
 
     const now = new Date();
-    const activeSections = (sectionsRes.rows || []).filter((sec: any) => {
+    const rawActive = (sectionsRes.rows || []).filter((sec: any) => {
       if (sec.start_date && new Date(sec.start_date) > now) return false;
       if (sec.end_date && new Date(sec.end_date) < now) return false;
       return true;
     });
+
+    const activeSections = rawActive.length > 0 ? rawActive : [
+      { id: 'sec-hero', type: 'hero_banner', title: 'Freshness from Nature to Your Table', subtitle: '100% Certified Organic • Chemical Free Harvest', description: 'Discover fresh vegetables and bring the goodness of nature into your everyday meals.', button_text: 'Explore Fresh Vegetables', button_link: '/products', display_order: 1 },
+      { id: 'sec-cats', type: 'categories', title: 'Shop by Harvest Category', subtitle: 'Farm Categories', display_order: 2 },
+      { id: 'sec-feat', type: 'featured_products', title: 'Handpicked Fresh Today', subtitle: 'Harvest Highlights', display_order: 3 },
+      { id: 'sec-best', type: 'best_sellers', title: 'Top Community Favorites', subtitle: 'Most Ordered Produce', display_order: 4 },
+      { id: 'sec-promo', type: 'promotional_banner', title: 'Super Saver Farm Offer', subtitle: 'Flat 20% OFF with code FRESH20', description: 'Enjoy handpicked crispy leafy greens and root vegetables at unbeatable farm-gate prices.', button_text: 'Claim Offer Now', button_link: '/products', display_order: 5, configuration: { coupon_code: 'FRESH20' } },
+      { id: 'sec-why', type: 'why_choose_us', title: 'Why Choose Fresh Vegetables?', subtitle: 'The Pure Farm Promise', display_order: 6 },
+      { id: 'sec-testi', type: 'testimonials', title: 'Trusted by Over 50,000+ Homes', subtitle: 'Real Customer Stories', display_order: 7 },
+      { id: 'sec-app', type: 'app_promotion', title: 'Freshness on the Go', subtitle: 'Progressive Mobile App', display_order: 8 }
+    ];
 
     const banners = bannersRes.rows || [];
 
@@ -44,9 +55,11 @@ export async function getHomepageData(req: Request, res: Response, next: NextFun
       if (sec.type === 'categories') {
         enrichedData.categories = allCategories;
       } else if (sec.type === 'featured_products' || sec.type === 'fresh_arrivals') {
-        enrichedData.products = allProducts.filter((p: any) => p.featured).slice(0, 8);
+        const feat = allProducts.filter((p: any) => p.featured);
+        enrichedData.products = (feat.length > 0 ? feat : allProducts).slice(0, 8);
       } else if (sec.type === 'best_sellers') {
-        enrichedData.products = allProducts.filter((p: any) => p.best_seller).slice(0, 8);
+        const best = allProducts.filter((p: any) => p.best_seller);
+        enrichedData.products = (best.length > 0 ? best : allProducts).slice(0, 8);
       } else if (sec.type === 'hero_banner') {
         enrichedData.banners = banners;
       }

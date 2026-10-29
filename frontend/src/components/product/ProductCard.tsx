@@ -68,9 +68,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     }
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('select') || target.closest('a')) {
+      return;
+    }
+    navigate(`/products/${product.slug}`);
+  };
+
   return (
     <div
-      className={`group glass-card-3d rounded-2xl border border-slate-200/90 hover:border-emerald-500/50 bg-white/95 backdrop-blur-md shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden relative h-full ${
+      onClick={handleCardClick}
+      className={`group glass-card-3d rounded-2xl border border-slate-200/90 hover:border-emerald-500/50 bg-white/95 backdrop-blur-md shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden relative h-full cursor-pointer ${
         isOutOfStock ? 'opacity-90 grayscale-[15%]' : ''
       }`}
     >
