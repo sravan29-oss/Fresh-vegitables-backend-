@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getActiveDeliveryZones,
   checkPincodeServiceability,
+  checkLocationCoordinates,
   getStores,
   getAdminZones,
   createZone,
@@ -21,6 +22,7 @@ router.put('/settings', authenticateAdmin, updateDeliverySettings);
 router.get('/', getActiveDeliveryZones);
 router.get('/active', getActiveDeliveryZones);
 router.post('/check-pincode', checkPincodeServiceability);
+router.post('/check-coordinates', checkLocationCoordinates);
 router.get('/stores', getStores);
 
 // Admin zone management

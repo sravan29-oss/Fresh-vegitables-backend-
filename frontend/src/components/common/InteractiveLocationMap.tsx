@@ -109,42 +109,16 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     [zones]
   );
 
-  // Reverse Geocoding with local directory priority, fallback to Nominatim
+  // Reverse Geocoding with OpenStreetMap Nominatim and local directory fallback
   const reverseGeocode = useCallback(
     async (lat: number, lng: number) => {
-      // 1. Check local Hyderabad Colonies directory
-      let closestColony = HYDERABAD_COLONIES[0];
-      let minDistance = Infinity;
+      const roundedLat = Number(lat.toFixed(6));
+      const roundedLng = Number(lng.toFixed(6));
 
-      for (const col of HYDERABAD_COLONIES) {
-        const dist = Math.hypot(col.lat - lat, col.lng - lng);
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestColony = col;
-        }
-      }
-
-      // Within ~1.5 km of a known Hyderabad colony
-      if (minDistance < 0.015) {
-        const matched = matchZone(lat, lng, closestColony.pincode);
-        const details: AddressDetails = {
-          colony: closestColony.colony,
-          area: closestColony.name,
-          pincode: closestColony.pincode,
-          fullAddress: `${closestColony.colony}, ${closestColony.name}, Hyderabad - ${closestColony.pincode}`,
-          latitude: lat,
-          longitude: lng,
-          matchedZone: matched,
-        };
-        setResolvedAddress(details.fullAddress || null);
-        onPositionChange(lat, lng, details);
-        return;
-      }
-
-      // 2. Fetch from OpenStreetMap Nominatim for exact street/colony
+      // 1. Fetch exact street/colony/area from OpenStreetMap Nominatim
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${roundedLat}&lon=${roundedLng}&zoom=18&addressdetails=1`,
           { headers: { 'Accept-Language': 'en' } }
         );
         const data = await res.json();
@@ -156,43 +130,56 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
             addr.residential ||
             addr.quarter ||
             addr.road ||
-            closestColony.colony;
-          const area = addr.city_district || addr.city || 'Hyderabad';
-          const pincode = addr.postcode || closestColony.pincode;
+            addr.village ||
+            'Hyderabad Colony';
+          const area = addr.city_district || addr.county || addr.city || 'Hyderabad';
+          const pincode = addr.postcode || '';
           const full = data.display_name
             ? data.display_name.split(',').slice(0, 3).join(', ')
             : `${colony}, ${area}`;
 
-          const matched = matchZone(lat, lng, pincode);
+          const matched = matchZone(roundedLat, roundedLng, pincode);
           const details: AddressDetails = {
             colony,
             area,
             pincode,
             fullAddress: full,
-            latitude: lat,
-            longitude: lng,
+            latitude: roundedLat,
+            longitude: roundedLng,
             matchedZone: matched,
           };
           setResolvedAddress(full);
-          onPositionChange(lat, lng, details);
+          onPositionChange(roundedLat, roundedLng, details);
           return;
         }
       } catch (e) {
-        // Fallback to closest colony
+        // Fallback to local directory
       }
 
-      const matched = matchZone(lat, lng, closestColony.pincode);
+      // 2. Fallback: Match nearest named reference for labeling
+      let closestColony = HYDERABAD_COLONIES[0];
+      let minDistance = Infinity;
+
+      for (const col of HYDERABAD_COLONIES) {
+        const dist = Math.hypot(col.lat - roundedLat, col.lng - roundedLng);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestColony = col;
+        }
+      }
+
+      const matched = matchZone(roundedLat, roundedLng, closestColony.pincode);
       const details: AddressDetails = {
         colony: closestColony.colony,
         area: closestColony.name,
         pincode: closestColony.pincode,
-        fullAddress: `${closestColony.colony}, Hyderabad`,
-        latitude: lat,
-        longitude: lng,
+        fullAddress: `${closestColony.colony}, Hyderabad - ${closestColony.pincode}`,
+        latitude: roundedLat,
+        longitude: roundedLng,
         matchedZone: matched,
       };
       setResolvedAddress(details.fullAddress || null);
-      onPositionChange(lat, lng, details);
+      onPositionChange(roundedLat, roundedLng, details);
     },
     [matchZone, onPositionChange]
   );
@@ -217,12 +204,13 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
       attributionControl: false,
     });
 
-    // High-resolution clean Carto Voyager Tile Layer
+    // High-resolution clean OpenStreetMap Standard Tiles (100% Free, No API Key Required)
     L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       {
         maxZoom: 19,
-        subdomains: 'abcd',
+        subdomains: ['a', 'b', 'c'],
+        attribution: '&copy; OpenStreetMap contributors',
       }
     ).addTo(map);
 
@@ -258,15 +246,25 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     if (interactive) {
       map.on('click', (e) => {
         const { lat, lng } = e.latlng;
-        marker.setLatLng([lat, lng]);
-        setCurrentCoords([lat, lng]);
-        reverseGeocode(lat, lng);
+        const roundedLat = Number(lat.toFixed(6));
+        const roundedLng = Number(lng.toFixed(6));
+        marker.setLatLng([roundedLat, roundedLng]);
+        setCurrentCoords([roundedLat, roundedLng]);
+        if (adminCircleRef.current) {
+          adminCircleRef.current.setLatLng([roundedLat, roundedLng]);
+        }
+        reverseGeocode(roundedLat, roundedLng);
       });
 
       marker.on('dragend', () => {
         const pos = marker.getLatLng();
-        setCurrentCoords([pos.lat, pos.lng]);
-        reverseGeocode(pos.lat, pos.lng);
+        const roundedLat = Number(pos.lat.toFixed(6));
+        const roundedLng = Number(pos.lng.toFixed(6));
+        setCurrentCoords([roundedLat, roundedLng]);
+        if (adminCircleRef.current) {
+          adminCircleRef.current.setLatLng([roundedLat, roundedLng]);
+        }
+        reverseGeocode(roundedLat, roundedLng);
       });
     }
 
@@ -295,9 +293,14 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     if (markerPosition && mapInstanceRef.current && markerRef.current) {
       const [lat, lng] = markerPosition;
       if (Math.abs(lat - currentCoords[0]) > 0.0001 || Math.abs(lng - currentCoords[1]) > 0.0001) {
-        markerRef.current.setLatLng([lat, lng]);
-        mapInstanceRef.current.panTo([lat, lng]);
-        setCurrentCoords([lat, lng]);
+        const roundedLat = Number(lat.toFixed(6));
+        const roundedLng = Number(lng.toFixed(6));
+        markerRef.current.setLatLng([roundedLat, roundedLng]);
+        mapInstanceRef.current.panTo([roundedLat, roundedLng]);
+        setCurrentCoords([roundedLat, roundedLng]);
+        if (adminCircleRef.current) {
+          adminCircleRef.current.setLatLng([roundedLat, roundedLng]);
+        }
       }
     }
   }, [markerPosition]);
@@ -339,6 +342,9 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
           if (markerRef.current && interactive) {
             markerRef.current.setLatLng([zone.latitude!, zone.longitude!]);
             setCurrentCoords([zone.latitude!, zone.longitude!]);
+            if (adminCircleRef.current) {
+              adminCircleRef.current.setLatLng([zone.latitude!, zone.longitude!]);
+            }
             reverseGeocode(zone.latitude!, zone.longitude!);
           }
         });
@@ -346,7 +352,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     });
   }, [zones, selectedZoneId, interactive, reverseGeocode]);
 
-  // Update Admin Geofence Radius Circle
+  // Update Admin Geofence Radius Circle in real time
   useEffect(() => {
     if (!mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
@@ -357,23 +363,24 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     }
 
     if (circleRadiusKm && circleRadiusKm > 0) {
-      const circle = L.circle(currentCoords, {
+      const centerCoords: [number, number] = markerPosition || currentCoords;
+      const circle = L.circle(centerCoords, {
         radius: circleRadiusKm * 1000,
-        color: '#22c55e',
+        color: '#10b981',
         weight: 2,
         dashArray: '5, 5',
-        fillColor: '#4ade80',
-        fillOpacity: 0.14,
+        fillColor: '#34d399',
+        fillOpacity: 0.16,
       }).addTo(map);
 
       circle.bindTooltip(
-        `<div style="font-size: 11px; font-weight: bold; color: #15803d;">Coverage Radius: ${circleRadiusKm} km</div>`,
+        `<div style="font-size: 11px; font-weight: bold; color: #047857; padding: 2px 4px;">Coverage Radius: ${circleRadiusKm} km</div>`,
         { permanent: true, direction: 'right' }
       );
 
       adminCircleRef.current = circle;
     }
-  }, [circleRadiusKm, currentCoords]);
+  }, [circleRadiusKm, currentCoords, markerPosition]);
 
   // Handle colony search input
   const handleSearchChange = (value: string) => {

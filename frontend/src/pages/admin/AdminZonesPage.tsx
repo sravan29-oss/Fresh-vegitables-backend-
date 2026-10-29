@@ -217,11 +217,20 @@ export const AdminZonesPage: React.FC = () => {
 
   // ================= ZONE ACTIONS =================
   const handleMapPositionChange = (lat: number, lng: number, details?: AddressDetails) => {
-    setZoneLat(lat);
-    setZoneLng(lng);
+    setZoneLat(Number(lat.toFixed(6)));
+    setZoneLng(Number(lng.toFixed(6)));
     if (details) {
       if (details.fullAddress) setDetectedAddress(details.fullAddress);
-      if (details.colony) setDetectedColony(details.colony);
+      if (details.colony) {
+        setDetectedColony(details.colony);
+        // Automatically sync zone name if it's default or generated
+        setName((prev) => {
+          if (!prev || prev.includes('& Surrounding') || prev.includes('Zone')) {
+            return `${details.colony} & Surrounding Zone`;
+          }
+          return prev;
+        });
+      }
       if (details.pincode) {
         setPincodes((prev) => {
           if (!prev.trim()) return details.pincode!;
@@ -231,9 +240,6 @@ export const AdminZonesPage: React.FC = () => {
           }
           return prev;
         });
-      }
-      if (!editingZone && details.colony && (!name || name === 'Kukatpally & KPHB Zone')) {
-        setName(`${details.colony} & Surrounding Zone`);
       }
     }
   };
@@ -251,16 +257,30 @@ export const AdminZonesPage: React.FC = () => {
   const handleSaveZone = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (!name.trim()) {
+        alert('Please specify a Zone Name');
+        return;
+      }
+      const pinArray = pincodes
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      if (pinArray.length === 0) {
+        alert('Please provide at least one covered pincode for this zone');
+        return;
+      }
+
       const payload = {
-        name,
-        pincodes: pincodes.split(',').map((p) => p.trim()).filter(Boolean),
-        delivery_fee: fee,
-        min_order_amount: minOrder,
-        free_delivery_threshold: freeThreshold,
-        estimated_delivery_time: eta,
-        latitude: zoneLat,
-        longitude: zoneLng,
-        delivery_radius_km: zoneRadius,
+        name: name.trim(),
+        pincodes: pinArray,
+        delivery_fee: Math.max(0, Number(fee) || 0),
+        min_order_amount: Math.max(0, Number(minOrder) || 0),
+        free_delivery_threshold: Math.max(0, Number(freeThreshold) || 0),
+        estimated_delivery_time: eta.trim() || '25–35 mins',
+        latitude: Number(zoneLat),
+        longitude: Number(zoneLng),
+        delivery_radius_km: Math.max(0.5, Number(zoneRadius) || 8.5),
       };
 
       if (editingZone) {
@@ -273,7 +293,7 @@ export const AdminZonesPage: React.FC = () => {
 
       setIsModalOpen(false);
       setEditingZone(null);
-      fetchData();
+      await fetchData();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to save zone');
     }
@@ -1068,8 +1088,8 @@ export const AdminZonesPage: React.FC = () => {
 
                     <input
                       type="range"
-                      min="2"
-                      max="25"
+                      min="1"
+                      max="30"
                       step="0.5"
                       value={zoneRadius}
                       onChange={(e) => setZoneRadius(Number(e.target.value))}
@@ -1077,7 +1097,13 @@ export const AdminZonesPage: React.FC = () => {
                     />
 
                     <div className="flex items-center justify-between text-[10px] text-slate-500">
-                      <span>2 km (Hyperlocal)</span>
+                      <button
+                        type="button"
+                        onClick={() => setZoneRadius(3.5)}
+                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 3.5 ? 'text-brand-400 font-bold' : ''}`}
+                      >
+                        3.5 km
+                      </button>
                       <button
                         type="button"
                         onClick={() => setZoneRadius(5)}
@@ -1099,7 +1125,13 @@ export const AdminZonesPage: React.FC = () => {
                       >
                         15 km
                       </button>
-                      <span>25 km (Regional)</span>
+                      <button
+                        type="button"
+                        onClick={() => setZoneRadius(25)}
+                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 25 ? 'text-brand-400 font-bold' : ''}`}
+                      >
+                        25 km (Regional)
+                      </button>
                     </div>
                   </div>
 
@@ -1117,23 +1149,24 @@ export const AdminZonesPage: React.FC = () => {
                     <div className="text-right shrink-0">
                       <p className="text-[10px] text-slate-500 font-mono">GPS Coordinates</p>
                       <p className="text-[11px] font-mono font-bold text-brand-400">
-                        {zoneLat.toFixed(4)}, {zoneLng.toFixed(4)}
+                        {zoneLat.toFixed(6)}, {zoneLng.toFixed(6)}
                       </p>
                     </div>
                   </div>
                 </div>
 
                 {/* ── RIGHT COLUMN: Zone Form & Financials (5 cols) ── */}
-                <form id="zone-form" onSubmit={handleSaveZone} className="lg:col-span-5 space-y-3 flex flex-col justify-between">
+                <form id="zone-form" onSubmit={handleSaveZone} className="lg:col-span-5 space-y-3">
                   <div className="space-y-3 text-xs">
                     <div>
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-1 gap-2">
                         <label className="text-slate-300 font-bold">Zone Name</label>
                         {detectedColony && (
                           <button
                             type="button"
                             onClick={() => setName(`${detectedColony} & Surrounding Zone`)}
-                            className="text-[10px] text-brand-400 hover:text-brand-300 font-bold cursor-pointer"
+                            className="text-[10px] text-brand-400 hover:text-brand-300 font-bold bg-brand-500/10 border border-brand-500/30 px-2 py-0.5 rounded cursor-pointer"
+                            title="Click to apply detected location name"
                           >
                             Use "{detectedColony}"
                           </button>
@@ -1231,25 +1264,33 @@ export const AdminZonesPage: React.FC = () => {
                       </p>
                     </div>
                   </div>
-
-                  {/* Actions Footer */}
-                  <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-brand-500/25 flex items-center gap-1.5 transition-all"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>{editingZone ? 'Save Changes' : 'Create Delivery Zone'}</span>
-                    </button>
-                  </div>
                 </form>
+              </div>
+            </div>
+
+            {/* Fixed Modal Footer - Always in View */}
+            <div className="pt-3 border-t border-slate-800 shrink-0 flex items-center justify-between gap-3 bg-slate-900">
+              <div className="text-xs text-slate-400 truncate hidden sm:block">
+                <span>Epicenter: <strong className="text-white">{detectedColony || 'Selected Colony'}</strong></span>
+                <span className="mx-2">•</span>
+                <span>Radius: <strong className="text-emerald-400 font-mono">{zoneRadius} km</strong></span>
+              </div>
+              <div className="flex items-center gap-2.5 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form="zone-form"
+                  className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-brand-500/25 flex items-center gap-1.5 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{editingZone ? 'Save Changes' : 'Create Delivery Zone'}</span>
+                </button>
               </div>
             </div>
           </div>

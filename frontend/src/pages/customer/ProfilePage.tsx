@@ -275,6 +275,20 @@ export const ProfilePage: React.FC = () => {
           is_default: a.id === id,
         }))
       );
+      const target = addresses.find((a) => a.id === id);
+      if (target) {
+        const areaName = target.area || target.street || target.city;
+        localStorage.setItem('fresh_delivery_colony', areaName);
+        localStorage.setItem(
+          'fresh_delivery_address',
+          `${target.house_number || ''} ${target.street || ''}, ${target.area || ''}, ${target.city} - ${target.pincode}`.trim()
+        );
+        window.dispatchEvent(
+          new CustomEvent('fresh_delivery_location_changed', {
+            detail: { colony: areaName, address: `${target.area || target.street}, ${target.city}` },
+          })
+        );
+      }
     } catch (err) {
       alert('Failed to set default address');
     }

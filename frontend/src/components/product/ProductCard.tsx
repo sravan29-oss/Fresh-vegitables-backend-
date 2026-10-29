@@ -85,57 +85,59 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       }`}
     >
       {/* ─── Top Showcase Stage (Blinkit & Zepto Pro Image Fit) ─── */}
-      <div className="relative w-full h-44 sm:h-48 rounded-xl bg-[#f8fafc] group-hover:bg-[#f0fdf4]/40 flex items-center justify-center p-2.5 overflow-hidden transition-colors border border-slate-100">
-        {/* Floating Badges Header */}
-        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between z-10 pointer-events-none">
+      <div className="relative w-full h-44 sm:h-48 rounded-xl bg-[#f8fafc] group-hover:bg-[#f0fdf4]/50 flex items-center justify-center p-2 overflow-hidden transition-colors border border-slate-100">
+        {/* Floating Badges Header - Layered high so image NEVER overlaps */}
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-30 pointer-events-none">
           {/* Top Left: Discount Badge */}
           {discount > 0 ? (
-            <span className="bg-[#256fef] text-white font-black text-[10.5px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
+            <span className="bg-[#256fef] text-white font-black text-[10px] sm:text-[10.5px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
               {discount}% OFF
             </span>
           ) : (
-            <span className="bg-emerald-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
-              Fresh
+            <span className="bg-emerald-600 text-white font-extrabold text-[9.5px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
+              FRESH
             </span>
           )}
 
           {/* Top Right: FSSAI Green Veg Dot Mark */}
           <div
-            className="w-4 h-4 rounded-[3px] border border-emerald-600 p-[1.5px] flex items-center justify-center bg-white shadow-2xs shrink-0"
+            className="w-4 h-4 rounded-[3px] border border-emerald-600 p-[1.5px] flex items-center justify-center bg-white shadow-xs shrink-0"
             title="100% Certified Organic Veg"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
           </div>
         </div>
 
-        {/* Delivery ETA Pill (Iconic Quick Commerce Badge) */}
-        <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 bg-white/95 px-2 py-0.5 rounded-md border border-slate-200/80 shadow-2xs text-[10px] font-extrabold text-slate-800 tracking-tight pointer-events-none">
+        {/* Delivery ETA Pill (Iconic Quick Commerce Badge) - High Z-Index */}
+        <div className="absolute bottom-2 left-2 z-30 flex items-center gap-1 bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-md border border-slate-200/90 shadow-xs text-[10px] font-extrabold text-slate-800 tracking-tight pointer-events-none">
           <Clock className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
           <span>15 MINS</span>
         </div>
 
-        {/* Vegetable Image - Perfectly Centered & Fitted */}
-        {product.images && product.images.length > 0 ? (
-          <img
-            src={getProductImageUrl(product.images[0], product.name)}
-            alt={product.name}
-            className={`w-full h-full max-h-36 sm:max-h-40 object-contain filter drop-shadow-sm group-hover:scale-106 transition-transform duration-300 ease-out z-10 ${
-              isOutOfStock ? 'opacity-50 grayscale' : ''
-            }`}
-            loading="lazy"
-            onError={(e) => {
-              e.currentTarget.src = getFallbackImageUrl(product.name);
-            }}
-          />
-        ) : (
-          <span className="text-5xl drop-shadow-sm select-none transform group-hover:scale-106 transition-transform duration-300 z-10">
-            🥬
-          </span>
-        )}
+        {/* Vegetable Image - Perfectly Centered, Scaled & Confined inside stage */}
+        <div className="w-full h-full flex items-center justify-center p-3 relative z-10 overflow-hidden">
+          {product.images && product.images.length > 0 ? (
+            <img
+              src={getProductImageUrl(product.images[0], product.name)}
+              alt={product.name}
+              className={`w-auto h-auto max-w-full max-h-32 sm:max-h-36 object-contain rounded-lg filter drop-shadow-xs group-hover:scale-105 transition-transform duration-300 ease-out ${
+                isOutOfStock ? 'opacity-50 grayscale' : ''
+              }`}
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.src = getFallbackImageUrl(product.name);
+              }}
+            />
+          ) : (
+            <span className="text-5xl select-none transform group-hover:scale-105 transition-transform duration-300">
+              🥬
+            </span>
+          )}
+        </div>
 
         {/* Sold Out Overlay */}
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] flex items-center justify-center z-20">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] flex items-center justify-center z-40">
             <span className="bg-rose-600 text-white text-[11px] font-black px-3.5 py-1 rounded-full uppercase tracking-wider shadow-md border border-white/30 flex items-center gap-1">
               <Ban className="w-3 h-3" /> Sold Out
             </span>
@@ -146,8 +148,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       {/* ─── Body Section ─── */}
       <div className="pt-2.5 flex-1 flex flex-col justify-between">
         <div>
-          {/* Pack / Weight Pill & Category */}
-          <div className="flex items-center justify-between">
+          {/* Pack / Weight Pill & Brand Tag */}
+          <div className="flex items-center justify-between gap-1.5 min-h-[24px]">
             {product.variants && product.variants.length > 0 ? (
               <select
                 value={selectedVariant?.id || ''}
@@ -155,7 +157,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   const found = product.variants?.find((v) => v.id === e.target.value);
                   if (found) setSelectedVariant(found);
                 }}
-                className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200/60 rounded-md px-2 py-0.5 cursor-pointer focus:ring-1 focus:ring-emerald-500 transition-colors truncate max-w-[140px]"
+                className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200/60 rounded-md px-2 py-0.5 cursor-pointer focus:ring-1 focus:ring-emerald-500 transition-colors truncate max-w-[130px]"
               >
                 {product.variants.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -164,23 +166,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 ))}
               </select>
             ) : (
-              <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md inline-block">
+              <span className="text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-md inline-block">
                 {unit}
               </span>
             )}
 
-            <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider truncate max-w-[100px]">
-              {product.category_name || 'Farm Fresh'}
+            {/* Brand / Category Tag - Crisp & Well-Padded */}
+            <span className="text-[9.5px] font-black text-emerald-800 uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200/70 truncate max-w-[110px] shrink-0 text-center">
+              {(product as any).brand || product.category_name || 'FRESH'}
             </span>
           </div>
 
-          {/* Product Title (2 lines clamp, crisp slate-900 font-bold) */}
-          <h3
-            className="text-slate-900 font-bold text-xs sm:text-[13.5px] leading-snug line-clamp-2 mt-1.5 min-h-[2.2rem] group-hover:text-emerald-700 transition-colors text-left"
-            title={product.name}
-          >
-            {product.name}
-          </h3>
+          {/* Product Title (Strict 2-line fixed height box to keep entire row aligned) */}
+          <div className="h-[2.5rem] mt-1.5 flex items-start">
+            <h3
+              className="text-slate-900 font-bold text-xs sm:text-[13.5px] leading-snug line-clamp-2 group-hover:text-emerald-700 transition-colors text-left"
+              title={product.name}
+            >
+              {product.name}
+            </h3>
+          </div>
 
           {/* Micro Status */}
           <div className="mt-1 flex items-center gap-1.5 text-[10px]">

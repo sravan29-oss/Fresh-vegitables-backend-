@@ -483,7 +483,22 @@ export const CheckoutPage: React.FC = () => {
                 {addresses.map((addr) => (
                   <div
                     key={addr.id}
-                    onClick={() => setSelectedAddressId(addr.id)}
+                    onClick={() => {
+                      setSelectedAddressId(addr.id);
+                      const locName = addr.area || addr.street || addr.city;
+                      if (locName) {
+                        localStorage.setItem('fresh_delivery_colony', locName);
+                        localStorage.setItem(
+                          'fresh_delivery_address',
+                          `${addr.house_number || ''} ${addr.street || ''}, ${addr.area || ''}, ${addr.city} - ${addr.pincode}`.trim()
+                        );
+                        window.dispatchEvent(
+                          new CustomEvent('fresh_delivery_location_changed', {
+                            detail: { colony: locName, address: `${addr.area || addr.street}, ${addr.city}` },
+                          })
+                        );
+                      }
+                    }}
                     className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                       selectedAddressId === addr.id
                         ? 'border-brand-600 bg-brand-50/50 shadow-sm ring-2 ring-brand-500/20'

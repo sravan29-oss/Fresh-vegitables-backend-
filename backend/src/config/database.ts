@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getPersistedDeliverySettings, savePersistedDeliverySettings } from '../services/deliverySettings.service';
 import { savePersistedProducts, savePersistedVariants, getPersistedProducts, getPersistedVariants } from '../services/productStore.service';
 import { savePersistedOrders, savePersistedOrderItems, getPersistedOrders } from '../services/orderStore.service';
+import { getPersistedZones, savePersistedZones } from '../services/zoneStore.service';
 
 const isLocalhost =
   env.DATABASE_URL.includes('localhost') ||
@@ -899,11 +900,12 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
 
   // 16. DELIVERY ZONES & STORES (Phase 19)
   if (lower.includes('from delivery_zones')) {
+    const zones = getPersistedZones();
     if (params[0]) {
-      const z = (memoryStore as any).delivery_zones.find((item: any) => item.id === params[0]);
+      const z = zones.find((item: any) => item.id === params[0]);
       return { rows: z ? [z] : [] };
     }
-    return { rows: (memoryStore as any).delivery_zones };
+    return { rows: zones };
   }
 
   if (lower.includes('from stores')) {

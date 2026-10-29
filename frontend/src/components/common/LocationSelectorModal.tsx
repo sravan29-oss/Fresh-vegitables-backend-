@@ -244,6 +244,17 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
     localStorage.setItem('fresh_delivery_colony', selectedColony);
     localStorage.setItem('fresh_delivery_address', selectedAddress);
 
+    // Dispatch global event for instant reactive update in Header and entire app
+    window.dispatchEvent(
+      new CustomEvent('fresh_delivery_location_changed', {
+        detail: {
+          zone: finalZone,
+          colony: selectedColony,
+          address: selectedAddress,
+        },
+      })
+    );
+
     if (onZoneSelected) {
       onZoneSelected(finalZone, selectedColony);
     }
