@@ -111,7 +111,7 @@ export const AdminOrdersPage: React.FC = () => {
     try {
       setIsResendingEmail(true);
       setResendEmailMsg(null);
-      const res = await api.post(`/orders/admin/${orderId}/resend-email`);
+      const res = await api.post(`/orders/admin/${orderId}/resend-email`, {}, { timeout: 12000 });
       const msg = res.data?.message || 'Order alert email sent to freshvegitables29@gmail.com!';
       showToast('success', msg);
       setResendEmailMsg({ id: orderId, success: true, text: msg });
@@ -121,7 +121,13 @@ export const AdminOrdersPage: React.FC = () => {
           : prev
       );
     } catch (err: any) {
-      const errMsg = err.response?.data?.message || 'Failed to send email alert. Check SMTP configuration.';
+      const errMsg =
+        err.response?.data?.message ||
+        (err.code === 'ECONNABORTED'
+          ? 'Request timed out: Render Free Tier blocks direct SMTP ports (465/587).'
+          : err.response?.status === 503
+          ? 'Render Service Unavailable (503): Outbound SMTP port blocked by Render.'
+          : err.message || 'Failed to send email alert.');
       showToast('error', errMsg);
       setResendEmailMsg({ id: orderId, success: false, text: errMsg });
     } finally {

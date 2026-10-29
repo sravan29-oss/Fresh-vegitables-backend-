@@ -91,7 +91,126 @@ function computeGoogleMapsUrl(snapshot: any): { url: string | null; isGps: boole
 }
 
 /**
- * Create Nodemailer Transporter with fallback support
+ * 1. Send via Resend HTTPS API (Port 443 — immune to cloud firewall SMTP restrictions)
+ */
+async function sendViaResend(options: {
+  apiKey: string;
+  from?: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const fromAddress = options.from || 'Fresh Vegetables <onboarding@resend.dev>';
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${options.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromAddress,
+        to: [options.to],
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+      }),
+    });
+
+    const data: any = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data?.message || data?.error?.message || `Resend error HTTP ${res.status}` };
+    }
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * 2. Send via Brevo HTTPS API (Port 443 — 300 free emails/day)
+ */
+async function sendViaBrevo(options: {
+  apiKey: string;
+  fromEmail?: string;
+  fromName?: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': options.apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: {
+          name: options.fromName || 'Fresh Vegetables Orders',
+          email: options.fromEmail || 'freshvegitables29@gmail.com',
+        },
+        to: [{ email: options.to }],
+        subject: options.subject,
+        htmlContent: options.html,
+        textContent: options.text,
+      }),
+    });
+
+    const data: any = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data?.message || `Brevo error HTTP ${res.status}` };
+    }
+    return { success: true, messageId: data?.messageId };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * 3. Send via Google Apps Script Webhook (Directly from user's Gmail over HTTPS port 443)
+ */
+async function sendViaGoogleRelay(options: {
+  webhookUrl: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const res = await fetch(options.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+      }),
+      redirect: 'follow',
+    });
+
+    const text = await res.text();
+    let data: any = {};
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { text };
+    }
+
+    if (!res.ok && res.status !== 302) {
+      return { success: false, error: data?.error || `Google Relay error HTTP ${res.status}` };
+    }
+    return { success: true, messageId: `gas_${Date.now()}` };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Create Nodemailer Transporter with tight 4s timeout (so Render HTTP gateway never 503s)
  */
 function createTransporter(options?: { forcePort?: number; forceSecure?: boolean }) {
   const host = env.SMTP_HOST || 'smtp.gmail.com';
@@ -116,10 +235,101 @@ function createTransporter(options?: { forcePort?: number; forceSecure?: boolean
     tls: {
       rejectUnauthorized: false,
     },
-    connectionTimeout: 12000,
-    greetingTimeout: 12000,
-    socketTimeout: 20000,
+    connectionTimeout: 4000, // 4 seconds max so Render never times out with 503!
+    greetingTimeout: 4000,
+    socketTimeout: 6000,
   });
+}
+
+/**
+ * Unified Email Dispatcher with HTTPS API fallback
+ */
+async function dispatchEmail(payload: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}): Promise<{
+  success: boolean;
+  messageId?: string;
+  provider: 'resend' | 'brevo' | 'gmail_relay' | 'smtp';
+  error?: string;
+}> {
+  // 1. Try Resend API (HTTPS Port 443 — 100% immune to Render port blocking)
+  if (env.RESEND_API_KEY) {
+    console.log('[OrderEmailService] 🚀 Dispatching email via Resend HTTPS API...');
+    const result = await sendViaResend({
+      apiKey: env.RESEND_API_KEY,
+      from: env.RESEND_FROM_EMAIL,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    });
+    if (result.success) {
+      return { success: true, messageId: result.messageId, provider: 'resend' };
+    }
+    console.warn(`[OrderEmailService] Resend API failed (${result.error}), trying next provider...`);
+  }
+
+  // 2. Try Brevo API (HTTPS Port 443 — 300 free emails/day)
+  if (env.BREVO_API_KEY) {
+    console.log('[OrderEmailService] 🚀 Dispatching email via Brevo HTTPS API...');
+    const result = await sendViaBrevo({
+      apiKey: env.BREVO_API_KEY,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    });
+    if (result.success) {
+      return { success: true, messageId: result.messageId, provider: 'brevo' };
+    }
+    console.warn(`[OrderEmailService] Brevo API failed (${result.error}), trying next provider...`);
+  }
+
+  // 3. Try Google Apps Script Relay (HTTPS Port 443 — sends from freshvegitables29@gmail.com directly)
+  if (env.GMAIL_RELAY_URL) {
+    console.log('[OrderEmailService] 🚀 Dispatching email via Google Apps Script Relay...');
+    const result = await sendViaGoogleRelay({
+      webhookUrl: env.GMAIL_RELAY_URL,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    });
+    if (result.success) {
+      return { success: true, messageId: result.messageId, provider: 'gmail_relay' };
+    }
+    console.warn(`[OrderEmailService] Google Relay failed (${result.error}), trying next provider...`);
+  }
+
+  // 4. Try Direct SMTP (Fast 4s timeout)
+  const transporter = createTransporter();
+  if (!transporter) {
+    return {
+      success: false,
+      provider: 'smtp',
+      error: 'No email provider configured. On Render Free Tier, SMTP ports are blocked. Set RESEND_API_KEY, BREVO_API_KEY, or GMAIL_RELAY_URL to send over HTTPS.',
+    };
+  }
+
+  try {
+    const sendResult = await transporter.sendMail({
+      from: `"Fresh Vegetables Orders" <${env.SMTP_USER || payload.to}>`,
+      to: payload.to,
+      subject: payload.subject,
+      text: payload.text,
+      html: payload.html,
+    });
+    return { success: true, messageId: sendResult.messageId, provider: 'smtp' };
+  } catch (smtpErr: any) {
+    const isTimeout = smtpErr?.code === 'ETIMEDOUT' || smtpErr?.message?.includes('timeout');
+    const msg = isTimeout
+      ? 'Render Free Tier blocks outbound SMTP (ports 465/587). Please add RESEND_API_KEY, BREVO_API_KEY, or GMAIL_RELAY_URL in Render environment variables for HTTPS delivery.'
+      : smtpErr.message;
+    return { success: false, provider: 'smtp', error: msg };
+  }
 }
 
 /**
@@ -195,10 +405,12 @@ export async function sendNewOrderAdminEmail(orderId: string, forceRetry = false
       [orderId, notificationType, recipient]
     );
 
-    // 5. Check if SMTP credentials exist
-    const transporter = createTransporter();
-    if (!transporter) {
-      const warningMsg = `SMTP credentials not configured (SMTP_USER or SMTP_PASS missing). Email for Order #${order.order_number} cannot be sent.`;
+    // 5. Check if any email provider is configured
+    const hasHttpProvider = Boolean(env.RESEND_API_KEY || env.BREVO_API_KEY || env.GMAIL_RELAY_URL);
+    const hasSmtp = Boolean(env.SMTP_USER && env.SMTP_PASS);
+
+    if (!hasHttpProvider && !hasSmtp) {
+      const warningMsg = `No email provider configured. On Render Free Tier, SMTP ports are blocked. Please set RESEND_API_KEY, BREVO_API_KEY, or GMAIL_RELAY_URL in Render environment variables.`;
       console.warn(`[OrderEmailService] ⚠️ ${warningMsg}`);
 
       await db.query(
@@ -537,33 +749,19 @@ ${adminOrderUrl}
 Fresh Vegetables Organic Delivery Service
     `.trim();
 
-    // 8. Send Email via Transporter
-    const mailOptions = {
-      from: `"Fresh Vegetables Orders" <${env.SMTP_USER || recipient}>`,
+    // 8. Send Email via Unified Multi-Engine Dispatcher (HTTPS first, then SMTP fallback)
+    const dispatchResult = await dispatchEmail({
       to: recipient,
       subject,
       text: plainTextContent,
       html: htmlContent,
-    };
+    });
 
-    let sendResult: any;
-    try {
-      sendResult = await transporter.sendMail(mailOptions);
-    } catch (primaryErr: any) {
-      console.warn(`[OrderEmailService] Primary transport failed (${primaryErr.message}). Retrying with alternative port...`);
-      // Try alternative port (if 587 -> try 465, if 465 -> try 587)
-      const currentPort = env.SMTP_PORT || 587;
-      const altPort = currentPort === 465 ? 587 : 465;
-      const altTransporter = createTransporter({ forcePort: altPort, forceSecure: altPort === 465 });
-      if (altTransporter) {
-        sendResult = await altTransporter.sendMail(mailOptions);
-        console.log(`[OrderEmailService] ✅ Order notification sent via fallback port ${altPort}`);
-      } else {
-        throw primaryErr;
-      }
+    if (!dispatchResult.success) {
+      throw new Error(dispatchResult.error || 'Failed to dispatch email');
     }
 
-    console.log(`[OrderEmailService] ✅ Order notification email sent to ${recipient} for Order #${orderNumber} (MessageId: ${sendResult.messageId})`);
+    console.log(`[OrderEmailService] ✅ Order notification email sent to ${recipient} via ${dispatchResult.provider} for Order #${orderNumber} (MessageId: ${dispatchResult.messageId})`);
 
     // 9. Update notification outbox and order records
     await db.query(
@@ -614,106 +812,80 @@ export async function testOrderEmailConnection(): Promise<{
   success: boolean;
   message: string;
   config: {
-    host: string;
-    port: number;
-    secure: boolean;
-    user: string;
+    activeProvider: string;
+    hasResend: boolean;
+    hasBrevo: boolean;
+    hasGoogleRelay: boolean;
+    hasSmtp: boolean;
     recipient: string;
-    passConfigured: boolean;
   };
   details?: any;
 }> {
-  const user = env.SMTP_USER;
-  const pass = env.SMTP_PASS;
   const recipient = env.ORDER_NOTIFICATION_EMAIL || 'freshvegitables29@gmail.com';
+  const hasResend = Boolean(env.RESEND_API_KEY);
+  const hasBrevo = Boolean(env.BREVO_API_KEY);
+  const hasGoogleRelay = Boolean(env.GMAIL_RELAY_URL);
+  const hasSmtp = Boolean(env.SMTP_USER && env.SMTP_PASS);
+
+  const activeProvider = hasResend
+    ? 'Resend API (HTTPS Port 443)'
+    : hasBrevo
+    ? 'Brevo API (HTTPS Port 443)'
+    : hasGoogleRelay
+    ? 'Google Apps Script Relay (HTTPS Port 443)'
+    : hasSmtp
+    ? `SMTP (${env.SMTP_HOST}:${env.SMTP_PORT})`
+    : 'None configured';
 
   const config = {
-    host: env.SMTP_HOST || 'smtp.gmail.com',
-    port: env.SMTP_PORT || 587,
-    secure: env.SMTP_SECURE,
-    user: user || '(empty)',
+    activeProvider,
+    hasResend,
+    hasBrevo,
+    hasGoogleRelay,
+    hasSmtp,
     recipient,
-    passConfigured: Boolean(pass && pass.trim().length > 0),
   };
 
-  if (!user || !pass) {
+  if (!hasResend && !hasBrevo && !hasGoogleRelay && !hasSmtp) {
     return {
       success: false,
-      message: 'SMTP credentials missing: SMTP_USER or SMTP_PASS environment variable is not configured on the server.',
+      message:
+        'No email provider configured. On Render Free Tier, SMTP ports (465/587) are blocked. Please configure RESEND_API_KEY, BREVO_API_KEY, or GMAIL_RELAY_URL in your Render Environment Variables.',
       config,
     };
   }
 
-  const transporter = createTransporter();
-  if (!transporter) {
-    return {
-      success: false,
-      message: 'Could not initialize email transporter.',
-      config,
-    };
-  }
-
-  try {
-    await transporter.verify();
-
-    const testInfo = await transporter.sendMail({
-      from: `"Fresh Vegetables Orders" <${user}>`,
-      to: recipient,
-      subject: `🔔 [DIAGNOSTIC TEST] Fresh Vegetables Order Email System is Online!`,
-      text: `Hello! This is an automated diagnostic test from Fresh Vegetables Organic.\n\nServer time: ${new Date().toISOString()}\nTarget: ${recipient}\nStatus: Operational!`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 550px; margin: 0 auto; padding: 24px; border: 2px solid #16a34a; border-radius: 12px; background: #f0fdf4;">
-          <h2 style="color: #166534; margin: 0 0 12px;">✅ Order Notification System Online!</h2>
-          <p style="color: #15803d; font-size: 14px; margin: 0 0 16px;">This diagnostic email confirms that your store email delivery pipeline is 100% operational.</p>
-          <div style="background: #ffffff; border-radius: 8px; padding: 14px; border: 1px solid #bbf7d0;">
-            <p style="margin: 4px 0; font-size: 13px;"><strong>Sender Account:</strong> ${escapeHtml(user)}</p>
-            <p style="margin: 4px 0; font-size: 13px;"><strong>Notification Recipient:</strong> ${escapeHtml(recipient)}</p>
-            <p style="margin: 4px 0; font-size: 13px;"><strong>Connection:</strong> ${config.host}:${config.port} (TLS: ${config.secure ? 'SSL' : 'STARTTLS'})</p>
-            <p style="margin: 4px 0; font-size: 13px;"><strong>Dispatched At:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</p>
-          </div>
+  const dispatchResult = await dispatchEmail({
+    to: recipient,
+    subject: `🔔 [DIAGNOSTIC TEST] Fresh Vegetables Order Email System Online!`,
+    text: `Hello! This is a test email sent from Fresh Vegetables Organic using ${activeProvider}. Time: ${new Date().toISOString()}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 550px; margin: 0 auto; padding: 24px; border: 2px solid #16a34a; border-radius: 12px; background: #f0fdf4;">
+        <h2 style="color: #166534; margin: 0 0 12px;">✅ Order Notification System Online!</h2>
+        <p style="color: #15803d; font-size: 14px; margin: 0 0 16px;">This diagnostic email confirms that your store email delivery pipeline is 100% operational.</p>
+        <div style="background: #ffffff; border-radius: 8px; padding: 14px; border: 1px solid #bbf7d0;">
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Delivery Provider:</strong> ${activeProvider}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Notification Recipient:</strong> ${escapeHtml(recipient)}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Dispatched At:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</p>
         </div>
-      `,
-    });
+      </div>
+    `,
+  });
 
-    return {
-      success: true,
-      message: `Test email successfully delivered to ${recipient}!`,
-      config,
-      details: { messageId: testInfo.messageId },
-    };
-  } catch (err: any) {
-    // Attempt fallback port before returning error
-    const fallbackPort = (env.SMTP_PORT || 587) === 465 ? 587 : 465;
-    try {
-      const altTransporter = createTransporter({ forcePort: fallbackPort, forceSecure: fallbackPort === 465 });
-      if (altTransporter) {
-        await altTransporter.verify();
-        const altTestInfo = await altTransporter.sendMail({
-          from: `"Fresh Vegetables Orders" <${user}>`,
-          to: recipient,
-          subject: `🔔 [DIAGNOSTIC TEST - VIA PORT ${fallbackPort}] Fresh Vegetables Order Email System Online!`,
-          text: `Test email successfully delivered via fallback port ${fallbackPort}.`,
-          html: `<p>Test email successfully delivered via fallback port ${fallbackPort}.</p>`,
-        });
-        return {
-          success: true,
-          message: `Test email successfully delivered to ${recipient} (via fallback port ${fallbackPort})!`,
-          config: { ...config, port: fallbackPort },
-          details: { messageId: altTestInfo.messageId },
-        };
-      }
-    } catch {}
-
+  if (!dispatchResult.success) {
     return {
       success: false,
-      message: `Email test failed: ${err.message}`,
+      message: dispatchResult.error || 'Failed to dispatch test email',
       config,
-      details: {
-        code: err.code,
-        response: err.response,
-        responseCode: err.responseCode,
-      },
     };
   }
+
+  return {
+    success: true,
+    message: `Test email successfully delivered to ${recipient} via ${dispatchResult.provider}!`,
+    config,
+    details: { messageId: dispatchResult.messageId },
+  };
 }
+
 

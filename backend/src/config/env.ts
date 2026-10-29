@@ -53,7 +53,14 @@ export const env = {
   WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
   WHATSAPP_BUSINESS_ACCOUNT_ID: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
 
-  // Order Email Notifications & SMTP Configuration
+  // Order Email Notifications & Multi-Provider Configuration
+  // 1. Cloud-Proof HTTPS API Providers (Render Free tier blocks outbound SMTP ports 25, 465, 587)
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL || 'Fresh Vegetables <onboarding@resend.dev>',
+  BREVO_API_KEY: process.env.BREVO_API_KEY || '',
+  GMAIL_RELAY_URL: process.env.GMAIL_RELAY_URL || '',
+
+  // 2. Direct SMTP Configuration (For local dev or paid Render/VPS hosting)
   SMTP_HOST: process.env.SMTP_HOST || 'smtp.gmail.com',
   SMTP_PORT: parseInt(process.env.SMTP_PORT || '587'),
   SMTP_SECURE: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : (parseInt(process.env.SMTP_PORT || '587') === 465),
