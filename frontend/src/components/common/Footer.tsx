@@ -25,16 +25,16 @@ export const Footer: React.FC = () => {
   }, []);
 
   return (
-    <footer className="glass-footer text-slate-300 pt-16 pb-8">
+    <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 pt-16 pb-8">
       {/* Top feature badges */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 border-b border-slate-800">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-800/40 border border-slate-800">
-            <div className="w-12 h-12 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center">
+          <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-900 border border-slate-800">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-[#0c831f] flex items-center justify-center">
               <Truck className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-white font-bold text-sm">30-Minute Delivery</h4>
+              <h4 className="text-white font-bold text-sm">15-Minute Express</h4>
               <p className="text-xs text-slate-400">Directly from partner farms</p>
             </div>
           </div>

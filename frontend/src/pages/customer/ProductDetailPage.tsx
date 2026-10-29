@@ -163,12 +163,12 @@ export const ProductDetailPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 bg-white p-6 sm:p-10 rounded-3xl border border-slate-200/80 shadow-sm">
         {/* Left Column: Image Gallery */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="aspect-square bg-slate-50 rounded-3xl border border-slate-100 flex items-center justify-center overflow-hidden relative shadow-inner">
+          <div className="aspect-square bg-[#f8fafc] rounded-3xl border border-slate-200/80 flex items-center justify-center overflow-hidden relative p-6">
             {activeImage ? (
               <img
                 src={getProductImageUrl(activeImage, product.name)}
                 alt={product.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 onError={(e) => {
                   e.currentTarget.src = getFallbackImageUrl(product.name);
                 }}
@@ -207,7 +207,7 @@ export const ProductDetailPage: React.FC = () => {
                   <img
                     src={getProductImageUrl(img, product.name)}
                     alt=""
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain p-1"
                     onError={(e) => {
                       e.currentTarget.src = getFallbackImageUrl(product.name);
                     }}

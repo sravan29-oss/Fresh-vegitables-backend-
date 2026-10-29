@@ -57,126 +57,92 @@ const HeroSection: React.FC<HeroSectionProps> = ({ section }) => {
   return (
     <section
       key={section?.id || 'hero-main'}
-      className="relative overflow-hidden bg-[#061a10] text-white rounded-3xl mx-4 sm:mx-6 lg:mx-8 mt-6 shadow-2xl border border-emerald-900/40 animate-slide-up"
+      className="relative overflow-hidden bg-gradient-to-r from-[#0c831f] via-[#0f9426] to-[#086317] text-white rounded-3xl mx-4 sm:mx-6 lg:mx-8 mt-5 shadow-lg border border-emerald-600/40 animate-slide-up"
     >
-      {/* 3D Organic Video Background Layer */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
-        {/* Deep forest-green fallback poster background */}
-        <div className="absolute inset-0 bg-[#061a10] bg-gradient-to-br from-[#061a10] via-[#092e1b] to-[#04120a]" />
-
-        {/* Video Element (strictly muted, responsive cover, preload metadata) */}
-        {!hasReducedMotion && !videoError && (
-          <video
-            ref={(el) => {
-              if (el) {
-                el.muted = true;
-                el.defaultMuted = true;
-              }
-            }}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            onError={() => setVideoError(true)}
-            className="w-full h-full object-cover object-center scale-[1.03] transition-opacity duration-1000"
-          >
-            <source src="/videos/organic-vegetables-bg.mp4" type="video/mp4" />
-          </video>
-        )}
-
-        {/* Cinematic Multi-layer Dark Forest-Green Gradient Overlays */}
-        {/* Horizontal contrast gradient: high contrast on text, soft vignette on right */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-emerald-950/85 to-slate-950/75 pointer-events-none" />
-        {/* Vertical vignette gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/60 pointer-events-none" />
-        {/* Radial organic glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-500/10 via-transparent to-black/60 pointer-events-none" />
-        {/* Fine subtle pattern grid */}
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#86efac_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none" />
+      {/* Decorative ambient patterns */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
+        <div className="absolute -right-20 -top-20 w-96 h-96 rounded-full bg-emerald-400/20 blur-3xl" />
+        <div className="absolute right-1/3 -bottom-20 w-80 h-80 rounded-full bg-teal-400/15 blur-2xl" />
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:24px_24px]" />
       </div>
 
-      {/* Hero Foreground Content Layer (floating safely above video) */}
-      <div className="max-w-7xl mx-auto px-6 sm:px-12 py-16 sm:py-24 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-        <div className="lg:col-span-7 space-y-6">
-          <div className="inline-flex items-center gap-2.5 bg-brand-500/20 backdrop-blur-md border border-brand-400/30 px-4 py-2 rounded-full text-xs font-bold text-brand-300 shadow-lg shadow-brand-950/30">
-            <img
-              src="/logo.png"
-              alt="Fresh Vegetables Brand"
-              className="w-5 h-5 rounded-full object-cover ring-1 ring-brand-400/50"
-            />
-            <Sparkles className="w-4 h-4 text-brand-400" />
+      {/* Hero Foreground Content Layer */}
+      <div className="max-w-7xl mx-auto px-6 sm:px-10 py-12 sm:py-16 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+        <div className="lg:col-span-7 space-y-5">
+          <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 px-3.5 py-1.5 rounded-full text-xs font-black text-white shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-[#ffc72c] animate-pulse"></span>
+            <Sparkles className="w-3.5 h-3.5 text-[#ffc72c]" />
             <span>{subtitle}</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.1] text-white filter drop-shadow-md">
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.1] text-white">
             {title}
           </h1>
 
-          <p className="text-emerald-100/90 text-base sm:text-lg max-w-xl font-normal leading-relaxed filter drop-shadow">
+          <p className="text-emerald-50 text-sm sm:text-base max-w-xl font-medium leading-relaxed">
             {description}
           </p>
 
-          <div className="flex flex-wrap gap-4 pt-2">
+          <div className="flex flex-wrap gap-3.5 pt-2">
             <Link
               to={buttonLink}
-              className="bg-brand-500 hover:bg-brand-400 active:scale-95 text-slate-950 font-extrabold px-8 py-4 rounded-2xl shadow-xl shadow-brand-500/30 flex items-center gap-2.5 hover:gap-3 transition-all transform hover:-translate-y-0.5"
+              className="bg-[#ffc72c] hover:bg-[#f5b81a] active:scale-95 text-slate-950 font-black px-7 py-3.5 rounded-xl shadow-md flex items-center gap-2 transition-all transform hover:-translate-y-0.5 text-sm"
             >
               <span>{buttonText}</span>
-              <ArrowRight className="w-5 h-5" />
+              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
             </Link>
             <Link
               to={section?.configuration?.secondary_button_link || '/products?best_seller=true'}
-              className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white font-bold px-7 py-4 rounded-2xl transition-all shadow-lg hover:border-brand-400/40 active:scale-95"
+              className="bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold px-6 py-3.5 rounded-xl transition-all shadow-xs active:scale-95 text-sm"
             >
-              {section?.configuration?.secondary_button_text || "Today's Specials 🔥"}
+              {section?.configuration?.secondary_button_text || "Today's Deals 🔥"}
             </Link>
           </div>
 
           {/* Proof points */}
-          <div className="pt-6 border-t border-emerald-800/40 grid grid-cols-3 gap-4 text-xs">
+          <div className="pt-6 border-t border-emerald-500/40 grid grid-cols-3 gap-4 text-xs">
             {stats.map((st: any, idx: number) => (
               <div key={idx} className="space-y-0.5">
                 <p className="font-extrabold text-2xl text-white tracking-tight">{st.value}</p>
-                <p className="text-emerald-300/90 font-medium">{st.label}</p>
+                <p className="text-emerald-100 font-medium">{st.label}</p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Visual illustration / live 3D glass basket badge */}
+        {/* Visual illustration / Solid White Feature Card */}
         <div className="lg:col-span-5 relative flex justify-center">
-          <div className="relative w-full max-w-md aspect-square bg-slate-950/60 backdrop-blur-xl border border-emerald-500/30 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl shadow-emerald-950/50 hover:border-emerald-400/50 transition-all">
-            <div className="flex justify-between items-center">
+          <div className="w-full max-w-sm bg-white text-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-100 flex flex-col justify-between">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-wider">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#0c831f] animate-ping"></span>
+                <span className="bg-emerald-100 text-[#0c831f] font-black text-xs px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                   Live Harvest
                 </span>
               </div>
-              <span className="text-xs text-brand-200 flex items-center gap-1 font-bold bg-slate-900/60 px-2.5 py-1 rounded-lg">
-                <Truck className="w-3.5 h-3.5 text-brand-400" /> 30-Min Dispatch
+              <span className="text-xs text-slate-700 flex items-center gap-1 font-extrabold bg-slate-100 px-2.5 py-1 rounded-lg">
+                <Truck className="w-3.5 h-3.5 text-[#0c831f]" /> 15-Min Dispatch
               </span>
             </div>
 
-            <div className="text-center space-y-3 py-4">
+            <div className="text-center space-y-3 py-6">
               <img
                 src="/logo.png"
-                alt="Organic Basket"
-                className="w-28 h-28 mx-auto rounded-full object-cover ring-4 ring-brand-500/30 shadow-2xl transform hover:rotate-3 transition-transform duration-300"
+                alt="Organic Produce Basket"
+                className="w-24 h-24 mx-auto rounded-2xl object-cover ring-2 ring-emerald-500/30 shadow-md"
               />
-              <h3 className="text-xl font-black text-white">Daily Fresh Harvest Basket</h3>
-              <p className="text-xs text-brand-100/75 max-w-xs mx-auto leading-relaxed">
-                Delivered straight from partnered organic farm clusters across Telangana &amp; Gujarat.
+              <h3 className="text-lg font-black text-slate-900">Daily Fresh Harvest</h3>
+              <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
+                Directly from regional organic farm clusters across Telangana &amp; Andhra Pradesh.
               </p>
             </div>
 
-            <div className="bg-slate-900/80 backdrop-blur-md rounded-2xl p-3.5 border border-brand-400/20 flex items-center justify-between text-xs">
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between text-xs">
               <div>
-                <span className="text-brand-300 font-bold block">Purity Guarantee</span>
-                <span className="text-[11px] text-slate-300">0% Added Synthetic Preservatives</span>
+                <span className="text-slate-900 font-bold block">Purity Guarantee</span>
+                <span className="text-[11px] text-slate-500">Zero Synthetic Pesticides</span>
               </div>
-              <span className="bg-brand-500 text-slate-950 font-extrabold px-3 py-1 rounded-lg text-xs shadow-md shadow-brand-500/20">
+              <span className="bg-[#0c831f] text-white font-extrabold px-3 py-1 rounded-lg text-xs shadow-xs">
                 100% Pure
               </span>
             </div>
@@ -269,9 +235,9 @@ export const HomePage: React.FC = () => {
                 <Link
                   key={cat.id}
                   to={`/products?category=${cat.slug}`}
-                  className="group p-5 rounded-3xl glass-card flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-brand-300 cursor-pointer"
+                  className="group p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer"
                 >
-                  <div className="w-16 h-16 rounded-2xl bg-brand-50 group-hover:bg-brand-100 flex items-center justify-center text-3xl mb-3 transition-colors shadow-inner">
+                  <div className="w-16 h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-3xl mb-3 transition-colors">
                     {cat.slug.includes('leaf')
                       ? '🥬'
                       : cat.slug.includes('root')
@@ -284,7 +250,7 @@ export const HomePage: React.FC = () => {
                       ? '🌿'
                       : '🍅'}
                   </div>
-                  <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-brand-700 transition-colors">
+                  <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0c831f] transition-colors">
                     {cat.name}
                   </h3>
                   <span className="text-[11px] text-slate-400 mt-1 font-medium">Fresh Harvest</span>
@@ -302,7 +268,7 @@ export const HomePage: React.FC = () => {
           <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <span className="text-emerald-600 font-extrabold text-xs uppercase tracking-wider">
+                <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
                   {section.subtitle || 'Hand-Picked At Dawn'}
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
@@ -311,7 +277,7 @@ export const HomePage: React.FC = () => {
               </div>
               <Link
                 to={section.button_link || '/products'}
-                className="text-sm font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                className="text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
               >
                 <span>{section.button_text || 'Explore Produce'}</span>
                 <ArrowRight className="w-4 h-4" />
@@ -319,7 +285,7 @@ export const HomePage: React.FC = () => {
             </div>
 
             {prodList.length === 0 ? (
-              <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-white/60 p-8 text-center space-y-2 shadow-sm">
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2 shadow-xs">
                 <p className="text-sm font-bold text-slate-700">Fresh Harvest Coming Soon</p>
                 <p className="text-xs text-slate-400">Our farmers are currently preparing fresh seasonal vegetables for this rail.</p>
               </div>
@@ -352,7 +318,7 @@ export const HomePage: React.FC = () => {
               </div>
               <Link
                 to={section.button_link || '/products?best_seller=true'}
-                className="text-sm font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                className="text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
               >
                 <span>{section.button_text || 'View All Best Sellers'}</span>
                 <ArrowRight className="w-4 h-4" />
@@ -360,7 +326,7 @@ export const HomePage: React.FC = () => {
             </div>
 
             {prodList.length === 0 ? (
-              <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-white/60 p-8 text-center space-y-2 shadow-sm">
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2 shadow-xs">
                 <p className="text-sm font-bold text-slate-700">Fresh Harvest Coming Soon</p>
                 <p className="text-xs text-slate-400">Our farmers are currently preparing fresh seasonal vegetables for this rail.</p>
               </div>
@@ -381,27 +347,27 @@ export const HomePage: React.FC = () => {
         const coupon = section.configuration?.coupon_code || 'WELCOME50';
         return (
           <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-slate-900 glass-banner rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-2xl">
+            <div className="bg-gradient-to-r from-[#0c831f] via-[#108934] to-[#046c1c] rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-lg border border-emerald-600/30">
               <div className="space-y-3 z-10 text-center md:text-left">
-                <span className="inline-flex items-center gap-1.5 bg-emerald-400 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider">
+                <span className="inline-flex items-center gap-1.5 bg-[#ffc72c] text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider">
                   <Tag className="w-3.5 h-3.5" />
                   <span>{section.subtitle || 'Limited Time Special'}</span>
                 </span>
                 <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
                   {section.title}
                 </h3>
-                <p className="text-emerald-100/90 text-sm max-w-lg">
+                <p className="text-emerald-50 text-sm max-w-lg font-medium">
                   {section.description || `Use promo coupon code ${coupon} at checkout for instant savings.`}
                 </p>
-                <div className="inline-block bg-white/10 border border-white/20 backdrop-blur-md px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-emerald-200">
-                  Code: <strong className="text-white underline">{coupon}</strong>
+                <div className="inline-block bg-white/20 border border-white/30 px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-white shadow-xs">
+                  Code: <strong className="text-[#ffc72c] underline">{coupon}</strong>
                 </div>
               </div>
 
               <div className="z-10 flex-shrink-0">
                 <Link
                   to={section.button_link || '/products'}
-                  className="bg-brand-400 hover:bg-brand-300 text-slate-950 font-black px-8 py-4 rounded-2xl text-sm shadow-xl inline-block transition-transform hover:scale-105"
+                  className="bg-[#ffc72c] hover:bg-[#f5b81a] text-slate-950 font-black px-8 py-4 rounded-xl text-sm shadow-md inline-block transition-transform hover:scale-105"
                 >
                   {section.button_text || 'Claim Offer Now'}
                 </Link>
@@ -416,13 +382,13 @@ export const HomePage: React.FC = () => {
           { title: 'Harvested at 4 AM', desc: 'Directly sourced from trusted regional partner farmers.' },
           { title: 'Ozone Washed & Safe', desc: 'Gentle sanitization eliminating dust and bacteria without heat.' },
           { title: 'Eco Biodegradable Bags', desc: '100% plastic-free compostable kraft packaging.' },
-          { title: '30-Minute Speed Dispatch', desc: 'Temperature controlled EV delivery straight to your doorstep.' },
+          { title: '15-Minute Speed Dispatch', desc: 'Temperature controlled EV delivery straight to your doorstep.' },
         ];
         return (
-          <section key={section.id} className="glass-section mx-4 sm:mx-6 lg:mx-8 py-16 animate-slide-up rounded-3xl">
+          <section key={section.id} className="bg-white border border-slate-200/90 mx-4 sm:mx-6 lg:mx-8 py-14 animate-slide-up rounded-3xl shadow-xs">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center max-w-2xl mx-auto mb-12">
-                <span className="text-brand-600 font-extrabold text-xs uppercase tracking-wider">
+                <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
                   {section.subtitle || 'The Pure Farm Promise'}
                 </span>
                 <h2 className="text-3xl font-black text-slate-900 tracking-tight mt-1">
@@ -435,8 +401,8 @@ export const HomePage: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {pillars.map((pil: any, idx: number) => (
-                  <div key={idx} className="p-6 rounded-3xl glass-card space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center font-bold">
+                  <div key={idx} className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#0c831f] flex items-center justify-center font-bold">
                       <CheckCircle2 className="w-5 h-5" />
                     </div>
                     <h4 className="font-extrabold text-sm text-slate-900">{pil.title}</h4>
@@ -452,13 +418,13 @@ export const HomePage: React.FC = () => {
       case 'testimonials': {
         const reviews = section.configuration?.reviews || [
           { name: 'Dr. Ananya Roy', role: 'Nutritionist, Hyderabad', comment: 'The palak and coriander stay fresh for an entire week. Truly farm quality!', rating: 5 },
-          { name: 'Rajesh Kulkarni', role: 'Home Chef', comment: 'Delivery is always on time within 30 mins and the tomatoes taste sweet and natural.', rating: 5 },
+          { name: 'Rajesh Kulkarni', role: 'Home Chef', comment: 'Delivery is always on time within 15 mins and the tomatoes taste sweet and natural.', rating: 5 },
           { name: 'Sneha Patel', role: 'Mother of two', comment: 'Zero pesticide test reports give me immense peace of mind for my kids.', rating: 5 },
         ];
         return (
           <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
             <div className="text-center max-w-2xl mx-auto mb-10">
-              <span className="text-brand-600 font-extrabold text-xs uppercase tracking-wider">
+              <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
                 {section.subtitle || 'Customer Trust'}
               </span>
               <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
@@ -468,7 +434,7 @@ export const HomePage: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {reviews.map((rev: any, idx: number) => (
-                <div key={idx} className="p-7 rounded-3xl glass-card space-y-4">
+                <div key={idx} className="p-7 rounded-2xl bg-white border border-slate-200 shadow-xs hover:shadow-md space-y-4">
                   <div className="flex items-center gap-1 text-amber-400">
                     {[...Array(rev.rating || 5)].map((_, i) => (
                       <Star key={i} className="w-4 h-4 fill-amber-400" />
@@ -568,9 +534,9 @@ export const HomePage: React.FC = () => {
                   <Link
                     key={cat.id}
                     to={`/products?category=${cat.slug}`}
-                    className="group p-5 rounded-3xl glass-card flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-brand-300 cursor-pointer"
+                    className="group p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer"
                   >
-                    <div className="w-16 h-16 rounded-2xl bg-brand-50 group-hover:bg-brand-100 flex items-center justify-center text-3xl mb-3 transition-colors shadow-inner">
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-3xl mb-3 transition-colors">
                       {cat.slug.includes('leaf')
                         ? '🥬'
                         : cat.slug.includes('root')
@@ -583,7 +549,7 @@ export const HomePage: React.FC = () => {
                         ? '🌿'
                         : '🍅'}
                     </div>
-                    <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-brand-700 transition-colors">
+                    <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0c831f] transition-colors">
                       {cat.name}
                     </h3>
                     <span className="text-[11px] text-slate-400 mt-1 font-medium">Fresh Harvest</span>
@@ -598,7 +564,7 @@ export const HomePage: React.FC = () => {
             <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
               <div className="flex items-center justify-between mb-8">
                 <div>
-                  <span className="text-emerald-600 font-extrabold text-xs uppercase tracking-wider">
+                  <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
                     Hand-Picked At Dawn
                   </span>
                   <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
@@ -607,7 +573,7 @@ export const HomePage: React.FC = () => {
                 </div>
                 <Link
                   to="/products"
-                  className="text-sm font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                  className="text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
                 >
                   <span>Explore Produce</span>
                   <ArrowRight className="w-4 h-4" />
@@ -624,27 +590,27 @@ export const HomePage: React.FC = () => {
 
           {/* Promotional Special Offer */}
           <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-slate-900 glass-banner rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-2xl">
+            <div className="bg-gradient-to-r from-[#0c831f] via-[#108934] to-[#046c1c] rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-lg border border-emerald-600/30">
               <div className="space-y-3 z-10 text-center md:text-left">
-                <span className="inline-flex items-center gap-1.5 bg-emerald-400 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider">
+                <span className="inline-flex items-center gap-1.5 bg-[#ffc72c] text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider">
                   <Tag className="w-3.5 h-3.5" />
                   <span>Limited Time Special</span>
                 </span>
                 <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
                   Super Saver Farm Offer
                 </h3>
-                <p className="text-emerald-100/90 text-sm max-w-lg">
-                  Use promo coupon code <strong className="text-emerald-300">FRESH20</strong> at checkout for 20% instant savings on your fresh morning harvest.
+                <p className="text-emerald-50 text-sm max-w-lg font-medium">
+                  Use promo coupon code <strong className="text-[#ffc72c]">FRESH20</strong> at checkout for 20% instant savings on your fresh morning harvest.
                 </p>
-                <div className="inline-block bg-white/10 border border-white/20 backdrop-blur-md px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-emerald-200">
-                  Code: <strong className="text-white underline">FRESH20</strong>
+                <div className="inline-block bg-white/20 border border-white/30 px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-white shadow-xs">
+                  Code: <strong className="text-[#ffc72c] underline">FRESH20</strong>
                 </div>
               </div>
 
               <div className="z-10 flex-shrink-0">
                 <Link
                   to="/products"
-                  className="bg-brand-400 hover:bg-brand-300 text-slate-950 font-black px-8 py-4 rounded-2xl text-sm shadow-xl inline-block transition-transform hover:scale-105"
+                  className="bg-[#ffc72c] hover:bg-[#f5b81a] text-slate-950 font-black px-8 py-4 rounded-xl text-sm shadow-md inline-block transition-transform hover:scale-105"
                 >
                   Claim Offer Now
                 </Link>
@@ -653,10 +619,10 @@ export const HomePage: React.FC = () => {
           </section>
 
           {/* Farm-to-Fork Trust Pillars */}
-          <section className="glass-section mx-4 sm:mx-6 lg:mx-8 py-16 animate-slide-up rounded-3xl">
+          <section className="bg-white border border-slate-200/90 mx-4 sm:mx-6 lg:mx-8 py-14 animate-slide-up rounded-3xl shadow-xs">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center max-w-2xl mx-auto mb-12">
-                <span className="text-brand-600 font-extrabold text-xs uppercase tracking-wider">
+                <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
                   The Pure Farm Promise
                 </span>
                 <h2 className="text-3xl font-black text-slate-900 tracking-tight mt-1">
@@ -672,10 +638,10 @@ export const HomePage: React.FC = () => {
                   { title: 'Harvested at 4 AM', desc: 'Directly sourced from trusted regional partner farmers.' },
                   { title: 'Ozone Washed & Safe', desc: 'Gentle sanitization eliminating dust and bacteria without heat.' },
                   { title: 'Eco Biodegradable Bags', desc: '100% plastic-free compostable kraft packaging.' },
-                  { title: '30-Minute Speed Dispatch', desc: 'Temperature controlled EV delivery straight to your doorstep.' },
+                  { title: '15-Minute Speed Dispatch', desc: 'Temperature controlled EV delivery straight to your doorstep.' },
                 ].map((pil, idx) => (
-                  <div key={idx} className="p-6 rounded-3xl glass-card space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center font-bold">
+                  <div key={idx} className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#0c831f] flex items-center justify-center font-bold">
                       <CheckCircle2 className="w-5 h-5" />
                     </div>
                     <h4 className="font-extrabold text-sm text-slate-900">{pil.title}</h4>

@@ -80,56 +80,47 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   return (
     <div
       onClick={handleCardClick}
-      className={`group bg-white rounded-2xl border border-slate-200/90 hover:border-emerald-500/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_28px_rgba(16,185,129,0.12)] transition-all duration-300 flex flex-col justify-between overflow-hidden relative h-full cursor-pointer p-3 select-none ${
-        isOutOfStock ? 'opacity-85 grayscale-[15%]' : ''
+      className={`group bg-white rounded-2xl border border-slate-200/90 hover:border-emerald-500 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_24px_rgba(0,0,0,0.08)] transition-all duration-200 flex flex-col justify-between overflow-hidden relative h-full cursor-pointer p-3 select-none ${
+        isOutOfStock ? 'opacity-85' : ''
       }`}
     >
-      {/* ─── Top Showcase Stage (Blinkit / Zepto Style) ─── */}
-      <div className="relative w-full h-38 sm:h-44 rounded-xl bg-[#f8faf8] group-hover:bg-[#f0fdf4]/50 flex items-center justify-center p-3 overflow-hidden transition-colors border border-slate-100/80">
+      {/* ─── Top Showcase Stage (Blinkit & Zepto Pro Image Fit) ─── */}
+      <div className="relative w-full h-44 sm:h-48 rounded-xl bg-[#f8fafc] group-hover:bg-[#f0fdf4]/40 flex items-center justify-center p-2.5 overflow-hidden transition-colors border border-slate-100">
         {/* Floating Badges Header */}
         <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between z-10 pointer-events-none">
           {/* Top Left: Discount Badge */}
-          <div>
-            {discount > 0 ? (
-              <span className="bg-[#256fef] text-white font-extrabold text-[10px] px-2 py-0.5 rounded-md shadow-xs tracking-tight flex items-center gap-0.5 uppercase">
-                {discount}% OFF
-              </span>
-            ) : product.featured ? (
-              <span className="bg-emerald-600 text-white font-extrabold text-[9.5px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
-                Trending
-              </span>
-            ) : (
-              <span className="bg-emerald-100/90 text-emerald-800 font-extrabold text-[9.5px] px-1.5 py-0.5 rounded-md tracking-tight">
-                Organic
-              </span>
-            )}
-          </div>
+          {discount > 0 ? (
+            <span className="bg-[#256fef] text-white font-black text-[10.5px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
+              {discount}% OFF
+            </span>
+          ) : (
+            <span className="bg-emerald-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-md shadow-xs tracking-tight uppercase">
+              Fresh
+            </span>
+          )}
 
           {/* Top Right: FSSAI Green Veg Dot Mark */}
           <div
-            className="w-4 h-4 rounded-[3px] border border-emerald-600 p-[1.5px] flex items-center justify-center bg-white/95 shadow-2xs shrink-0"
+            className="w-4 h-4 rounded-[3px] border border-emerald-600 p-[1.5px] flex items-center justify-center bg-white shadow-2xs shrink-0"
             title="100% Certified Organic Veg"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
           </div>
         </div>
 
-        {/* Delivery ETA Pill (Iconic Blinkit/Zepto 10-15 Min Badge) */}
-        <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 bg-white/95 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-slate-200/70 shadow-2xs text-[9.5px] font-extrabold text-slate-700 tracking-tight pointer-events-none">
-          <Clock className="w-2.5 h-2.5 text-emerald-600 stroke-[2.5]" />
-          <span>30 MINS</span>
+        {/* Delivery ETA Pill (Iconic Quick Commerce Badge) */}
+        <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 bg-white/95 px-2 py-0.5 rounded-md border border-slate-200/80 shadow-2xs text-[10px] font-extrabold text-slate-800 tracking-tight pointer-events-none">
+          <Clock className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
+          <span>15 MINS</span>
         </div>
 
-        {/* Ambient Produce Cast Shadow */}
-        <div className="absolute bottom-2.5 w-1/2 h-2.5 bg-slate-900/10 rounded-full blur-[3px] transform group-hover:scale-110 transition-transform duration-300 pointer-events-none" />
-
-        {/* Vegetable Image */}
+        {/* Vegetable Image - Perfectly Centered & Fitted */}
         {product.images && product.images.length > 0 ? (
           <img
             src={getProductImageUrl(product.images[0], product.name)}
             alt={product.name}
-            className={`max-h-28 sm:max-h-32 max-w-full object-contain filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.08)] group-hover:scale-108 transition-transform duration-300 ease-out z-10 rounded-md ${
-              isOutOfStock ? 'opacity-60' : ''
+            className={`w-full h-full max-h-36 sm:max-h-40 object-contain filter drop-shadow-sm group-hover:scale-106 transition-transform duration-300 ease-out z-10 ${
+              isOutOfStock ? 'opacity-50 grayscale' : ''
             }`}
             loading="lazy"
             onError={(e) => {
@@ -137,15 +128,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             }}
           />
         ) : (
-          <span className="text-5xl drop-shadow-md select-none transform group-hover:scale-110 transition-transform duration-300 z-10">
+          <span className="text-5xl drop-shadow-sm select-none transform group-hover:scale-106 transition-transform duration-300 z-10">
             🥬
           </span>
         )}
 
         {/* Sold Out Overlay */}
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[1px] flex items-center justify-center z-20">
-            <span className="bg-rose-600 text-white text-[10.5px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-md border border-white/30 flex items-center gap-1">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] flex items-center justify-center z-20">
+            <span className="bg-rose-600 text-white text-[11px] font-black px-3.5 py-1 rounded-full uppercase tracking-wider shadow-md border border-white/30 flex items-center gap-1">
               <Ban className="w-3 h-3" /> Sold Out
             </span>
           </div>
@@ -153,9 +144,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </div>
 
       {/* ─── Body Section ─── */}
-      <div className="pt-2 flex-1 flex flex-col justify-between">
+      <div className="pt-2.5 flex-1 flex flex-col justify-between">
         <div>
-          {/* Weight / Pack Size Pill (Blinkit / Zepto Placement) */}
+          {/* Pack / Weight Pill & Category */}
           <div className="flex items-center justify-between">
             {product.variants && product.variants.length > 0 ? (
               <select
@@ -164,7 +155,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   const found = product.variants?.find((v) => v.id === e.target.value);
                   if (found) setSelectedVariant(found);
                 }}
-                className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 border-0 rounded-md px-2 py-0.5 cursor-pointer focus:ring-1 focus:ring-emerald-500 transition-colors truncate max-w-[150px]"
+                className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200/60 rounded-md px-2 py-0.5 cursor-pointer focus:ring-1 focus:ring-emerald-500 transition-colors truncate max-w-[140px]"
               >
                 {product.variants.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -173,26 +164,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 ))}
               </select>
             ) : (
-              <span className="text-[11px] font-bold text-slate-500 bg-slate-100/90 px-2 py-0.5 rounded-md inline-block">
+              <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md inline-block">
                 {unit}
               </span>
             )}
 
-            {/* Category tag */}
-            <span className="text-[9.5px] font-extrabold text-emerald-700 uppercase tracking-wider truncate max-w-[90px]">
+            <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider truncate max-w-[100px]">
               {product.category_name || 'Farm Fresh'}
             </span>
           </div>
 
-          {/* Product Title (2 lines clamp, crisp slate typography) */}
+          {/* Product Title (2 lines clamp, crisp slate-900 font-bold) */}
           <h3
-            className="text-slate-900 font-bold text-xs sm:text-[13.5px] leading-snug line-clamp-2 mt-1.5 min-h-[2.1rem] group-hover:text-emerald-700 transition-colors text-left"
+            className="text-slate-900 font-bold text-xs sm:text-[13.5px] leading-snug line-clamp-2 mt-1.5 min-h-[2.2rem] group-hover:text-emerald-700 transition-colors text-left"
             title={product.name}
           >
             {product.name}
           </h3>
 
-          {/* Micro Farm Fresh / Stock Indicator */}
+          {/* Micro Status */}
           <div className="mt-1 flex items-center gap-1.5 text-[10px]">
             {isOutOfStock ? (
               <span className="font-bold text-rose-600 flex items-center gap-1">
@@ -205,13 +195,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             ) : (
               <span className="text-emerald-700 font-medium flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Morning Harvest</span>
+                <span>Daily Farm Harvest</span>
               </span>
             )}
           </div>
         </div>
 
-        {/* ─── Bottom Pricing & Action Row (Iconic Quick Commerce Footer) ─── */}
+        {/* ─── Bottom Pricing & Action Row ─── */}
         <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
           {/* Price Column */}
           <div className="flex flex-col justify-center leading-none">
@@ -220,17 +210,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 ₹{Number(price).toFixed(0)}
               </span>
               {mrp > price && (
-                <span className="text-slate-400 text-[11px] line-through font-medium ml-1.5">
+                <span className="text-slate-400 text-xs line-through font-medium ml-1.5">
                   ₹{Number(mrp).toFixed(0)}
                 </span>
               )}
             </div>
-            <span className="text-[9px] font-semibold text-slate-400 mt-0.5">
+            <span className="text-[9.5px] font-semibold text-slate-400 mt-0.5">
               per {unit}
             </span>
           </div>
 
-          {/* Action Button: Blinkit/Zepto "ADD" or Stepper */}
+          {/* Action Button: Blinkit/Zepto "ADD" button or Stepper */}
           <div className="shrink-0">
             {isOutOfStock ? (
               <button
@@ -268,7 +258,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 type="button"
                 onClick={handleAdd}
                 disabled={isAdding}
-                className="h-8 min-w-[72px] px-3 rounded-lg border border-emerald-600 bg-emerald-50/70 hover:bg-emerald-600 text-emerald-700 hover:text-white font-black text-xs uppercase tracking-wider shadow-2xs hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1 group/btn cursor-pointer"
+                className="h-8 min-w-[72px] px-3.5 rounded-lg border-1.5 border-emerald-600 bg-emerald-50/80 hover:bg-emerald-600 text-emerald-700 hover:text-white font-black text-xs uppercase tracking-wider shadow-2xs hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1 group/btn cursor-pointer"
               >
                 {isAdding ? (
                   <Check className="w-3.5 h-3.5 animate-bounce" />

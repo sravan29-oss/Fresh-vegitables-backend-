@@ -47,21 +47,15 @@ import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
 
 const CustomerLayout: React.FC = () => {
   return (
-    <div className="flex flex-col min-h-screen relative pb-14 md:pb-0">
-      {/* 3D Animated Background Canvas */}
-      <AnimatedBackground />
-
-      {/* All content floats above the canvas */}
-      <div className="content-layer flex flex-col min-h-screen">
-        <Header />
-        <main className="flex-1">
-          <Outlet />
-        </main>
-        <Footer />
-        <CartDrawer />
-        <MobileBottomNav />
-        <PWAInstallPrompt />
-      </div>
+    <div className="flex flex-col min-h-screen bg-[#f8fafc] text-slate-900 relative pb-14 md:pb-0">
+      <Header />
+      <main className="flex-1">
+        <Outlet />
+      </main>
+      <Footer />
+      <CartDrawer />
+      <MobileBottomNav />
+      <PWAInstallPrompt />
     </div>
   );
 };
