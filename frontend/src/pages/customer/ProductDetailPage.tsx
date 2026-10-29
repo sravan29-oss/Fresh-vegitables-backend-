@@ -5,6 +5,7 @@ import api from '../../services/api';
 import { Product, ProductVariant } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
+import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
 import { ProductCard } from '../../components/product/ProductCard';
 import { ProductDetailSkeleton } from '../../components/product/ProductDetailSkeleton';
 import { ServerMaintenance } from '../../components/common/ServerMaintenance';
@@ -164,7 +165,14 @@ export const ProductDetailPage: React.FC = () => {
         <div className="lg:col-span-5 space-y-4">
           <div className="aspect-square bg-slate-50 rounded-3xl border border-slate-100 flex items-center justify-center overflow-hidden relative shadow-inner">
             {activeImage ? (
-              <img src={activeImage} alt={product.name} className="w-full h-full object-cover" />
+              <img
+                src={getProductImageUrl(activeImage, product.name)}
+                alt={product.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = getFallbackImageUrl(product.name);
+                }}
+              />
             ) : (
               <span className="text-9xl select-none">🥦</span>
             )}
@@ -196,7 +204,14 @@ export const ProductDetailPage: React.FC = () => {
                     activeImage === img ? 'border-brand-600 shadow-sm' : 'border-slate-200 opacity-70'
                   }`}
                 >
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={getProductImageUrl(img, product.name)}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = getFallbackImageUrl(product.name);
+                    }}
+                  />
                 </button>
               ))}
             </div>

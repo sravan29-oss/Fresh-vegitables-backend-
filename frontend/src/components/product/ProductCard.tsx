@@ -4,6 +4,7 @@ import { Plus, Minus, ShoppingBag, Check, AlertTriangle, Ban, AlertCircle } from
 import { Product, ProductVariant } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
+import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
 
 interface ProductCardProps {
   product: Product;
@@ -121,14 +122,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {/* Produce Image */}
           {product.images && product.images.length > 0 ? (
             <img
-              src={product.images[0]}
+              src={getProductImageUrl(product.images[0], product.name)}
               alt={product.name}
               className={`max-h-28 sm:max-h-30 max-w-full object-contain filter drop-shadow-[0_6px_12px_rgba(0,0,0,0.12)] group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-500 ease-out z-10 rounded-lg ${
                 isOutOfStock ? 'opacity-65' : ''
               }`}
               loading="lazy"
               onError={(e) => {
-                e.currentTarget.src = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&auto=format&fit=crop';
+                e.currentTarget.src = getFallbackImageUrl(product.name);
               }}
             />
           ) : (

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
+import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
 
 export const CartDrawer: React.FC = () => {
   const { cart, isCartOpen, setIsCartOpen, updateQuantity, removeFromCart, itemCount, deliverySettings } = useCart();
@@ -112,7 +113,14 @@ export const CartDrawer: React.FC = () => {
                   {/* Thumbnail */}
                   <div className="w-16 h-16 rounded-xl bg-slate-50 border border-slate-100 flex-shrink-0 overflow-hidden flex items-center justify-center text-2xl">
                     {item.image ? (
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      <img
+                        src={getProductImageUrl(item.image, item.name)}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = getFallbackImageUrl(item.name);
+                        }}
+                      />
                     ) : (
                       '🥦'
                     )}

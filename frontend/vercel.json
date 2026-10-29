@@ -10,7 +10,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets|videos|manifest\\.json|favicon\\.png|apple-touch-icon\\.png|logo\\.png|logo\\.jpg|icon-192\\.png|icon-512\\.png|sw\\.js).*)",
+      "source": "/((?!assets|uploads|videos|manifest\\.json|favicon\\.png|apple-touch-icon\\.png|logo\\.png|logo\\.jpg|icon-192\\.png|icon-512\\.png|sw\\.js).*)",
       "destination": "/index.html"
     }
   ]

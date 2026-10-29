@@ -3,6 +3,7 @@ import { Plus, Search, Edit2, Trash2, Check, X, AlertTriangle, Upload, Image as 
 import api from '../../services/api';
 import { Product, Category } from '../../types';
 import { notifyLiveUpdate } from '../../services/liveSync';
+import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
 
 const VEGETABLE_IMAGE_PRESETS = [
   { name: 'Tomato', url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop', icon: '🍅' },
@@ -52,8 +53,8 @@ export const AdminProductsPage: React.FC = () => {
     try {
       setIsLoading(true);
       const [prodRes, catRes] = await Promise.all([
-        api.get('/admin/all', { baseURL: '/api/products' }),
-        api.get('/admin/all', { baseURL: '/api/categories' }),
+        api.get('/products/admin/all').catch(() => api.get('/products', { params: { limit: 100 } })),
+        api.get('/categories/admin/all').catch(() => api.get('/categories')),
       ]);
       if (prodRes.data?.data) setProducts(prodRes.data.data);
       if (catRes.data?.data) setCategories(catRes.data.data);
@@ -338,7 +339,14 @@ export const AdminProductsPage: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-lg overflow-hidden flex-shrink-0">
                           {p.images && p.images[0] ? (
-                            <img src={p.images[0]} alt="" className="w-full h-full object-cover" />
+                            <img
+                              src={getProductImageUrl(p.images[0], p.name)}
+                              alt={p.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.src = getFallbackImageUrl(p.name);
+                              }}
+                            />
                           ) : (
                             '🥦'
                           )}
@@ -478,11 +486,11 @@ export const AdminProductsPage: React.FC = () => {
                   {imagePreview ? (
                     <div className="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-brand-500 shadow-md shrink-0 bg-slate-900 group">
                       <img
-                        src={imagePreview}
+                        src={getProductImageUrl(imagePreview, formData.name)}
                         alt="Preview"
                         className="w-full h-full object-cover"
                         onError={(e) => {
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&auto=format&fit=crop';
+                          e.currentTarget.src = getFallbackImageUrl(formData.name);
                         }}
                       />
                     </div>

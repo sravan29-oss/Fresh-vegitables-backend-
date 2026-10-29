@@ -10,7 +10,7 @@ export const AdminCustomersPage: React.FC = () => {
   const loadCustomers = async () => {
     try {
       setIsLoading(true);
-      const res = await api.get('/customers', { baseURL: '/api/admin', params: { search } });
+      const res = await api.get('/admin/customers', { params: { search } });
       if (res.data?.data) {
         setCustomers(res.data.data);
       }

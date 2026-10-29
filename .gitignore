@@ -2,8 +2,9 @@ node_modules/
 dist/
 uploads/
 !backend/uploads/
-!backend/uploads/products/
-!backend/uploads/products/*
+!backend/uploads/**
+!frontend/public/uploads/
+!frontend/public/uploads/**
 .env
 ADMIN_CREDENTIALS.txt
 *.log

@@ -17,7 +17,7 @@ export const AdminInventoryPage: React.FC = () => {
       if (stockStatus) params.stock_status = stockStatus;
       if (search) params.search = search;
 
-      const res = await api.get('/inventory', { baseURL: '/api/admin', params });
+      const res = await api.get('/admin/inventory', { params });
       if (res.data?.data) {
         setInventory(res.data.data);
         const map: Record<string, number> = {};
@@ -40,7 +40,7 @@ export const AdminInventoryPage: React.FC = () => {
   const handleSaveStock = async (id: string) => {
     try {
       setSavingId(id);
-      await api.patch(`/inventory/${id}`, { stock_quantity: editingStocks[id] }, { baseURL: '/api/admin' });
+      await api.patch(`/admin/inventory/${id}`, { stock_quantity: editingStocks[id] });
       await loadInventory();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to update stock');

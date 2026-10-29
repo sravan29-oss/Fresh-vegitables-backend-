@@ -21,7 +21,7 @@ export const AdminCategoriesPage: React.FC = () => {
   const loadCategories = async () => {
     try {
       setIsLoading(true);
-      const res = await api.get('/admin/all', { baseURL: '/api/categories' });
+      const res = await api.get('/categories/admin/all').catch(() => api.get('/categories'));
       if (res.data?.data) setCategories(res.data.data);
     } catch (err) {
       console.error('Failed to load categories', err);
