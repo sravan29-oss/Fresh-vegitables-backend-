@@ -298,8 +298,29 @@ export const AdminOrdersPage: React.FC = () => {
     if (coords) {
       return `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`;
     }
-    const formatted = getFormattedAddress(order);
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formatted)}`;
+    const addr = order.address_snapshot || order.delivery_address;
+    if (!addr) return 'https://www.google.com/maps';
+    if (typeof addr === 'string') {
+      const cleanStr = addr.replace(/^flat\/house:\s*/i, '').replace(/pincode:\s*/i, '').trim();
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanStr)}`;
+    }
+    const clean = (val: any) =>
+      typeof val === 'string'
+        ? val.replace(/^flat\/house:\s*/i, '').replace(/^pincode:\s*/i, '').replace(/^near:\s*/i, '').trim()
+        : '';
+
+    const parts = [
+      clean(addr.house_number),
+      clean(addr.street),
+      clean(addr.landmark),
+      clean(addr.area),
+      clean(addr.city),
+      clean(addr.state),
+      clean(addr.pincode),
+    ].filter(Boolean);
+
+    const query = parts.length > 0 ? parts.join(', ') : 'Hyderabad, Telangana';
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   };
 
   // Update order status handler

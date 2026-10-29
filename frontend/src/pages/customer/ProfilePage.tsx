@@ -25,18 +25,49 @@ export const ProfilePage: React.FC = () => {
     message?: string;
   }>({ checked: false, serviceable: true });
 
-  const [newAddress, setNewAddress] = useState({
-    full_name: user?.name || '',
-    phone: user?.mobile || '',
-    house_number: '',
-    street: '',
-    area: '',
-    landmark: '',
-    city: 'Ahmedabad',
-    state: 'Gujarat',
-    pincode: '380015',
-    address_type: 'home' as 'home' | 'work' | 'other',
-    is_default: false,
+  const [newAddress, setNewAddress] = useState<{
+    full_name: string;
+    phone: string;
+    house_number: string;
+    street: string;
+    area: string;
+    landmark: string;
+    city: string;
+    state: string;
+    pincode: string;
+    latitude?: number;
+    longitude?: number;
+    address_type: 'home' | 'work' | 'other';
+    is_default: boolean;
+  }>(() => {
+    let initLat: number | undefined;
+    let initLng: number | undefined;
+    try {
+      const savedZone = localStorage.getItem('fresh_delivery_zone');
+      if (savedZone) {
+        const parsed = JSON.parse(savedZone);
+        if (parsed.latitude && parsed.longitude) {
+          initLat = Number(parsed.latitude);
+          initLng = Number(parsed.longitude);
+        }
+      }
+    } catch {}
+
+    return {
+      full_name: user?.name || '',
+      phone: user?.mobile || '',
+      house_number: '',
+      street: '',
+      area: '',
+      landmark: '',
+      city: 'Hyderabad',
+      state: 'Telangana',
+      pincode: '500072',
+      latitude: initLat,
+      longitude: initLng,
+      address_type: 'home',
+      is_default: false,
+    };
   });
 
   const checkPincodeServiceability = async (pincodeToCheck: string) => {
@@ -168,6 +199,8 @@ export const ProfilePage: React.FC = () => {
 
         setNewAddress((prev) => ({
           ...prev,
+          latitude: Number(latitude.toFixed(6)),
+          longitude: Number(longitude.toFixed(6)),
           house_number: detectedHouse || prev.house_number,
           area: detectedArea || prev.area,
           city: detectedCity || prev.city,
@@ -246,7 +279,21 @@ export const ProfilePage: React.FC = () => {
       return;
     }
     try {
-      const res = await api.post('/addresses', newAddress);
+      const payload = { ...newAddress };
+      if (!payload.latitude || !payload.longitude) {
+        try {
+          const savedZone = localStorage.getItem('fresh_delivery_zone');
+          if (savedZone) {
+            const parsed = JSON.parse(savedZone);
+            if (parsed.latitude && parsed.longitude) {
+              payload.latitude = Number(parsed.latitude);
+              payload.longitude = Number(parsed.longitude);
+            }
+          }
+        } catch {}
+      }
+
+      const res = await api.post('/addresses', payload);
       if (res.data?.data) {
         setAddresses([res.data.data, ...addresses]);
         setIsAddingAddress(false);

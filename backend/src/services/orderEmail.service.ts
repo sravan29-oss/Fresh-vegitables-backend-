@@ -58,8 +58,50 @@ function formatDeliveryAddress(snapshot: any): string {
 }
 
 /**
+ * Format a clean query string optimized specifically for Google Maps search.
+ * IMPORTANT: Google Maps gets confused by labels like "Flat/House:" and "Pincode:",
+ * causing it to treat them as keywords and return multiple unrelated businesses.
+ */
+function formatMapsSearchQuery(snapshot: any): string {
+  if (!snapshot) return '';
+  if (typeof snapshot === 'string') {
+    try {
+      snapshot = JSON.parse(snapshot);
+    } catch {
+      return snapshot;
+    }
+  }
+
+  const clean = (val: any) =>
+    typeof val === 'string'
+      ? val.replace(/^flat\/house:\s*/i, '').replace(/^pincode:\s*/i, '').replace(/^near:\s*/i, '').trim()
+      : '';
+
+  const house = clean(snapshot.house_number);
+  const street = clean(snapshot.street);
+  const landmark = clean(snapshot.landmark);
+  const area = clean(snapshot.area);
+  const city = clean(snapshot.city);
+  const state = clean(snapshot.state);
+  const pincode = clean(snapshot.pincode);
+
+  const parts = [
+    house,
+    street,
+    landmark,
+    area,
+    city,
+    state,
+    pincode,
+  ].filter(Boolean);
+
+  return parts.join(', ');
+}
+
+/**
  * Compute Google Maps navigation URL safely:
- * Coordinates preferred if valid, else encoded address, or null.
+ * Exact GPS coordinates preferred (drops 1 exact pin on doorstep).
+ * Otherwise clean location query without labels so Google Maps doesn't show multiple places.
  */
 function computeGoogleMapsUrl(snapshot: any): { url: string | null; isGps: boolean } {
   if (!snapshot) return { url: null, isGps: false };
@@ -79,10 +121,10 @@ function computeGoogleMapsUrl(snapshot: any): { url: string | null; isGps: boole
     };
   }
 
-  const formatted = formatDeliveryAddress(snapshot);
-  if (formatted && formatted !== 'No address provided' && formatted !== 'Delivery address not available') {
+  const cleanQuery = formatMapsSearchQuery(snapshot);
+  if (cleanQuery) {
     return {
-      url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formatted)}`,
+      url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`,
       isGps: false,
     };
   }
