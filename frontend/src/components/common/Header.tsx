@@ -192,8 +192,13 @@ export const Header: React.FC = () => {
         await markAsRead(notif.id);
       }
       setIsNotifOpen(false);
-      if (notif.reference_type === 'order' && notif.reference_id) {
-        navigate(`/orders/${notif.reference_id}/track`);
+      if (notif.reference_type === 'order') {
+        const refId = notif.reference_id && notif.reference_id !== 'undefined' ? notif.reference_id : null;
+        if (refId) {
+          navigate(`/orders/${refId}/track`);
+        } else {
+          navigate('/orders');
+        }
       }
     } catch (err) {
       console.error(err);

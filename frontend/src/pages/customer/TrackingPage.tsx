@@ -105,8 +105,9 @@ export const TrackingPage: React.FC = () => {
       if (!silent) setLoading(true);
       let trackingResult: DeliveryTrackingResponse | null = null;
 
+      const cleanId = id && id !== 'undefined' ? id : 'latest';
       try {
-        const res = await api.get(`/delivery/tracking/${id}`);
+        const res = await api.get(`/delivery/tracking/${cleanId}`);
         if (res.data?.data) {
           trackingResult = res.data.data;
         }
@@ -125,9 +126,9 @@ export const TrackingPage: React.FC = () => {
         !currentOrder.customer_name ||
         currentOrder.customer_name === 'Rahul Sharma';
 
-      if (needsOrderFetch && id) {
+      if (needsOrderFetch && cleanId && cleanId !== 'latest') {
         try {
-          const ordRes = await api.get(`/orders/${id}`);
+          const ordRes = await api.get(`/orders/${cleanId}`);
           if (ordRes.data?.data) {
             const rawOrd = ordRes.data.data;
             const addr = rawOrd.address_snapshot || rawOrd.delivery_address || {};
@@ -259,11 +260,12 @@ export const TrackingPage: React.FC = () => {
   }, []);
 
   const trackingData = data || DEFAULT_TRACKING_DATA;
-  const rawStatus = (demoStatus || trackingData.order.order_status || 'confirmed').toLowerCase();
+  const rawStatus = (demoStatus || trackingData.order.order_status || trackingData.logistics_status || 'confirmed').toLowerCase();
 
+  const isCancelled = rawStatus === 'cancelled';
   // Check if driver details should be unlocked (Amazon/Flipkart rule: only when Out for Delivery or Delivered)
-  const isOutForDelivery = rawStatus === 'out_for_delivery' || rawStatus === 'delivered';
-  const isDelivered = rawStatus === 'delivered';
+  const isOutForDelivery = !isCancelled && (rawStatus === 'out_for_delivery' || rawStatus === 'delivered');
+  const isDelivered = !isCancelled && rawStatus === 'delivered';
 
   // Draw interactive route map canvas only when out for delivery
   useEffect(() => {
@@ -572,14 +574,19 @@ export const TrackingPage: React.FC = () => {
 
   const { order, tracking, destination } = trackingData;
 
-  // Amazon/Flipkart 5-stage milestones
-  const milestoneStages = [
-    { key: 'placed', label: 'Order Placed', time: 'Verified' },
-    { key: 'confirmed', label: 'Confirmed', time: 'Hub Accepted' },
-    { key: 'packed', label: 'Harvested & Packed', time: 'Cold-Chain Ready' },
-    { key: 'out_for_delivery', label: 'Out for Delivery', time: 'Courier Dispatched' },
-    { key: 'delivered', label: 'Delivered', time: 'Doorstep' },
-  ];
+  // Amazon/Flipkart milestone stages
+  const milestoneStages = isCancelled
+    ? [
+        { key: 'placed', label: 'Order Placed', time: 'Verified' },
+        { key: 'cancelled', label: 'Order Cancelled', time: 'Terminated by Admin' },
+      ]
+    : [
+        { key: 'placed', label: 'Order Placed', time: 'Verified' },
+        { key: 'confirmed', label: 'Confirmed', time: 'Hub Accepted' },
+        { key: 'packed', label: 'Harvested & Packed', time: 'Cold-Chain Ready' },
+        { key: 'out_for_delivery', label: 'Out for Delivery', time: 'Courier Dispatched' },
+        { key: 'delivered', label: 'Delivered', time: 'Doorstep' },
+      ];
 
   const getStageIndex = (st: string) => {
     switch (st) {
@@ -594,6 +601,8 @@ export const TrackingPage: React.FC = () => {
         return 3;
       case 'delivered':
         return 4;
+      case 'cancelled':
+        return 1;
       default:
         return 1;
     }
@@ -710,6 +719,7 @@ export const TrackingPage: React.FC = () => {
               { id: 'packed', label: '2. Packed' },
               { id: 'out_for_delivery', label: '3. Out for Delivery 🛵' },
               { id: 'delivered', label: '4. Delivered ✅' },
+              { id: 'cancelled', label: '🛑 Cancelled' },
             ].map((btn) => (
               <button
                 key={btn.id}
@@ -732,14 +742,22 @@ export const TrackingPage: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-xs font-black uppercase tracking-wider text-brand-700 bg-brand-50 border border-brand-200 px-2.5 py-0.5 rounded-full">
-                Shipment Status
+              <span className={`text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                isCancelled
+                  ? 'text-rose-700 bg-rose-50 border border-rose-300'
+                  : 'text-brand-700 bg-brand-50 border border-brand-200'
+              }`}>
+                {isCancelled ? 'Order Cancelled' : 'Shipment Status'}
               </span>
-              <span className="text-xs text-slate-400 font-medium">Standard 2-Hour Express Delivery</span>
+              <span className="text-xs text-slate-400 font-medium">
+                {isCancelled ? 'Operations Update' : 'Standard 2-Hour Express Delivery'}
+              </span>
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {isDelivered
+              {isCancelled
+                ? 'Order Cancelled'
+                : isDelivered
                 ? 'Delivered to your doorstep'
                 : isOutForDelivery
                 ? 'Out for delivery — Arriving today'
@@ -749,14 +767,25 @@ export const TrackingPage: React.FC = () => {
             </h2>
 
             <p className="text-sm font-semibold text-slate-600 mt-1 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-brand-600" />
-              <span>
-                {isDelivered
-                  ? 'Delivered successfully'
-                  : isOutForDelivery
-                  ? `Estimated arrival: ~${etaMinutes} mins (${trackingData.expected_delivery || 'Today, by 8:00 PM'})`
-                  : `Expected Delivery: ${trackingData.expected_delivery || 'Today, by 8:00 PM'}`}
-              </span>
+              {isCancelled ? (
+                <>
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="text-rose-700 font-bold">
+                    This order was cancelled by store operations. Delivery has been stopped.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Clock className="w-4 h-4 text-brand-600" />
+                  <span>
+                    {isDelivered
+                      ? 'Delivered successfully'
+                      : isOutForDelivery
+                      ? `Estimated arrival: ~${etaMinutes} mins (${trackingData.expected_delivery || 'Today, by 8:00 PM'})`
+                      : `Expected Delivery: ${trackingData.expected_delivery || 'Today, by 8:00 PM'}`}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
@@ -771,53 +800,104 @@ export const TrackingPage: React.FC = () => {
             </div>
             <div className="flex justify-between text-slate-500">
               <span>Packaging:</span>
-              <span className="font-bold text-emerald-700">Cold-Chain Insulated</span>
+              <span className={`font-bold ${isCancelled ? 'text-rose-600' : 'text-emerald-700'}`}>
+                {isCancelled ? 'Cancelled & Stock Restored' : 'Cold-Chain Insulated'}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Amazon/Flipkart Signature 5-Stage Stepper */}
-        <div className="py-2">
-          <div className="relative">
-            {/* Background connecting line */}
-            <div className="absolute top-4 left-6 right-6 h-1 bg-slate-100 rounded-full hidden sm:block"></div>
-            {/* Active filled connecting line */}
-            <div
-              className="absolute top-4 left-6 h-1 bg-brand-600 rounded-full transition-all duration-700 hidden sm:block"
-              style={{
-                width: `${(currentStepIdx / (milestoneStages.length - 1)) * 90}%`,
-              }}
-            ></div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 relative z-10">
-              {milestoneStages.map((st, idx) => {
-                const isCompleted = idx <= currentStepIdx;
-                const isCurrent = idx === currentStepIdx;
-
-                return (
-                  <div key={st.key} className="flex flex-col items-center text-center">
-                    <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
-                        isCompleted
-                          ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30 ring-4 ring-white'
-                          : 'bg-white text-slate-400 border-2 border-slate-200'
-                      } ${isCurrent && !isDelivered ? 'ring-4 ring-brand-200 animate-pulse' : ''}`}
-                    >
-                      {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : idx + 1}
-                    </div>
-                    <span
-                      className={`text-xs font-black mt-2.5 ${
-                        isCompleted ? 'text-slate-900' : 'text-slate-400'
-                      }`}
-                    >
-                      {st.label}
-                    </span>
-                    <span className="text-[10px] text-slate-400 mt-0.5 font-medium">{st.time}</span>
-                  </div>
-                );
-              })}
+        {/* Cancellation Notice Banner */}
+        {isCancelled && (
+          <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-start gap-3.5 text-rose-900 animate-in fade-in duration-300">
+            <AlertCircle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="text-sm font-black text-rose-900 uppercase tracking-wide">
+                Order Cancelled by Store Operations
+              </h4>
+              <p className="text-xs text-rose-700 leading-relaxed font-medium">
+                This order was marked as <strong>Cancelled</strong> by store operations. Any harvest and courier dispatch for this package has been halted. If you paid online via UPI/Card, your refund has been processed.
+              </p>
+              <div className="pt-2 flex items-center gap-3">
+                <Link
+                  to="/products"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-sm"
+                >
+                  Browse Fresh Produce
+                </Link>
+                <a
+                  href="tel:+918106970384"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-bold transition-all"
+                >
+                  <Phone className="w-3.5 h-3.5" /> Call Support
+                </a>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* Amazon/Flipkart Stepper */}
+        <div className="py-2">
+          {isCancelled ? (
+            <div className="max-w-md mx-auto grid grid-cols-2 gap-4 relative">
+              <div className="absolute top-4 left-1/4 right-1/4 h-1 bg-rose-200 rounded-full"></div>
+              <div className="flex flex-col items-center text-center relative z-10">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-emerald-600 text-white shadow-md ring-4 ring-white">
+                  <Check className="w-4 h-4 stroke-[3]" />
+                </div>
+                <span className="text-xs font-black mt-2.5 text-slate-900">Order Placed</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 font-medium">Verified</span>
+              </div>
+              <div className="flex flex-col items-center text-center relative z-10">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-rose-600 text-white shadow-md ring-4 ring-white">
+                  ✕
+                </div>
+                <span className="text-xs font-black mt-2.5 text-rose-700">Cancelled</span>
+                <span className="text-[10px] text-rose-500 mt-0.5 font-medium">Order Terminated</span>
+              </div>
+            </div>
+          ) : (
+            <div className="relative">
+              {/* Background connecting line */}
+              <div className="absolute top-4 left-6 right-6 h-1 bg-slate-100 rounded-full hidden sm:block"></div>
+              {/* Active filled connecting line */}
+              <div
+                className="absolute top-4 left-6 h-1 bg-brand-600 rounded-full transition-all duration-700 hidden sm:block"
+                style={{
+                  width: `${(currentStepIdx / (milestoneStages.length - 1)) * 90}%`,
+                }}
+              ></div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 relative z-10">
+                {milestoneStages.map((st, idx) => {
+                  const isCompleted = idx <= currentStepIdx;
+                  const isCurrent = idx === currentStepIdx;
+
+                  return (
+                    <div key={st.key} className="flex flex-col items-center text-center">
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
+                          isCompleted
+                            ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30 ring-4 ring-white'
+                            : 'bg-white text-slate-400 border-2 border-slate-200'
+                        } ${isCurrent && !isDelivered ? 'ring-4 ring-brand-200 animate-pulse' : ''}`}
+                      >
+                        {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : idx + 1}
+                      </div>
+                      <span
+                        className={`text-xs font-black mt-2.5 ${
+                          isCompleted ? 'text-slate-900' : 'text-slate-400'
+                        }`}
+                      >
+                        {st.label}
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5 font-medium">{st.time}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -912,6 +992,52 @@ export const TrackingPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
                   <span className="font-semibold text-emerald-700">Driver Active on GPS Route</span>
+                </div>
+              </div>
+            </div>
+          ) : isCancelled ? (
+            /* CANCELLED ORDER: Store Operations Cancellation Screen */
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-rose-950 via-slate-950 to-slate-900 rounded-3xl border border-rose-900/60 shadow-xl p-8 sm:p-10 text-white relative overflow-hidden">
+                <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-rose-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="max-w-xl space-y-4 relative z-10">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-inner">
+                    <AlertCircle className="w-7 h-7" />
+                  </div>
+
+                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                    Order Cancelled by Operations
+                  </h3>
+
+                  <p className="text-slate-300 text-sm leading-relaxed">
+                    This order was cancelled by store operations. Produce harvesting has ceased and courier dispatch has been halted.
+                  </p>
+
+                  <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 backdrop-blur-md text-xs text-rose-200 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-rose-400">
+                      <Info className="w-4 h-4" />
+                      <span>Order & Payment Resolution</span>
+                    </div>
+                    <p className="text-rose-200/80 leading-normal">
+                      For COD orders, no amount was charged. If this order was prepaid via UPI, Card, or Digital Wallet, an automatic refund has been queued back to your source account.
+                    </p>
+                  </div>
+
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
+                    <Link
+                      to="/orders"
+                      className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs rounded-xl shadow transition-all"
+                    >
+                      View All My Orders
+                    </Link>
+                    <a
+                      href="tel:+918106970384"
+                      className="px-4 py-2.5 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-700/50 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
+                    >
+                      <Phone className="w-3.5 h-3.5" /> Call Customer Support
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1068,6 +1194,30 @@ export const TrackingPage: React.FC = () => {
                   <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
                 </a>
               </div>
+            </div>
+          ) : isCancelled ? (
+            /* CANCELLED COURIER CARD */
+            <div className="bg-white p-6 rounded-3xl border border-rose-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-rose-500">Dispatch Status</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                  Cancelled
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-rose-50/60 border border-rose-100">
+                <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl shrink-0">
+                  🛑
+                </div>
+                <div className="text-xs">
+                  <p className="font-bold text-rose-950">No Courier Dispatched</p>
+                  <p className="text-rose-700/80 text-[11px] mt-0.5">Order was cancelled prior to delivery fleet pickup</p>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-400 leading-normal">
+                If you have questions about this cancellation, please contact our support desk directly at <strong>+91 8106970384</strong>.
+              </p>
             </div>
           ) : (
             /* PENDING DRIVER CARD: Shown before Out for Delivery */

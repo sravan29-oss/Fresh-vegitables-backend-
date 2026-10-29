@@ -391,9 +391,10 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
     const orderDateStr = createdAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     const orderTimeStr = createdAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
-    const isConfirmed = ['confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
-    const isHarvested = ['preparing', 'packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
-    const isPacked = ['packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
+    const isCancelled = orderStatus === 'cancelled';
+    const isConfirmed = !isCancelled && ['confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
+    const isHarvested = !isCancelled && ['preparing', 'packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
+    const isPacked = !isCancelled && ['packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
 
     const activities = [
       {
@@ -405,54 +406,69 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         location: 'Fresh Farm Online Portal',
         completed: true,
       },
-      {
-        id: 'act-2',
-        status: 'confirmed',
-        title: 'Order Confirmed by Fulfillment Center',
-        description: 'Order accepted by warehouse manager. Assigned to fresh farm procurement.',
-        timestamp: `${orderDateStr}, ${new Date(createdAt.getTime() + 8 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-        location: 'Central Farm Depot, Hyderabad Agro Hub',
-        completed: isConfirmed,
-      },
-      {
-        id: 'act-3',
-        status: 'preparing',
-        title: 'Harvested Fresh & Quality Graded',
-        description: 'Vegetables harvested from partner hydroponic and organic plots. 100% pesticide-free quality check passed.',
-        timestamp: isHarvested ? `${orderDateStr}, ${new Date(createdAt.getTime() + 20 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected today',
-        location: 'Agro Harvest Sorting Unit, Hyderabad',
-        completed: isHarvested,
-      },
-      {
-        id: 'act-4',
-        status: 'packed',
-        title: 'Packed in Temperature-Controlled Crate',
-        description: 'Packed with biodegradable liners and eco-chill packaging for cold-chain transit.',
-        timestamp: isPacked ? `${orderDateStr}, ${new Date(createdAt.getTime() + 35 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'In progress',
-        location: 'Sorting & Packaging Center Hub, Hyderabad',
-        completed: isPacked,
-      },
-      {
-        id: 'act-5',
-        status: 'out_for_delivery',
-        title: isOutForDelivery ? 'Out for Delivery (Courier Dispatched)' : 'Out for Delivery (Upcoming)',
-        description: isOutForDelivery
-          ? `Package picked up by ${trackingInfo?.partner_name || 'Delivery Partner'} on ${trackingInfo?.vehicle_type || 'EV Bike'}. Heading toward your location.`
-          : 'Delivery partner details will be assigned and shown here once the package leaves the local hub.',
-        timestamp: isOutForDelivery ? `${orderDateStr}, ${new Date(createdAt.getTime() + 50 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected soon',
-        location: `Local Delivery Station, ${normalizedAddress.area || 'Hyderabad'}`,
-        completed: isOutForDelivery,
-      },
-      {
-        id: 'act-6',
-        status: 'delivered',
-        title: 'Delivered',
-        description: isDelivered ? 'Package safely delivered to your doorstep.' : 'Expected doorstep delivery within 25–35 mins.',
-        timestamp: isDelivered ? `${orderDateStr}, ${new Date(createdAt.getTime() + 65 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Estimated today',
-        location: normalizedAddress.full_address || 'Customer Doorstep',
-        completed: isDelivered,
-      },
     ];
+
+    if (isCancelled) {
+      activities.push({
+        id: 'act-cancelled',
+        status: 'cancelled',
+        title: 'Order Cancelled',
+        description: 'Order was cancelled by store operations. Items returned to farm inventory.',
+        timestamp: `${orderDateStr}, ${orderTimeStr}`,
+        location: 'Store Operations Hub, Hyderabad',
+        completed: true,
+      });
+    } else {
+      activities.push(
+        {
+          id: 'act-2',
+          status: 'confirmed',
+          title: 'Order Confirmed by Fulfillment Center',
+          description: 'Order accepted by warehouse manager. Assigned to fresh farm procurement.',
+          timestamp: `${orderDateStr}, ${new Date(createdAt.getTime() + 8 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
+          location: 'Central Farm Depot, Hyderabad Agro Hub',
+          completed: isConfirmed,
+        },
+        {
+          id: 'act-3',
+          status: 'preparing',
+          title: 'Harvested Fresh & Quality Graded',
+          description: 'Vegetables harvested from partner hydroponic and organic plots. 100% pesticide-free quality check passed.',
+          timestamp: isHarvested ? `${orderDateStr}, ${new Date(createdAt.getTime() + 20 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected today',
+          location: 'Agro Harvest Sorting Unit, Hyderabad',
+          completed: isHarvested,
+        },
+        {
+          id: 'act-4',
+          status: 'packed',
+          title: 'Packed in Temperature-Controlled Crate',
+          description: 'Packed with biodegradable liners and eco-chill packaging for cold-chain transit.',
+          timestamp: isPacked ? `${orderDateStr}, ${new Date(createdAt.getTime() + 35 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'In progress',
+          location: 'Sorting & Packaging Center Hub, Hyderabad',
+          completed: isPacked,
+        },
+        {
+          id: 'act-5',
+          status: 'out_for_delivery',
+          title: isOutForDelivery ? 'Out for Delivery (Courier Dispatched)' : 'Out for Delivery (Upcoming)',
+          description: isOutForDelivery
+            ? `Package picked up by ${trackingInfo?.partner_name || 'Delivery Partner'} on ${trackingInfo?.vehicle_type || 'EV Bike'}. Heading toward your location.`
+            : 'Delivery partner details will be assigned and shown here once the package leaves the local hub.',
+          timestamp: isOutForDelivery ? `${orderDateStr}, ${new Date(createdAt.getTime() + 50 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected soon',
+          location: `Local Delivery Station, ${normalizedAddress.area || 'Hyderabad'}`,
+          completed: isOutForDelivery,
+        },
+        {
+          id: 'act-6',
+          status: 'delivered',
+          title: 'Delivered',
+          description: isDelivered ? 'Package safely delivered to your doorstep.' : 'Expected doorstep delivery within 25–35 mins.',
+          timestamp: isDelivered ? `${orderDateStr}, ${new Date(createdAt.getTime() + 65 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Estimated today',
+          location: normalizedAddress.full_address || 'Customer Doorstep',
+          completed: isDelivered,
+        }
+      );
+    }
 
     sendSuccess(res, 'Logistics delivery tracking info', {
       order: {
@@ -463,7 +479,7 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
       show_driver: isOutForDelivery,
       carrier_name: 'FreshVeg Logistics Express',
       tracking_number: `TRK-${(order.order_number || id).replace(/[^A-Za-z0-9]/g, '').slice(-8)}`,
-      expected_delivery: isDelivered ? 'Delivered Today' : 'Today, within 25–35 mins',
+      expected_delivery: isCancelled ? 'Order Cancelled' : isDelivered ? 'Delivered Today' : 'Today, within 25–35 mins',
       logistics_status: orderStatus,
       fulfillment_center: 'Central Farm Depot, Hyderabad Agro Hub',
       package_type: 'Eco-Insulated Cold Chain Crate',
