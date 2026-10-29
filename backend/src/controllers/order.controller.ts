@@ -6,6 +6,12 @@ import { AppError, NotFoundError, ValidationError } from '../utils/appError';
 import { generateOrderNumber, parsePaginationParams } from '../utils/helpers';
 import { memoryStore } from '../config/mockDb';
 import { getPersistedDeliverySettings } from '../services/deliverySettings.service';
+import { sendNewOrderAdminEmail } from '../services/orderEmail.service';
+import {
+  broadcastNewOrderToAdmins,
+  getRecentOrderAlerts,
+  handleAdminLiveStream,
+} from '../services/adminNotification.service';
 
 // ===================== CUSTOMER =====================
 
@@ -177,8 +183,32 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
 
     await client.query('COMMIT');
 
+    const createdOrder = orderResult.rows[0];
+
+    // Trigger asynchronous background notifications (Email & Live Admin Dashboard Stream)
+    // Executes strictly after successful DB COMMIT so customer order persistence is guaranteed
+    const orderDataForNotification = {
+      ...createdOrder,
+      items: orderItems,
+      customer_name: addressSnapshot.full_name || req.user?.name,
+      customer_phone: addressSnapshot.phone || (req.user as any)?.phone || req.user?.mobile || '',
+      address_snapshot: addressSnapshot,
+    };
+
+    // 1. Send automated admin email alert to freshvegitables29@gmail.com
+    sendNewOrderAdminEmail(createdOrder.id).catch((err) => {
+      console.error('[OrderController] Background email notification error:', err.message);
+    });
+
+    // 2. Broadcast real-time new order event to open Admin Dashboard sessions
+    try {
+      broadcastNewOrderToAdmins(orderDataForNotification);
+    } catch (err: any) {
+      console.warn('[OrderController] Real-time admin broadcast error:', err.message);
+    }
+
     sendSuccess(res, 'Order placed successfully', {
-      order: orderResult.rows[0],
+      order: createdOrder,
       items: orderItems,
     }, 201);
   } catch (error) {
@@ -656,6 +686,38 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     }
 
     sendSuccess(res, 'Order status updated', result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ===================== REAL-TIME & NOTIFICATIONS =====================
+
+export async function adminLiveStream(req: Request, res: Response) {
+  await handleAdminLiveStream(req, res);
+}
+
+export async function adminGetRecentAlerts(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const alerts = await getRecentOrderAlerts(15);
+    sendSuccess(res, 'Recent order alerts fetched', alerts);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function adminResendOrderEmail(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const result = await sendNewOrderAdminEmail(id, true);
+    if (result.success) {
+      sendSuccess(res, result.message || 'Email notification sent successfully', result);
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message || 'Failed to send email alert',
+      });
+    }
   } catch (error) {
     next(error);
   }

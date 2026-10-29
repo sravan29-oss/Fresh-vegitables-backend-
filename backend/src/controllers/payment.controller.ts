@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { sendSuccess } from '../utils/apiResponse';
 import { AppError, NotFoundError, ValidationError } from '../utils/appError';
 import { v4 as uuidv4 } from 'uuid';
+import { sendNewOrderAdminEmail } from '../services/orderEmail.service';
 
 export async function createPayment(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -69,6 +70,9 @@ export async function verifyPayment(req: AuthRequest, res: Response, next: NextF
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [req.user?.id || null, 'Payment Received! 💳', `Your payment of ₹${payment.amount} has been verified successfully.`, 'ORDER_UPDATE', 'order', payment.order_id]
       );
+
+      // Ensure admin email notification is sent if pending
+      sendNewOrderAdminEmail(payment.order_id).catch(() => {});
     } else if (status === 'FAILED') {
       await db.query(
         "UPDATE orders SET payment_status = 'failed' WHERE id = $1",

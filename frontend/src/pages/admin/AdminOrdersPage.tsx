@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search,
   Eye,
@@ -28,6 +29,7 @@ import {
   DollarSign,
   PackageCheck,
   UserCheck,
+  Mail,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Order, OrderItem } from '../../types';
@@ -71,10 +73,49 @@ export const AdminOrdersPage: React.FC = () => {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<boolean>(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isResendingEmail, setIsResendingEmail] = useState<boolean>(false);
+
+  const { id: paramOrderId } = useParams<{ id?: string }>();
+  const navigate = useNavigate();
 
   const showToast = (type: 'success' | 'error', text: string) => {
     setToastMsg({ type, text });
     setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  // Auto-open modal if URL has order ID parameter (e.g. from automated email link)
+  useEffect(() => {
+    if (paramOrderId) {
+      const found = orders.find((o) => o.id === paramOrderId || o.order_number === paramOrderId);
+      if (found) {
+        setSelectedOrder(found);
+        setIsDetailDrawerOpen(true);
+      } else {
+        api.get(`/orders/admin/${paramOrderId}`)
+          .then((res) => {
+            if (res.data?.data) {
+              setSelectedOrder(res.data.data);
+              setIsDetailDrawerOpen(true);
+            }
+          })
+          .catch((err) => {
+            console.warn('Could not load order by ID from URL param:', err);
+          });
+      }
+    }
+  }, [paramOrderId, orders]);
+
+  // Resend order alert email handler
+  const handleResendEmail = async (orderId: string) => {
+    try {
+      setIsResendingEmail(true);
+      const res = await api.post(`/orders/admin/${orderId}/resend-email`);
+      showToast('success', res.data?.message || 'Order alert email sent to freshvegitables29@gmail.com!');
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to send email alert. Check SMTP configuration.');
+    } finally {
+      setIsResendingEmail(false);
+    }
   };
 
   // 1. Fetch Order Summary Metrics
@@ -1085,12 +1126,29 @@ export const AdminOrdersPage: React.FC = () => {
                 </p>
               </div>
 
-              <button
-                onClick={() => setIsDetailDrawerOpen(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleResendEmail(selectedOrder.id)}
+                  disabled={isResendingEmail}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Resend email alert to freshvegitables29@gmail.com"
+                >
+                  <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{isResendingEmail ? 'Sending...' : 'Resend Email Alert'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDetailDrawerOpen(false);
+                    if (paramOrderId) navigate('/admin/orders');
+                  }}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}
