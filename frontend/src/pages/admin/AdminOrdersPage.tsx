@@ -106,20 +106,29 @@ export const AdminOrdersPage: React.FC = () => {
     }
   }, [paramOrderId, orders]);
 
-  // Resend order alert email handler
-  const handleResendEmail = async (orderId: string) => {
+  // Resend order alert or customer notification email handler
+  const handleResendEmail = async (
+    orderId: string,
+    type: 'admin' | 'customer_confirmed' | 'customer_cancelled' | 'customer_delivered' = 'admin'
+  ) => {
     try {
       setIsResendingEmail(true);
       setResendEmailMsg(null);
-      const res = await api.post(`/orders/admin/${orderId}/resend-email`, {}, { timeout: 12000 });
-      const msg = res.data?.message || 'Order alert email sent to freshvegitables29@gmail.com!';
+      const res = await api.post(`/orders/admin/${orderId}/resend-email`, { type }, { timeout: 15000 });
+      const msg = res.data?.message || 'Email dispatched successfully!';
       showToast('success', msg);
       setResendEmailMsg({ id: orderId, success: true, text: msg });
-      setSelectedOrder((prev: any) =>
-        prev && prev.id === orderId
-          ? { ...prev, admin_email_sent: true, admin_email_error: null }
-          : prev
-      );
+      setSelectedOrder((prev: any) => {
+        if (!prev || prev.id !== orderId) return prev;
+        if (type === 'customer_confirmed') {
+          return { ...prev, customer_email_sent: true, customer_email_error: null };
+        } else if (type === 'customer_cancelled') {
+          return { ...prev, cancellation_email_sent: true };
+        } else if (type === 'customer_delivered') {
+          return { ...prev, delivery_email_sent: true };
+        }
+        return { ...prev, admin_email_sent: true, admin_email_error: null };
+      });
     } catch (err: any) {
       const errMsg =
         err.response?.data?.message ||
@@ -1358,8 +1367,8 @@ export const AdminOrdersPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Admin Email Notification Status & Resend */}
-                <div className="pt-2.5 border-t border-slate-800/60 space-y-2">
+                {/* Email Notifications Status & Resend Options */}
+                <div className="pt-2.5 border-t border-slate-800/60 space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5">
                       <Mail className="w-3.5 h-3.5 text-slate-400" />
@@ -1382,15 +1391,85 @@ export const AdminOrdersPage: React.FC = () => {
                       )}
                     </div>
                     <button
-                      onClick={() => handleResendEmail(selectedOrder.id)}
+                      onClick={() => handleResendEmail(selectedOrder.id, 'admin')}
                       disabled={isResendingEmail}
                       className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
                       title="Send or resend email notification to freshvegitables29@gmail.com"
                     >
                       <Mail className="w-3 h-3" />
-                      <span>{isResendingEmail ? 'Sending...' : 'Resend Email'}</span>
+                      <span>{isResendingEmail ? 'Sending...' : 'Resend Store Alert'}</span>
                     </button>
                   </div>
+
+                  {/* Customer Confirmation Email Status */}
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-slate-400 text-[11px]">Customer Confirmation:</span>
+                      {selectedOrder.customer_email_sent ? (
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          Sent
+                        </span>
+                      ) : selectedOrder.customer_email_error ? (
+                        <span
+                          className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20"
+                          title={selectedOrder.customer_email_error}
+                        >
+                          Failed
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
+                          Pending
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleResendEmail(selectedOrder.id, 'customer_confirmed')}
+                      disabled={isResendingEmail}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Send confirmation email to customer"
+                    >
+                      <span>Resend to Customer</span>
+                    </button>
+                  </div>
+
+                  {/* If cancelled or delivered, show those email statuses as well */}
+                  {selectedOrder.order_status === 'cancelled' && (
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-rose-400 text-[11px]">Cancellation Notice:</span>
+                        <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                          {selectedOrder.cancellation_email_sent ? 'Sent' : 'Dispatched'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleResendEmail(selectedOrder.id, 'customer_cancelled')}
+                        disabled={isResendingEmail}
+                        className="px-2 py-0.5 rounded bg-slate-800 text-rose-400 hover:text-rose-300 text-[10.5px] font-medium cursor-pointer"
+                      >
+                        Resend
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedOrder.order_status === 'delivered' && (
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-emerald-400 text-[11px]">Delivery Notice:</span>
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          {selectedOrder.delivery_email_sent ? 'Sent' : 'Dispatched'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleResendEmail(selectedOrder.id, 'customer_delivered')}
+                        disabled={isResendingEmail}
+                        className="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 hover:text-emerald-300 text-[10.5px] font-medium cursor-pointer"
+                      >
+                        Resend
+                      </button>
+                    </div>
+                  )}
+
                   {resendEmailMsg && resendEmailMsg.id === selectedOrder.id && (
                     <p
                       className={`text-[10.5px] font-medium ${

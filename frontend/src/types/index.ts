@@ -130,6 +130,14 @@ export interface Order {
   admin_email_sent?: boolean;
   admin_email_sent_at?: string | null;
   admin_email_error?: string | null;
+  customer_email_sent?: boolean;
+  customer_email_sent_at?: string | null;
+  customer_email_error?: string | null;
+  cancellation_email_sent?: boolean;
+  cancellation_email_sent_at?: string | null;
+  delivery_email_sent?: boolean;
+  delivery_email_sent_at?: string | null;
+  cancellation_reason?: string | null;
   created_at: string;
   items?: OrderItem[];
 }

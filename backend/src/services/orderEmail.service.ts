@@ -16,6 +16,25 @@ function escapeHtml(str: string | null | undefined): string {
 }
 
 /**
+ * Validate email address format strictly
+ */
+export function isValidEmail(email: string | null | undefined): boolean {
+  if (!email || typeof email !== 'string') return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+/**
+ * Extract verified customer email from order user record or address snapshot
+ */
+export function extractCustomerEmail(order: any, addressSnapshot: any): string | null {
+  const candidate = order?.customer_email || addressSnapshot?.email || order?.email || null;
+  if (candidate && isValidEmail(candidate)) {
+    return candidate.trim();
+  }
+  return null;
+}
+
+/**
  * Format timestamp in the store's configured business timezone (default: Asia/Kolkata / IST)
  */
 function formatOrderDateTime(dateStr: string | Date): string {
@@ -844,6 +863,1048 @@ Fresh Vegetables Organic Delivery Service
     }
 
     return { success: false, message: errorMsg };
+  }
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 1. CUSTOMER ORDER CONFIRMATION EMAIL
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Sends a branded, mobile-responsive confirmation email to the customer's
+ * registered email address when an order is successfully confirmed.
+ */
+export async function sendCustomerOrderConfirmedEmail(
+  orderId: string,
+  forceRetry = false
+): Promise<{ success: boolean; message: string; skipped?: boolean }> {
+  const notificationType = 'customer_order_confirmed';
+
+  try {
+    // 1. Fetch complete order details
+    const orderRes = await db.query(
+      `SELECT o.*, u.name as customer_name, u.email as customer_email, u.mobile as customer_phone
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.id
+       WHERE o.id = $1`,
+      [orderId]
+    );
+
+    if (orderRes.rows.length === 0) {
+      console.warn(`[OrderEmailService] Order ${orderId} not found in database. Skipping customer confirmation email.`);
+      return { success: false, message: 'Order not found' };
+    }
+
+    const order = orderRes.rows[0];
+
+    // 2. Parse address snapshot & validate customer email
+    let addressSnapshot = order.address_snapshot;
+    if (typeof addressSnapshot === 'string') {
+      try { addressSnapshot = JSON.parse(addressSnapshot); } catch {}
+    }
+
+    const customerEmail = extractCustomerEmail(order, addressSnapshot);
+    const orderNumber = order.order_number || order.id.slice(0, 8).toUpperCase();
+
+    if (!customerEmail) {
+      console.warn(`[OrderEmailService] Order #${orderNumber} has no valid customer email address. Skipping customer email notification.`);
+      try {
+        await db.query(
+          `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, error_message, updated_at)
+           VALUES ($1, $2, 'none', 'skipped', 0, 'No valid customer email address on file', NOW())
+           ON CONFLICT (order_id, notification_type)
+           DO UPDATE SET status = 'skipped', error_message = 'No valid customer email address on file', updated_at = NOW()`,
+          [orderId, notificationType]
+        );
+        await db.query(
+          `UPDATE orders SET customer_email_error = 'No valid customer email address on file' WHERE id = $1`,
+          [orderId]
+        );
+      } catch {}
+      return { success: false, skipped: true, message: 'No valid customer email address on file' };
+    }
+
+    // 3. Idempotency Check via order_notifications
+    if (!forceRetry) {
+      const existingNotifRes = await db.query(
+        `SELECT id, status, sent_at FROM order_notifications
+         WHERE order_id = $1 AND notification_type = $2`,
+        [orderId, notificationType]
+      );
+
+      if (existingNotifRes.rows.length > 0 && existingNotifRes.rows[0].status === 'sent') {
+        console.log(`[OrderEmailService] Customer confirmation email for order #${orderNumber} already sent at ${existingNotifRes.rows[0].sent_at}. Skipping duplicate.`);
+        return { success: true, message: 'Already sent', skipped: true };
+      }
+    }
+
+    // Record pending in outbox
+    await db.query(
+      `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, updated_at)
+       VALUES ($1, $2, $3, 'pending', 1, NOW())
+       ON CONFLICT (order_id, notification_type)
+       DO UPDATE SET attempts = order_notifications.attempts + 1, updated_at = NOW()`,
+      [orderId, notificationType, customerEmail]
+    );
+
+    // 4. Fetch order items
+    const itemsRes = await db.query(
+      `SELECT oi.*, p.images
+       FROM order_items oi
+       LEFT JOIN products p ON oi.product_id = p.id
+       WHERE oi.order_id = $1
+       ORDER BY oi.created_at ASC`,
+      [orderId]
+    );
+    const items = itemsRes.rows;
+
+    // 5. Fetch payment details
+    const paymentRes = await db.query(
+      `SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [orderId]
+    );
+    const payment = paymentRes.rows[0] || null;
+
+    // 6. Build Customer Email Data
+    const formattedDate = formatOrderDateTime(order.created_at);
+    const customerName = addressSnapshot?.full_name || order.customer_name || 'Valued Customer';
+    const formattedAddress = formatDeliveryAddress(addressSnapshot);
+    const deliveryNotes = order.notes ? escapeHtml(order.notes) : '';
+
+    const subtotal = Number(order.subtotal || 0).toFixed(2);
+    const deliveryCharge = Number(order.delivery_charge || 0);
+    const discount = Number(order.discount || 0).toFixed(2);
+    const total = Number(order.total || 0).toFixed(2);
+
+    const paymentMethodUpper = (order.payment_method || 'cod').toUpperCase();
+    const isPaid = order.payment_status === 'paid';
+    const paymentStatusBadge = isPaid
+      ? '<span style="color: #0c831f; font-weight: 800;">Paid & Verified</span>'
+      : order.payment_method === 'cod'
+      ? '<span style="color: #d97706; font-weight: 800;">Cash on Delivery (Pay at Doorstep)</span>'
+      : '<span style="color: #64748b; font-weight: 800;">Pending Verification</span>';
+
+    const frontendBaseUrl = (env.FRONTEND_URL || 'https://fresh-vegitables-frontend.vercel.app').replace(/\/$/, '');
+    const trackingUrl = `${frontendBaseUrl}/orders/${order.id}/track`;
+
+    // Items Table HTML
+    const itemsTableHtml = items
+      .map((item, idx) => {
+        const name = escapeHtml(item.product_name_snapshot || 'Fresh Vegetable');
+        const unit = escapeHtml(item.unit_snapshot || '1 unit');
+        const qty = item.quantity || 1;
+        const price = Number(item.price_snapshot || 0).toFixed(2);
+        const lineTotal = Number(item.total || Number(price) * qty).toFixed(2);
+        const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+
+        return `
+          <tr style="background-color: ${bgColor};">
+            <td style="padding: 11px 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+              ${name}
+            </td>
+            <td style="padding: 11px 14px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-size: 12px;">
+              ${unit}
+            </td>
+            <td style="padding: 11px 14px; text-align: center; font-weight: 800; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+              ${qty}
+            </td>
+            <td style="padding: 11px 14px; text-align: right; color: #334155; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+              ₹${price}
+            </td>
+            <td style="padding: 11px 14px; text-align: right; font-weight: 800; color: #0c831f; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+              ₹${lineTotal}
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const subject = `Order Confirmed! Your Fresh Vegetables Order #${orderNumber}`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 620px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;" cellspacing="0" cellpadding="0">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #0c831f 0%, #0f9426 100%); padding: 28px; text-align: left;">
+              <span style="display: inline-block; background-color: rgba(255,255,255,0.22); color: #ffffff; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">
+                ✅ Order Confirmed
+              </span>
+              <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 900; letter-spacing: -0.02em;">
+                Fresh Vegetables Organic
+              </h1>
+              <p style="margin: 4px 0 0; color: #e2fbe8; font-size: 13.5px; font-weight: 500;">
+                100% Genuine Certified Organic • Harvested Fresh at Dawn
+              </p>
+            </td>
+          </tr>
+
+          <!-- Welcome Message -->
+          <tr>
+            <td style="padding: 24px 28px 12px;">
+              <h2 style="margin: 0 0 8px; font-size: 18px; font-weight: 800; color: #0f172a;">
+                Hi ${escapeHtml(customerName)},
+              </h2>
+              <p style="margin: 0; font-size: 13.5px; line-height: 1.6; color: #334155;">
+                Thank you for your order! Your morning harvest vegetables have been confirmed and are being carefully packed by our farm team for speedy doorstep delivery.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Key Order Metadata Card -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <table width="100%" style="background-color: #f8fafc; border-radius: 14px; border: 1px solid #e2e8f0; padding: 16px;" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #64748b;">
+                    <strong>Order Number:</strong><br>
+                    <span style="font-size: 14px; font-weight: 800; color: #0c831f;">#${escapeHtml(orderNumber)}</span>
+                  </td>
+                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #64748b;">
+                    <strong>Order Date:</strong><br>
+                    <span style="font-size: 13px; font-weight: 700; color: #0f172a;">${escapeHtml(formattedDate)}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="50%" style="padding: 8px 8px 4px; font-size: 12px; color: #64748b;">
+                    <strong>Estimated Delivery:</strong><br>
+                    <span style="font-size: 13px; font-weight: 800; color: #0f172a;">Today, within 25–35 mins</span>
+                  </td>
+                  <td width="50%" style="padding: 8px 8px 4px; font-size: 12px; color: #64748b;">
+                    <strong>Payment:</strong><br>
+                    <span style="font-size: 13px;">${paymentMethodUpper} (${paymentStatusBadge})</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Items Ordered Table -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <h3 style="margin: 0 0 10px; font-size: 14px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.04em;">
+                Produce in Your Basket
+              </h3>
+              <table width="100%" style="border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;" cellspacing="0" cellpadding="0">
+                <thead>
+                  <tr style="background-color: #f1f5f9; text-align: left;">
+                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">Vegetable</th>
+                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">Unit</th>
+                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: center;">Qty</th>
+                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: right;">Price</th>
+                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: right;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsTableHtml}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Cost Summary -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <table width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Subtotal:</td>
+                  <td style="padding: 4px 0; font-size: 13px; text-align: right; font-weight: 700; color: #0f172a;">₹${subtotal}</td>
+                </tr>
+                ${Number(discount) > 0 ? `
+                <tr>
+                  <td style="padding: 4px 0; font-size: 13px; color: #0c831f;">Special Discount Savings:</td>
+                  <td style="padding: 4px 0; font-size: 13px; text-align: right; font-weight: 800; color: #0c831f;">-₹${discount}</td>
+                </tr>
+                ` : ''}
+                <tr>
+                  <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Delivery Fee:</td>
+                  <td style="padding: 4px 0; font-size: 13px; text-align: right; font-weight: 700; color: #0f172a;">
+                    ${deliveryCharge === 0 ? '<span style="color: #0c831f; font-weight: 800;">FREE</span>' : `₹${deliveryCharge.toFixed(2)}`}
+                  </td>
+                </tr>
+                <tr style="border-top: 1.5px solid #cbd5e1;">
+                  <td style="padding: 10px 0 4px; font-size: 15px; font-weight: 900; color: #0f172a;">Total to Pay:</td>
+                  <td style="padding: 10px 0 4px; font-size: 18px; text-align: right; font-weight: 900; color: #0c831f;">₹${total}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Delivery Address Card -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #0c831f; border-radius: 10px; padding: 14px;">
+                <p style="margin: 0 0 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0c831f; letter-spacing: 0.05em;">
+                  📍 Delivery Address
+                </p>
+                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #0f172a; font-weight: 600;">
+                  ${escapeHtml(formattedAddress)}
+                </p>
+                ${deliveryNotes ? `
+                  <p style="margin: 6px 0 0; font-size: 12px; color: #64748b;">
+                    <strong>Instructions:</strong> ${deliveryNotes}
+                  </p>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+
+          <!-- CTA Tracking Button -->
+          <tr>
+            <td align="center" style="padding: 16px 28px 24px;">
+              <a href="${trackingUrl}" target="_blank" style="display: inline-block; background-color: #0c831f; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 800; padding: 13px 28px; border-radius: 12px; box-shadow: 0 4px 14px rgba(12,131,31,0.25);">
+                Track Your Delivery Live →
+              </a>
+            </td>
+          </tr>
+
+          <!-- Support Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
+              <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #334155;">
+                Need help with your order?
+              </p>
+              <p style="margin: 0; font-size: 11.5px; color: #64748b;">
+                Customer Support: <a href="tel:+918106970384" style="color: #0c831f; font-weight: 700; text-decoration: none;">+91 8106970384</a> • 
+                <a href="mailto:freshvegitables29@gmail.com" style="color: #0c831f; font-weight: 700; text-decoration: none;">freshvegitables29@gmail.com</a>
+              </p>
+              <p style="margin: 10px 0 0; font-size: 10.5px; color: #94a3b8;">
+                Fresh Vegetables Organic • Hyderabad, Telangana • Hand-Picked Daily
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    const textContent = `
+ORDER CONFIRMED — FRESH VEGETABLES ORGANIC
+Order #${orderNumber}
+==================================================
+
+Hi ${customerName},
+
+Thank you for your order! Your morning harvest vegetables have been confirmed and are being prepared for delivery.
+
+Order Number: #${orderNumber}
+Order Date: ${formattedDate}
+Estimated Delivery: Today, within 25–35 mins
+Payment Method: ${paymentMethodUpper} (${isPaid ? 'Paid' : 'Pending'})
+
+ITEMS ORDERED:
+${items.map((i) => `- ${i.product_name_snapshot} (${i.unit_snapshot}) x ${i.quantity} = ₹${i.total}`).join('\n')}
+
+Subtotal: ₹${subtotal}
+${Number(discount) > 0 ? `Discount Savings: -₹${discount}\n` : ''}Delivery Fee: ${deliveryCharge === 0 ? 'FREE' : `₹${deliveryCharge.toFixed(2)}`}
+Total Amount: ₹${total}
+
+DELIVERY ADDRESS:
+${formattedAddress}
+${deliveryNotes ? `Instructions: ${deliveryNotes}\n` : ''}
+
+Track your order live: ${trackingUrl}
+
+Customer Support: +91 8106970384 | freshvegitables29@gmail.com
+Fresh Vegetables Organic, Hyderabad, Telangana
+    `.trim();
+
+    // 7. Dispatch via unified multi-engine
+    const dispatchResult = await dispatchEmail({
+      to: customerEmail,
+      subject,
+      html: htmlContent,
+      text: textContent,
+    });
+
+    if (!dispatchResult.success) {
+      throw new Error(dispatchResult.error || 'Failed to dispatch customer confirmation email');
+    }
+
+    console.log(`[OrderEmailService] ✅ Customer order confirmation email sent to ${customerEmail} via ${dispatchResult.provider} for Order #${orderNumber}`);
+
+    // 8. Update DB status
+    await db.query(
+      `UPDATE order_notifications
+       SET status = 'sent', sent_at = NOW(), error_message = NULL, updated_at = NOW()
+       WHERE order_id = $1 AND notification_type = $2`,
+      [orderId, notificationType]
+    );
+
+    await db.query(
+      `UPDATE orders
+       SET customer_email_sent = TRUE, customer_email_sent_at = NOW(), customer_email_error = NULL
+       WHERE id = $1`,
+      [orderId]
+    );
+
+    return { success: true, message: 'Customer confirmation email sent successfully' };
+  } catch (error: any) {
+    const errorMsg = error?.message || 'Unknown customer email error';
+    console.error(`[OrderEmailService] ❌ Failed to send customer confirmation email for ${orderId}:`, errorMsg);
+
+    try {
+      await db.query(
+        `UPDATE order_notifications
+         SET status = 'failed', error_message = $1, updated_at = NOW()
+         WHERE order_id = $2 AND notification_type = $3`,
+        [errorMsg, orderId, notificationType]
+      );
+      await db.query(
+        `UPDATE orders SET customer_email_error = $1 WHERE id = $2`,
+        [errorMsg, orderId]
+      );
+    } catch {}
+
+    return { success: false, message: errorMsg };
+  }
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 2. CUSTOMER ORDER CANCELLATION EMAIL
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Sends an email to the customer when their order is cancelled.
+ * Includes cancellation reason and verified refund timeframe.
+ */
+export async function sendCustomerOrderCancelledEmail(
+  orderId: string,
+  cancellationReason?: string,
+  forceRetry = false
+): Promise<{ success: boolean; message: string; skipped?: boolean }> {
+  const notificationType = 'customer_order_cancelled';
+
+  try {
+    const orderRes = await db.query(
+      `SELECT o.*, u.name as customer_name, u.email as customer_email, u.mobile as customer_phone
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.id
+       WHERE o.id = $1`,
+      [orderId]
+    );
+
+    if (orderRes.rows.length === 0) {
+      return { success: false, message: 'Order not found' };
+    }
+
+    const order = orderRes.rows[0];
+
+    // Business rule: If already delivered, cannot cancel
+    if (order.order_status === 'delivered') {
+      console.warn(`[OrderEmailService] Cannot send cancellation email for delivered Order #${order.order_number}`);
+      return { success: false, skipped: true, message: 'Order was already delivered' };
+    }
+
+    let addressSnapshot = order.address_snapshot;
+    if (typeof addressSnapshot === 'string') {
+      try { addressSnapshot = JSON.parse(addressSnapshot); } catch {}
+    }
+
+    const customerEmail = extractCustomerEmail(order, addressSnapshot);
+    const orderNumber = order.order_number || order.id.slice(0, 8).toUpperCase();
+
+    if (!customerEmail) {
+      console.warn(`[OrderEmailService] No valid email address found for order #${orderNumber} cancellation email.`);
+      return { success: false, skipped: true, message: 'No valid customer email address on file' };
+    }
+
+    // Idempotency check: Don't send multiple cancellation emails
+    if (!forceRetry) {
+      const existingNotifRes = await db.query(
+        `SELECT id, status, sent_at FROM order_notifications
+         WHERE order_id = $1 AND notification_type = $2`,
+        [orderId, notificationType]
+      );
+
+      if (existingNotifRes.rows.length > 0 && existingNotifRes.rows[0].status === 'sent') {
+        console.log(`[OrderEmailService] Cancellation email for order #${orderNumber} already sent at ${existingNotifRes.rows[0].sent_at}. Skipping duplicate.`);
+        return { success: true, message: 'Already sent', skipped: true };
+      }
+    }
+
+    // Record pending in outbox
+    await db.query(
+      `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, updated_at)
+       VALUES ($1, $2, $3, 'pending', 1, NOW())
+       ON CONFLICT (order_id, notification_type)
+       DO UPDATE SET attempts = order_notifications.attempts + 1, updated_at = NOW()`,
+      [orderId, notificationType, customerEmail]
+    );
+
+    // Fetch items
+    const itemsRes = await db.query(
+      `SELECT oi.* FROM order_items oi WHERE oi.order_id = $1 ORDER BY oi.created_at ASC`,
+      [orderId]
+    );
+    const items = itemsRes.rows;
+
+    const formattedCancellationDate = formatOrderDateTime(new Date());
+    const customerName = addressSnapshot?.full_name || order.customer_name || 'Valued Customer';
+    const total = Number(order.total || 0).toFixed(2);
+    const paymentMethodUpper = (order.payment_method || 'cod').toUpperCase();
+    const reasonText = cancellationReason || order.cancellation_reason || 'Cancelled by store operations. Produce restored to farm inventory.';
+
+    const isPaid = order.payment_status === 'paid';
+    const refundMessage = isPaid
+      ? `A refund of <strong>₹${total}</strong> has been initiated to your original payment method. Depending on your bank, it will reflect within <strong>3–5 business days</strong>.`
+      : `Since this was a <strong>Cash on Delivery</strong> order, no payment was collected.`;
+
+    const frontendBaseUrl = (env.FRONTEND_URL || 'https://fresh-vegitables-frontend.vercel.app').replace(/\/$/, '');
+    const catalogUrl = `${frontendBaseUrl}/products`;
+
+    const subject = `Order Cancelled — Fresh Vegetables Order #${orderNumber}`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 620px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;" cellspacing="0" cellpadding="0">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #e11d48 0%, #be123c 100%); padding: 28px; text-align: left;">
+              <span style="display: inline-block; background-color: rgba(255,255,255,0.22); color: #ffffff; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">
+                ⚠️ Order Cancellation Notice
+              </span>
+              <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 900; letter-spacing: -0.02em;">
+                Fresh Vegetables Organic
+              </h1>
+              <p style="margin: 4px 0 0; color: #ffe4e6; font-size: 13.5px; font-weight: 500;">
+                Order #${escapeHtml(orderNumber)} has been cancelled
+              </p>
+            </td>
+          </tr>
+
+          <!-- Message -->
+          <tr>
+            <td style="padding: 24px 28px 12px;">
+              <h2 style="margin: 0 0 8px; font-size: 18px; font-weight: 800; color: #0f172a;">
+                Hi ${escapeHtml(customerName)},
+              </h2>
+              <p style="margin: 0; font-size: 13.5px; line-height: 1.6; color: #334155;">
+                We are writing to inform you that your order <strong>#${escapeHtml(orderNumber)}</strong> has been cancelled.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Cancellation Info Card -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <table width="100%" style="background-color: #fff1f2; border: 1px solid #fecdd3; border-radius: 14px; padding: 16px;" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #881337;">
+                    <strong>Cancelled On:</strong><br>
+                    <span style="font-size: 13px; font-weight: 700; color: #0f172a;">${escapeHtml(formattedCancellationDate)}</span>
+                  </td>
+                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #881337;">
+                    <strong>Order Amount:</strong><br>
+                    <span style="font-size: 14px; font-weight: 800; color: #0f172a;">₹${total}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding: 10px 8px 4px; font-size: 12px; color: #881337;">
+                    <strong>Cancellation Reason:</strong><br>
+                    <span style="font-size: 13px; font-weight: 600; color: #4c0519;">${escapeHtml(reasonText)}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Refund Status Card -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #e11d48; border-radius: 10px; padding: 14px;">
+                <p style="margin: 0 0 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #be123c; letter-spacing: 0.05em;">
+                  💳 Payment &amp; Refund Status
+                </p>
+                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #0f172a;">
+                  Payment Method: <strong>${paymentMethodUpper}</strong><br>
+                  ${refundMessage}
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Items Cancelled -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <h3 style="margin: 0 0 10px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.04em;">
+                Cancelled Items
+              </h3>
+              <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #334155; line-height: 1.7;">
+                ${items.map((i) => `<li><strong>${escapeHtml(i.product_name_snapshot)}</strong> (${escapeHtml(i.unit_snapshot)}) × ${i.quantity}</li>`).join('')}
+              </ul>
+            </td>
+          </tr>
+
+          <!-- CTA to re-order -->
+          <tr>
+            <td align="center" style="padding: 16px 28px 24px;">
+              <a href="${catalogUrl}" target="_blank" style="display: inline-block; background-color: #0c831f; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 800; padding: 13px 28px; border-radius: 12px; box-shadow: 0 4px 14px rgba(12,131,31,0.25);">
+                Explore Fresh Harvest Catalog →
+              </a>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
+              <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #334155;">
+                Questions about this cancellation?
+              </p>
+              <p style="margin: 0; font-size: 11.5px; color: #64748b;">
+                Customer Support: <a href="tel:+918106970384" style="color: #0c831f; font-weight: 700; text-decoration: none;">+91 8106970384</a> • 
+                <a href="mailto:freshvegitables29@gmail.com" style="color: #0c831f; font-weight: 700; text-decoration: none;">freshvegitables29@gmail.com</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    const textContent = `
+ORDER CANCELLED — FRESH VEGETABLES ORGANIC
+Order #${orderNumber}
+==================================================
+
+Hi ${customerName},
+
+Your order #${orderNumber} has been cancelled on ${formattedCancellationDate}.
+
+Cancellation Reason: ${reasonText}
+Order Amount: ₹${total} (${paymentMethodUpper})
+
+${isPaid ? 'Refund Status: Refund initiated to your original payment method (3–5 business days).' : 'No payment was collected for this order.'}
+
+Cancelled Items:
+${items.map((i) => `- ${i.product_name_snapshot} (${i.unit_snapshot}) x ${i.quantity}`).join('\n')}
+
+For any questions, contact us at +91 8106970384 or freshvegitables29@gmail.com.
+Fresh Vegetables Organic, Hyderabad, Telangana
+    `.trim();
+
+    const dispatchResult = await dispatchEmail({
+      to: customerEmail,
+      subject,
+      html: htmlContent,
+      text: textContent,
+    });
+
+    if (!dispatchResult.success) {
+      throw new Error(dispatchResult.error || 'Failed to dispatch customer cancellation email');
+    }
+
+    console.log(`[OrderEmailService] ✅ Customer cancellation email sent to ${customerEmail} via ${dispatchResult.provider} for Order #${orderNumber}`);
+
+    await db.query(
+      `UPDATE order_notifications
+       SET status = 'sent', sent_at = NOW(), error_message = NULL, updated_at = NOW()
+       WHERE order_id = $1 AND notification_type = $2`,
+      [orderId, notificationType]
+    );
+
+    await db.query(
+      `UPDATE orders
+       SET cancellation_email_sent = TRUE, cancellation_email_sent_at = NOW(), cancellation_reason = $1
+       WHERE id = $2`,
+      [reasonText, orderId]
+    );
+
+    return { success: true, message: 'Cancellation email sent successfully' };
+  } catch (error: any) {
+    const errorMsg = error?.message || 'Unknown cancellation email error';
+    console.error(`[OrderEmailService] ❌ Failed to send cancellation email for ${orderId}:`, errorMsg);
+    return { success: false, message: errorMsg };
+  }
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 3. CUSTOMER ORDER DELIVERED EMAIL
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Sends a delivery confirmation & thank-you email to the customer when the
+ * order is marked as Delivered.
+ */
+export async function sendCustomerOrderDeliveredEmail(
+  orderId: string,
+  forceRetry = false
+): Promise<{ success: boolean; message: string; skipped?: boolean }> {
+  const notificationType = 'customer_order_delivered';
+
+  try {
+    const orderRes = await db.query(
+      `SELECT o.*, u.name as customer_name, u.email as customer_email, u.mobile as customer_phone
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.id
+       WHERE o.id = $1`,
+      [orderId]
+    );
+
+    if (orderRes.rows.length === 0) {
+      return { success: false, message: 'Order not found' };
+    }
+
+    const order = orderRes.rows[0];
+
+    // Verify order is genuinely delivered
+    if (order.order_status !== 'delivered') {
+      console.warn(`[OrderEmailService] Cannot send delivery email: Order #${order.order_number} status is "${order.order_status}", not "delivered".`);
+      return { success: false, skipped: true, message: 'Order is not in delivered status' };
+    }
+
+    let addressSnapshot = order.address_snapshot;
+    if (typeof addressSnapshot === 'string') {
+      try { addressSnapshot = JSON.parse(addressSnapshot); } catch {}
+    }
+
+    const customerEmail = extractCustomerEmail(order, addressSnapshot);
+    const orderNumber = order.order_number || order.id.slice(0, 8).toUpperCase();
+
+    if (!customerEmail) {
+      console.warn(`[OrderEmailService] No valid email address found for order #${orderNumber} delivery email.`);
+      return { success: false, skipped: true, message: 'No valid customer email address on file' };
+    }
+
+    // Idempotency check: Don't send duplicate delivery emails
+    if (!forceRetry) {
+      const existingNotifRes = await db.query(
+        `SELECT id, status, sent_at FROM order_notifications
+         WHERE order_id = $1 AND notification_type = $2`,
+        [orderId, notificationType]
+      );
+
+      if (existingNotifRes.rows.length > 0 && existingNotifRes.rows[0].status === 'sent') {
+        console.log(`[OrderEmailService] Delivery email for order #${orderNumber} already sent at ${existingNotifRes.rows[0].sent_at}. Skipping duplicate.`);
+        return { success: true, message: 'Already sent', skipped: true };
+      }
+    }
+
+    // Record pending in outbox
+    await db.query(
+      `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, updated_at)
+       VALUES ($1, $2, $3, 'pending', 1, NOW())
+       ON CONFLICT (order_id, notification_type)
+       DO UPDATE SET attempts = order_notifications.attempts + 1, updated_at = NOW()`,
+      [orderId, notificationType, customerEmail]
+    );
+
+    // Fetch items
+    const itemsRes = await db.query(
+      `SELECT oi.* FROM order_items oi WHERE oi.order_id = $1 ORDER BY oi.created_at ASC`,
+      [orderId]
+    );
+    const items = itemsRes.rows;
+
+    const formattedDeliveryDate = formatOrderDateTime(new Date());
+    const customerName = addressSnapshot?.full_name || order.customer_name || 'Valued Customer';
+    const formattedAddress = formatDeliveryAddress(addressSnapshot);
+    const total = Number(order.total || 0).toFixed(2);
+    const paymentMethodUpper = (order.payment_method || 'cod').toUpperCase();
+
+    const frontendBaseUrl = (env.FRONTEND_URL || 'https://fresh-vegitables-frontend.vercel.app').replace(/\/$/, '');
+    const trackingUrl = `${frontendBaseUrl}/orders/${order.id}/track`;
+
+    const subject = `Your Fresh Vegetables Order #${orderNumber} Has Been Delivered!`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 620px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;" cellspacing="0" cellpadding="0">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #059669 0%, #0c831f 100%); padding: 28px; text-align: left;">
+              <span style="display: inline-block; background-color: rgba(255,255,255,0.22); color: #ffffff; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">
+                🎉 Package Delivered
+              </span>
+              <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 900; letter-spacing: -0.02em;">
+                Fresh Vegetables Organic
+              </h1>
+              <p style="margin: 4px 0 0; color: #e2fbe8; font-size: 13.5px; font-weight: 500;">
+                Delivered fresh to your doorstep!
+              </p>
+            </td>
+          </tr>
+
+          <!-- Message -->
+          <tr>
+            <td style="padding: 24px 28px 12px;">
+              <h2 style="margin: 0 0 8px; font-size: 18px; font-weight: 800; color: #0f172a;">
+                Hi ${escapeHtml(customerName)},
+              </h2>
+              <p style="margin: 0; font-size: 13.5px; line-height: 1.6; color: #334155;">
+                Great news! Your Fresh Vegetables order <strong>#${escapeHtml(orderNumber)}</strong> has been successfully delivered. We hope you enjoy the crispness, aroma, and natural taste of fresh organic harvest in your kitchen!
+              </p>
+            </td>
+          </tr>
+
+          <!-- Delivery Card -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <table width="100%" style="background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 14px; padding: 16px;" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #065f46;">
+                    <strong>Delivered On:</strong><br>
+                    <span style="font-size: 13px; font-weight: 700; color: #0f172a;">${escapeHtml(formattedDeliveryDate)}</span>
+                  </td>
+                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #065f46;">
+                    <strong>Total Amount:</strong><br>
+                    <span style="font-size: 15px; font-weight: 900; color: #0c831f;">₹${total}</span> (${paymentMethodUpper})
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding: 10px 8px 4px; font-size: 12px; color: #065f46;">
+                    <strong>Delivered To:</strong><br>
+                    <span style="font-size: 13px; font-weight: 600; color: #0f172a;">${escapeHtml(formattedAddress)}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Items Delivered Summary -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <h3 style="margin: 0 0 10px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.04em;">
+                Delivered Items (${items.length})
+              </h3>
+              <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #334155; line-height: 1.7;">
+                ${items.map((i) => `<li><strong>${escapeHtml(i.product_name_snapshot)}</strong> (${escapeHtml(i.unit_snapshot)}) × ${i.quantity}</li>`).join('')}
+              </ul>
+            </td>
+          </tr>
+
+          <!-- CTA to View Order Details / Rate -->
+          <tr>
+            <td align="center" style="padding: 16px 28px 24px;">
+              <a href="${trackingUrl}" target="_blank" style="display: inline-block; background-color: #0c831f; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 800; padding: 13px 28px; border-radius: 12px; box-shadow: 0 4px 14px rgba(12,131,31,0.25);">
+                View Order Details &amp; Feedback →
+              </a>
+            </td>
+          </tr>
+
+          <!-- Support & Satisfaction Guarantee Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
+              <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #334155;">
+                100% Quality &amp; Freshness Guarantee
+              </p>
+              <p style="margin: 0; font-size: 11.5px; color: #64748b;">
+                Something not right with your produce? We offer instant replacement or refund.<br>
+                Customer Support: <a href="tel:+918106970384" style="color: #0c831f; font-weight: 700; text-decoration: none;">+91 8106970384</a> • 
+                <a href="mailto:freshvegitables29@gmail.com" style="color: #0c831f; font-weight: 700; text-decoration: none;">freshvegitables29@gmail.com</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    const textContent = `
+YOUR FRESH VEGETABLES ORDER HAS BEEN DELIVERED!
+Order #${orderNumber}
+==================================================
+
+Hi ${customerName},
+
+Great news! Your Fresh Vegetables order #${orderNumber} has been successfully delivered on ${formattedDeliveryDate}.
+
+Total Amount: ₹${total} (${paymentMethodUpper})
+Delivered To: ${formattedAddress}
+
+Delivered Items:
+${items.map((i) => `- ${i.product_name_snapshot} (${i.unit_snapshot}) x ${i.quantity}`).join('\n')}
+
+View order details: ${trackingUrl}
+
+We hope you enjoy your farm-fresh organic vegetables!
+Customer Support: +91 8106970384 | freshvegitables29@gmail.com
+Fresh Vegetables Organic, Hyderabad, Telangana
+    `.trim();
+
+    const dispatchResult = await dispatchEmail({
+      to: customerEmail,
+      subject,
+      html: htmlContent,
+      text: textContent,
+    });
+
+    if (!dispatchResult.success) {
+      throw new Error(dispatchResult.error || 'Failed to dispatch customer delivery email');
+    }
+
+    console.log(`[OrderEmailService] ✅ Customer delivery email sent to ${customerEmail} via ${dispatchResult.provider} for Order #${orderNumber}`);
+
+    await db.query(
+      `UPDATE order_notifications
+       SET status = 'sent', sent_at = NOW(), error_message = NULL, updated_at = NOW()
+       WHERE order_id = $1 AND notification_type = $2`,
+      [orderId, notificationType]
+    );
+
+    await db.query(
+      `UPDATE orders
+       SET delivery_email_sent = TRUE, delivery_email_sent_at = NOW()
+       WHERE id = $1`,
+      [orderId]
+    );
+
+    return { success: true, message: 'Delivery confirmation email sent successfully' };
+  } catch (error: any) {
+    const errorMsg = error?.message || 'Unknown delivery email error';
+    console.error(`[OrderEmailService] ❌ Failed to send delivery email for ${orderId}:`, errorMsg);
+    return { success: false, message: errorMsg };
+  }
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 4. CENTRAL EVENT DISPATCHER FOR ORDER NOTIFICATIONS
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Central event handler for ORDER_CREATED, ORDER_CANCELLED, and ORDER_DELIVERED.
+ * Dispatches both admin alert and customer transactional emails asynchronously.
+ */
+export async function handleOrderNotificationEvent(
+  event: 'ORDER_CREATED' | 'ORDER_CANCELLED' | 'ORDER_DELIVERED',
+  orderId: string,
+  metadata?: { reason?: string; forceRetry?: boolean }
+): Promise<void> {
+  console.log(`[OrderNotificationEvent] 📨 Received event "${event}" for Order ID: ${orderId}`);
+  try {
+    switch (event) {
+      case 'ORDER_CREATED':
+        // 1. Asynchronously send admin alert to freshvegitables29@gmail.com
+        sendNewOrderAdminEmail(orderId, metadata?.forceRetry).catch((err) => {
+          console.error(`[OrderNotificationEvent] Admin email failed for ${orderId}:`, err.message);
+        });
+        // 2. Asynchronously send customer confirmation email
+        sendCustomerOrderConfirmedEmail(orderId, metadata?.forceRetry).catch((err) => {
+          console.error(`[OrderNotificationEvent] Customer confirmation email failed for ${orderId}:`, err.message);
+        });
+        break;
+
+      case 'ORDER_CANCELLED':
+        // Asynchronously send customer cancellation email
+        sendCustomerOrderCancelledEmail(orderId, metadata?.reason, metadata?.forceRetry).catch((err) => {
+          console.error(`[OrderNotificationEvent] Customer cancellation email failed for ${orderId}:`, err.message);
+        });
+        // Optionally notify admin if configured
+        if (env.NOTIFY_ADMIN_ON_CANCEL) {
+          sendAdminOrderStatusAlert(orderId, 'CANCELLED', metadata?.reason).catch((err) => {
+            console.error(`[OrderNotificationEvent] Admin cancellation alert failed for ${orderId}:`, err.message);
+          });
+        }
+        break;
+
+      case 'ORDER_DELIVERED':
+        // Asynchronously send customer delivery email
+        sendCustomerOrderDeliveredEmail(orderId, metadata?.forceRetry).catch((err) => {
+          console.error(`[OrderNotificationEvent] Customer delivery email failed for ${orderId}:`, err.message);
+        });
+        // Optionally notify admin if configured
+        if (env.NOTIFY_ADMIN_ON_DELIVERED) {
+          sendAdminOrderStatusAlert(orderId, 'DELIVERED').catch((err) => {
+            console.error(`[OrderNotificationEvent] Admin delivery alert failed for ${orderId}:`, err.message);
+          });
+        }
+        break;
+
+      default:
+        console.warn(`[OrderNotificationEvent] Unknown event type: ${event}`);
+    }
+  } catch (err: any) {
+    console.error(`[OrderNotificationEvent] Error handling event ${event} for ${orderId}:`, err.message);
+  }
+}
+
+/**
+ * Send an optional status update alert to the admin notification email
+ */
+export async function sendAdminOrderStatusAlert(
+  orderId: string,
+  status: 'CANCELLED' | 'DELIVERED',
+  reason?: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const adminEmail = env.ORDER_NOTIFICATION_EMAIL || 'freshvegitables29@gmail.com';
+    const orderRes = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+    if (orderRes.rows.length === 0) return { success: false, message: 'Order not found' };
+    const order = orderRes.rows[0];
+    const orderNumber = order.order_number || order.id.slice(0, 8).toUpperCase();
+    const formattedDate = formatOrderDateTime(new Date());
+
+    const isCancel = status === 'CANCELLED';
+    const subject = `[ADMIN ALERT] Order #${orderNumber} Has Been ${isCancel ? 'CANCELLED' : 'DELIVERED'}`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <div style="background-color: ${isCancel ? '#be123c' : '#0c831f'}; padding: 16px; border-radius: 8px; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 18px;">Order #${escapeHtml(orderNumber)} Status Update</h2>
+          <p style="margin: 4px 0 0; font-size: 13px;">Status changed to: <strong>${status}</strong></p>
+        </div>
+        <div style="padding: 16px 0;">
+          <p><strong>Customer:</strong> ${escapeHtml(order.customer_name || 'Customer')}</p>
+          <p><strong>Total Amount:</strong> ₹${order.total}</p>
+          <p><strong>Payment Method:</strong> ${(order.payment_method || 'cod').toUpperCase()} (${order.payment_status})</p>
+          <p><strong>Updated At:</strong> ${formattedDate}</p>
+          ${reason ? `<p><strong>Reason:</strong> ${escapeHtml(reason)}</p>` : ''}
+        </div>
+        <p style="font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+          Fresh Vegetables Organic Admin Notification Engine
+        </p>
+      </div>
+    `;
+
+    await dispatchEmail({
+      to: adminEmail,
+      subject,
+      text: `Order #${orderNumber} status changed to ${status}. Total: ₹${order.total}. At: ${formattedDate}.`,
+      html,
+    });
+    return { success: true, message: 'Admin status alert sent' };
+  } catch (err: any) {
+    return { success: false, message: err.message };
   }
 }
 

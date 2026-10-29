@@ -67,6 +67,8 @@ export const env = {
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
   ORDER_NOTIFICATION_EMAIL: process.env.ORDER_NOTIFICATION_EMAIL || 'freshvegitables29@gmail.com',
+  NOTIFY_ADMIN_ON_CANCEL: process.env.NOTIFY_ADMIN_ON_CANCEL === 'true',
+  NOTIFY_ADMIN_ON_DELIVERED: process.env.NOTIFY_ADMIN_ON_DELIVERED === 'true',
   BUSINESS_TIMEZONE: process.env.BUSINESS_TIMEZONE || 'Asia/Kolkata',
 };
 

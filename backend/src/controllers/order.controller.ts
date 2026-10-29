@@ -6,7 +6,14 @@ import { AppError, NotFoundError, ValidationError } from '../utils/appError';
 import { generateOrderNumber, parsePaginationParams } from '../utils/helpers';
 import { memoryStore } from '../config/mockDb';
 import { getPersistedDeliverySettings } from '../services/deliverySettings.service';
-import { sendNewOrderAdminEmail, testOrderEmailConnection } from '../services/orderEmail.service';
+import {
+  sendNewOrderAdminEmail,
+  sendCustomerOrderConfirmedEmail,
+  sendCustomerOrderCancelledEmail,
+  sendCustomerOrderDeliveredEmail,
+  handleOrderNotificationEvent,
+  testOrderEmailConnection,
+} from '../services/orderEmail.service';
 import {
   broadcastNewOrderToAdmins,
   getRecentOrderAlerts,
@@ -195,8 +202,8 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       address_snapshot: addressSnapshot,
     };
 
-    // 1. Send automated admin email alert to freshvegitables29@gmail.com
-    sendNewOrderAdminEmail(createdOrder.id).catch((err) => {
+    // 1. Send automated order notifications (Admin alert + Customer confirmation email)
+    handleOrderNotificationEvent('ORDER_CREATED', createdOrder.id).catch((err) => {
       console.error('[OrderController] Background email notification error:', err.message);
     });
 
@@ -608,10 +615,16 @@ export async function adminGetOrderById(req: AuthRequest, res: Response, next: N
 export async function updateOrderStatus(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { order_status, payment_status } = req.body;
+    const { order_status, payment_status, cancellation_reason } = req.body;
 
     const existing = await db.query('SELECT * FROM orders WHERE id = $1', [id]);
     if (existing.rows.length === 0) throw new NotFoundError('Order not found');
+    const prevOrder = existing.rows[0];
+
+    // Business rule: If order is already delivered, do not allow cancellation
+    if (order_status === 'cancelled' && prevOrder.order_status === 'delivered') {
+      throw new ValidationError('Delivered orders cannot be cancelled');
+    }
 
     const fields: string[] = [];
     const values: any[] = [];
@@ -619,11 +632,16 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
 
     if (order_status) { fields.push(`order_status = $${idx++}`); values.push(order_status); }
     if (payment_status) { fields.push(`payment_status = $${idx++}`); values.push(payment_status); }
+    if (order_status === 'cancelled') {
+      const reasonToSave = cancellation_reason || req.body.notes || 'Cancelled by store operations';
+      fields.push(`cancellation_reason = $${idx++}`);
+      values.push(reasonToSave);
+    }
 
     if (fields.length === 0) throw new AppError('No fields to update', 400);
 
     // If cancelling, restore stock
-    if (order_status === 'cancelled' && existing.rows[0].order_status !== 'cancelled') {
+    if (order_status === 'cancelled' && prevOrder.order_status !== 'cancelled') {
       const items = await db.query('SELECT * FROM order_items WHERE order_id = $1', [id]);
       for (const item of items.rows) {
         if (item.variant_id) {
@@ -647,7 +665,7 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     );
 
     // Update payment status if order delivered and COD
-    if (order_status === 'delivered' && existing.rows[0].payment_method === 'cod') {
+    if (order_status === 'delivered' && prevOrder.payment_method === 'cod') {
       await db.query(
         "UPDATE payments SET status = 'success' WHERE order_id = $1",
         [id]
@@ -656,6 +674,18 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
         "UPDATE orders SET payment_status = 'paid' WHERE id = $1",
         [id]
       );
+    }
+
+    // Trigger automated email notifications ONLY when genuinely transitioning
+    if (order_status === 'cancelled' && prevOrder.order_status !== 'cancelled') {
+      const reason = cancellation_reason || req.body.notes || 'Cancelled by store operations';
+      handleOrderNotificationEvent('ORDER_CANCELLED', id, { reason }).catch((err) => {
+        console.error('[OrderController] Cancellation email event error:', err.message);
+      });
+    } else if (order_status === 'delivered' && prevOrder.order_status !== 'delivered') {
+      handleOrderNotificationEvent('ORDER_DELIVERED', id).catch((err) => {
+        console.error('[OrderController] Delivery email event error:', err.message);
+      });
     }
 
     // Automatically create in-app notification for the customer
@@ -709,7 +739,19 @@ export async function adminGetRecentAlerts(req: AuthRequest, res: Response, next
 export async function adminResendOrderEmail(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const result = await sendNewOrderAdminEmail(id, true);
+    const type = req.body?.type || req.query?.type || 'admin';
+    let result: { success: boolean; message: string; details?: any };
+
+    if (type === 'customer_confirmed') {
+      result = await sendCustomerOrderConfirmedEmail(id, true);
+    } else if (type === 'customer_cancelled') {
+      result = await sendCustomerOrderCancelledEmail(id, req.body?.reason, true);
+    } else if (type === 'customer_delivered') {
+      result = await sendCustomerOrderDeliveredEmail(id, true);
+    } else {
+      result = await sendNewOrderAdminEmail(id, true);
+    }
+
     if (result.success) {
       sendSuccess(res, result.message || 'Email notification sent successfully', result);
     } else {
