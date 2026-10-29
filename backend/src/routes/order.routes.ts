@@ -10,6 +10,7 @@ import {
   adminLiveStream,
   adminGetRecentAlerts,
   adminResendOrderEmail,
+  adminTestOrderEmail,
 } from '../controllers/order.controller';
 import { authenticateCustomer, authenticateAdmin } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -20,6 +21,7 @@ const router = Router();
 // Admin real-time streams and alerts (authenticated)
 router.get('/admin/live-stream', adminLiveStream);
 router.get('/admin/recent-alerts', authenticateAdmin, adminGetRecentAlerts);
+router.post('/admin/test-email', authenticateAdmin, adminTestOrderEmail);
 router.post('/admin/:id/resend-email', authenticateAdmin, adminResendOrderEmail);
 
 // Admin routes (placed before parameterized customer routes)

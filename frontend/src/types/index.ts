@@ -127,6 +127,9 @@ export interface Order {
   delivery_address: any;
   address_snapshot?: any;
   notes?: string;
+  admin_email_sent?: boolean;
+  admin_email_sent_at?: string | null;
+  admin_email_error?: string | null;
   created_at: string;
   items?: OrderItem[];
 }

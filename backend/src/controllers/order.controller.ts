@@ -6,7 +6,7 @@ import { AppError, NotFoundError, ValidationError } from '../utils/appError';
 import { generateOrderNumber, parsePaginationParams } from '../utils/helpers';
 import { memoryStore } from '../config/mockDb';
 import { getPersistedDeliverySettings } from '../services/deliverySettings.service';
-import { sendNewOrderAdminEmail } from '../services/orderEmail.service';
+import { sendNewOrderAdminEmail, testOrderEmailConnection } from '../services/orderEmail.service';
 import {
   broadcastNewOrderToAdmins,
   getRecentOrderAlerts,
@@ -722,3 +722,22 @@ export async function adminResendOrderEmail(req: AuthRequest, res: Response, nex
     next(error);
   }
 }
+
+export async function adminTestOrderEmail(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await testOrderEmailConnection();
+    if (result.success) {
+      sendSuccess(res, result.message, result);
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message,
+        config: result.config,
+        details: result.details,
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+}
+

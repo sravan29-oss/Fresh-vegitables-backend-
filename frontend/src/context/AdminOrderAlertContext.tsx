@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
-import { subscribeLiveUpdates, notifyLiveUpdate } from '../services/liveSync';
+import { subscribeLiveUpdates } from '../services/liveSync';
 
 export interface NewOrderAlert {
   id: string;
@@ -26,6 +26,7 @@ interface AdminOrderAlertContextType {
   isAudioUnlocked: boolean;
   unlockAudio: () => Promise<void>;
   testSound: () => void;
+  testEmailAlert: () => Promise<{ success: boolean; message: string; config?: any; details?: any }>;
   activeAlerts: NewOrderAlert[];
   dismissAlert: (id: string) => void;
   clearAllAlerts: () => void;
@@ -36,29 +37,20 @@ interface AdminOrderAlertContextType {
 
 const AdminOrderAlertContext = createContext<AdminOrderAlertContextType | undefined>(undefined);
 
-// Web Audio API Synthesizer: Professional Quick-Commerce 2-Tone Chime
-function playProfessionalChime(volume = 0.8): AudioContext | null {
+// Synthesize 3-tone chime through an active Web Audio AudioContext
+function synthesizeChime(ctx: AudioContext, volume: number) {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return null;
-
-    const ctx = new AudioContextClass();
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-
     const now = ctx.currentTime;
     const masterGain = ctx.createGain();
     const clampedVol = Math.max(0.05, Math.min(1.0, volume));
     masterGain.gain.setValueAtTime(clampedVol, now);
     masterGain.connect(ctx.destination);
 
-    // Tone 1: 587.33 Hz (D5 - Bright clear chime base)
+    // Tone 1: 587.33 Hz (D5 - Clear bell base)
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'sine';
     osc1.frequency.setValueAtTime(587.33, now);
-    // Envelope for Tone 1
     gain1.gain.setValueAtTime(0.0, now);
     gain1.gain.linearRampToValueAtTime(0.7, now + 0.015);
     gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
@@ -67,22 +59,21 @@ function playProfessionalChime(volume = 0.8): AudioContext | null {
     osc1.start(now);
     osc1.stop(now + 0.6);
 
-    // Tone 2: 880.00 Hz (A5 - High harmonic chime finish, delayed by 110ms)
+    // Tone 2: 880.00 Hz (A5 - High harmonic chime finish, delayed by 100ms)
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = 'triangle';
-    osc2.frequency.setValueAtTime(880.00, now + 0.11);
-    // Envelope for Tone 2
+    osc2.frequency.setValueAtTime(880.00, now + 0.1);
     gain2.gain.setValueAtTime(0.0, now);
-    gain2.gain.setValueAtTime(0.0, now + 0.11);
-    gain2.gain.linearRampToValueAtTime(0.85, now + 0.125);
+    gain2.gain.setValueAtTime(0.0, now + 0.1);
+    gain2.gain.linearRampToValueAtTime(0.85, now + 0.115);
     gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
     osc2.connect(gain2);
     gain2.connect(masterGain);
-    osc2.start(now + 0.11);
+    osc2.start(now + 0.1);
     osc2.stop(now + 0.9);
 
-    // Tone 3: Harmonic sparkle (1174.66 Hz - D6)
+    // Tone 3: 1174.66 Hz (D6 - Crisp sparkle overtone)
     const osc3 = ctx.createOscillator();
     const gain3 = ctx.createGain();
     osc3.type = 'sine';
@@ -95,11 +86,8 @@ function playProfessionalChime(volume = 0.8): AudioContext | null {
     gain3.connect(masterGain);
     osc3.start(now + 0.14);
     osc3.stop(now + 0.7);
-
-    return ctx;
   } catch (err) {
-    console.warn('[AdminOrderAlert] AudioContext playback note:', err);
-    return null;
+    console.warn('[AdminOrderAlert] Synthesizer note:', err);
   }
 }
 
@@ -132,7 +120,21 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
   // Track seen order IDs to prevent duplicate alerts (Deduplication engine)
   const seenOrderIdsRef = useRef<Set<string>>(new Set());
   const isInitialSyncDoneRef = useRef<boolean>(false);
+
+  // Dual-Engine Audio Refs
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize persistent HTML5 Audio Element
+  useEffect(() => {
+    try {
+      const audio = new Audio('/order-chime.wav');
+      audio.preload = 'auto';
+      audioElementRef.current = audio;
+    } catch (e) {
+      console.warn('[AdminOrderAlert] HTML5 Audio preload note:', e);
+    }
+  }, []);
 
   const setSoundEnabled = (enabled: boolean) => {
     setSoundEnabledState(enabled);
@@ -145,9 +147,15 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
     localStorage.setItem('fresh_admin_sound_volume', String(clamped));
   };
 
-  // Unlock audio context on user gesture (respects browser autoplay policy)
+  // Helper to retrieve active admin authentication token
+  const getAdminToken = useCallback(() => {
+    return localStorage.getItem('admin_token') || localStorage.getItem('token') || '';
+  }, []);
+
+  // Unlock audio engines upon first user gesture (respects browser autoplay policies)
   const unlockAudio = useCallback(async () => {
     try {
+      // 1. Unlock Web Audio Context
       if (!audioContextRef.current) {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioContextClass) {
@@ -157,17 +165,100 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
       if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
       }
+
+      // 2. Prime HTML5 Audio element
+      if (audioElementRef.current) {
+        audioElementRef.current.volume = 0.01;
+        const playPromise = audioElementRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              audioElementRef.current?.pause();
+              if (audioElementRef.current) audioElementRef.current.currentTime = 0;
+            })
+            .catch(() => {});
+        }
+      }
+
       setIsAudioUnlocked(true);
     } catch (e) {
-      console.warn('Could not unlock audio context:', e);
+      console.warn('[AdminOrderAlert] Audio unlock note:', e);
     }
   }, []);
+
+  // Dual-engine Chime Sound Player
+  const playChimeSound = useCallback(
+    (vol = volume) => {
+      let soundPlayed = false;
+
+      // Engine 1: HTML5 Audio Element (Most reliable in background tabs)
+      if (audioElementRef.current) {
+        try {
+          audioElementRef.current.volume = Math.max(0.05, Math.min(1.0, vol));
+          audioElementRef.current.currentTime = 0;
+          const promise = audioElementRef.current.play();
+          if (promise !== undefined) {
+            promise
+              .then(() => {
+                soundPlayed = true;
+              })
+              .catch(() => {
+                // Autoplay restriction or background throttle; fall through to Engine 2
+              });
+          }
+        } catch {}
+      }
+
+      // Engine 2: Web Audio API Synthesizer
+      try {
+        if (!audioContextRef.current) {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            audioContextRef.current = new AudioContextClass();
+          }
+        }
+        if (audioContextRef.current) {
+          if (audioContextRef.current.state === 'suspended') {
+            audioContextRef.current.resume().then(() => {
+              if (audioContextRef.current) synthesizeChime(audioContextRef.current, vol);
+            }).catch(() => {});
+          } else {
+            synthesizeChime(audioContextRef.current, vol);
+          }
+        }
+      } catch (err) {
+        console.warn('[AdminOrderAlert] Audio synthesis note:', err);
+      }
+    },
+    [volume]
+  );
 
   // Test sound button handler
   const testSound = useCallback(() => {
     unlockAudio();
-    playProfessionalChime(volume);
-  }, [unlockAudio, volume]);
+    playChimeSound(volume);
+  }, [unlockAudio, playChimeSound, volume]);
+
+  // Test email alert handler
+  const testEmailAlert = useCallback(async () => {
+    try {
+      const res = await api.post('/orders/admin/test-email');
+      return {
+        success: true,
+        message: res.data?.message || 'Test email dispatched successfully',
+        config: res.data?.data?.config,
+        details: res.data?.data?.details,
+      };
+    } catch (err: any) {
+      const errMsg = err.response?.data?.message || err.message || 'Failed to send test email';
+      return {
+        success: false,
+        message: errMsg,
+        config: err.response?.data?.config,
+        details: err.response?.data?.details,
+      };
+    }
+  }, []);
 
   // Request browser desktop notification permission
   const requestDesktopNotification = useCallback(async () => {
@@ -210,11 +301,7 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
 
       // 2. Play notification sound (if enabled)
       if (soundEnabled) {
-        try {
-          playProfessionalChime(volume);
-        } catch (soundErr) {
-          console.warn('[AdminOrderAlert] Audio playback prevented by browser:', soundErr);
-        }
+        playChimeSound(volume);
       }
 
       // 3. Increment new order count
@@ -256,24 +343,24 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
         }
       }
     },
-    [soundEnabled, volume, navigate]
+    [soundEnabled, volume, playChimeSound, navigate]
   );
 
-  // 1. Initial Sync: Load existing orders into seenOrderIdsRef so NO SOUND is played on page load
+  // 1. Initial Sync: Load existing orders into seenOrderIdsRef so NO SOUND is played on initial page load
   useEffect(() => {
     let isMounted = true;
 
     async function initialSync() {
       try {
-        const token = localStorage.getItem('admin_token');
-        if (!token) return;
-
-        const res = await api.get('/orders/admin/recent-alerts');
-        if (res.data?.data && Array.isArray(res.data.data)) {
-          res.data.data.forEach((ord: any) => {
-            const id = ord.order_id || ord.id;
-            if (id) seenOrderIdsRef.current.add(id);
-          });
+        const token = getAdminToken();
+        if (token) {
+          const res = await api.get('/orders/admin/recent-alerts');
+          if (res.data?.data && Array.isArray(res.data.data)) {
+            res.data.data.forEach((ord: any) => {
+              const id = ord.order_id || ord.id;
+              if (id) seenOrderIdsRef.current.add(id);
+            });
+          }
         }
       } catch (err) {
         console.warn('[AdminOrderAlert] Initial alerts sync note:', err);
@@ -286,31 +373,39 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
 
     initialSync();
 
-    // Auto-unlock audio on first user click anywhere in admin panel
+    // Auto-unlock audio on user click, touch, or keypress anywhere in admin panel
     const handleFirstInteraction = () => {
       unlockAudio();
       window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
       window.removeEventListener('keydown', handleFirstInteraction);
     };
-    window.addEventListener('click', handleFirstInteraction);
-    window.addEventListener('keydown', handleFirstInteraction);
+    window.addEventListener('click', handleFirstInteraction, { passive: true });
+    window.addEventListener('touchstart', handleFirstInteraction, { passive: true });
+    window.addEventListener('keydown', handleFirstInteraction, { passive: true });
 
     return () => {
       isMounted = false;
       window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
       window.removeEventListener('keydown', handleFirstInteraction);
     };
-  }, [unlockAudio]);
+  }, [unlockAudio, getAdminToken]);
 
-  // 2. Real-time Connection: Server-Sent Events (SSE) Stream
+  // 2. Real-time Connection: Server-Sent Events (SSE) Stream + Fallback Polling
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: any = null;
     let isCancelled = false;
 
     const connectSSE = () => {
-      const adminToken = localStorage.getItem('admin_token');
-      if (!adminToken) return;
+      const adminToken = getAdminToken();
+      if (!adminToken) {
+        if (!isCancelled) {
+          reconnectTimeout = setTimeout(connectSSE, 3000);
+        }
+        return;
+      }
 
       const sseUrl = `${API_BASE_URL}/orders/admin/live-stream?token=${encodeURIComponent(adminToken)}`;
 
@@ -336,23 +431,22 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
             eventSource = null;
           }
           if (!isCancelled) {
-            // Reconnect backoff after 5 seconds
-            reconnectTimeout = setTimeout(connectSSE, 5000);
+            reconnectTimeout = setTimeout(connectSSE, 6000);
           }
         };
       } catch (err) {
         console.warn('[AdminOrderAlert] EventSource connection note:', err);
         if (!isCancelled) {
-          reconnectTimeout = setTimeout(connectSSE, 10000);
+          reconnectTimeout = setTimeout(connectSSE, 8000);
         }
       }
     };
 
     connectSSE();
 
-    // 3. Fallback Authenticated Polling (Runs every 15 seconds to ensure zero missed orders)
+    // 3. Fallback Authenticated Polling (Runs every 10 seconds to ensure 100% order capture)
     const pollInterval = setInterval(async () => {
-      const adminToken = localStorage.getItem('admin_token');
+      const adminToken = getAdminToken();
       if (!adminToken) return;
 
       try {
@@ -368,10 +462,10 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
       } catch (err) {
         // Silent polling failure fallback
       }
-    }, 15000);
+    }, 10000);
 
     // 4. Cross-tab synchronization via liveSync
-    const unsubscribeSync = subscribeLiveUpdates(['orders'], (type, payload) => {
+    const unsubscribeSync = subscribeLiveUpdates(['orders'], (_type, payload) => {
       if (payload && (payload.order_id || payload.id)) {
         handleIncomingOrder(payload);
       }
@@ -384,7 +478,7 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
       clearInterval(pollInterval);
       unsubscribeSync();
     };
-  }, [handleIncomingOrder]);
+  }, [handleIncomingOrder, getAdminToken]);
 
   return (
     <AdminOrderAlertContext.Provider
@@ -396,6 +490,7 @@ export const AdminOrderAlertProvider: React.FC<{ children: React.ReactNode }> = 
         isAudioUnlocked,
         unlockAudio,
         testSound,
+        testEmailAlert,
         activeAlerts,
         dismissAlert,
         clearAllAlerts,

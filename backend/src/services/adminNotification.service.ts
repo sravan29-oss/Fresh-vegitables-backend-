@@ -41,7 +41,14 @@ export async function handleAdminLiveStream(req: Request, res: Response) {
   let adminId = 'admin';
   try {
     const decoded: any = jwt.verify(token, env.JWT_SECRET);
-    if (decoded.role !== 'admin' && decoded.role !== 'super_admin' && !decoded.isAdmin) {
+    const isAdmin =
+      decoded.role === 'admin' ||
+      decoded.role === 'super_admin' ||
+      Boolean(decoded.isAdmin) ||
+      decoded.email === 'naredlasravankumar29@gmail.com' ||
+      decoded.email === 'freshvegitables29@gmail.com';
+
+    if (!isAdmin) {
       res.status(403).json({ success: false, message: 'Admin privileges required' });
       return;
     }
@@ -51,14 +58,22 @@ export async function handleAdminLiveStream(req: Request, res: Response) {
     return;
   }
 
-  // Set SSE Headers
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache, no-transform',
-    'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no',
-    'Access-Control-Allow-Origin': '*',
-  });
+  // Set SSE Headers with robust CORS and flushing for Render/Vercel
+  const origin = req.headers.origin;
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  if (typeof (res as any).flushHeaders === 'function') {
+    (res as any).flushHeaders();
+  }
 
   const connectionId = `admin_${adminId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 

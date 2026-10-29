@@ -74,6 +74,7 @@ export const AdminOrdersPage: React.FC = () => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isResendingEmail, setIsResendingEmail] = useState<boolean>(false);
+  const [resendEmailMsg, setResendEmailMsg] = useState<{ id: string; success: boolean; text: string } | null>(null);
 
   const { id: paramOrderId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -109,10 +110,20 @@ export const AdminOrdersPage: React.FC = () => {
   const handleResendEmail = async (orderId: string) => {
     try {
       setIsResendingEmail(true);
+      setResendEmailMsg(null);
       const res = await api.post(`/orders/admin/${orderId}/resend-email`);
-      showToast('success', res.data?.message || 'Order alert email sent to freshvegitables29@gmail.com!');
+      const msg = res.data?.message || 'Order alert email sent to freshvegitables29@gmail.com!';
+      showToast('success', msg);
+      setResendEmailMsg({ id: orderId, success: true, text: msg });
+      setSelectedOrder((prev: any) =>
+        prev && prev.id === orderId
+          ? { ...prev, admin_email_sent: true, admin_email_error: null }
+          : prev
+      );
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to send email alert. Check SMTP configuration.');
+      const errMsg = err.response?.data?.message || 'Failed to send email alert. Check SMTP configuration.';
+      showToast('error', errMsg);
+      setResendEmailMsg({ id: orderId, success: false, text: errMsg });
     } finally {
       setIsResendingEmail(false);
     }
@@ -1319,6 +1330,50 @@ export const AdminOrdersPage: React.FC = () => {
                     <span className="text-slate-300 font-medium">{selectedOrder.customer_email}</span>
                   </div>
                 )}
+
+                {/* Admin Email Notification Status & Resend */}
+                <div className="pt-2.5 border-t border-slate-800/60 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-slate-400 text-[11px]">Store Email Alert:</span>
+                      {selectedOrder.admin_email_sent ? (
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          Sent
+                        </span>
+                      ) : selectedOrder.admin_email_error ? (
+                        <span
+                          className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20"
+                          title={selectedOrder.admin_email_error}
+                        >
+                          Failed
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                          Pending
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleResendEmail(selectedOrder.id)}
+                      disabled={isResendingEmail}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Send or resend email notification to freshvegitables29@gmail.com"
+                    >
+                      <Mail className="w-3 h-3" />
+                      <span>{isResendingEmail ? 'Sending...' : 'Resend Email'}</span>
+                    </button>
+                  </div>
+                  {resendEmailMsg && resendEmailMsg.id === selectedOrder.id && (
+                    <p
+                      className={`text-[10.5px] font-medium ${
+                        resendEmailMsg.success ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {resendEmailMsg.text}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* 3. Delivery Address & Google Maps Location */}

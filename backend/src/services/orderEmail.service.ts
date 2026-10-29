@@ -91,12 +91,13 @@ function computeGoogleMapsUrl(snapshot: any): { url: string | null; isGps: boole
 }
 
 /**
- * Create Nodemailer Transporter
+ * Create Nodemailer Transporter with fallback support
  */
-function createTransporter() {
+function createTransporter(options?: { forcePort?: number; forceSecure?: boolean }) {
   const host = env.SMTP_HOST || 'smtp.gmail.com';
-  const port = env.SMTP_PORT || 465;
-  const secure = env.SMTP_SECURE;
+  const defaultPort = env.SMTP_PORT || 587;
+  const port = options?.forcePort ?? defaultPort;
+  const secure = options?.forceSecure ?? (port === 465);
   const user = env.SMTP_USER;
   const pass = env.SMTP_PASS;
 
@@ -112,10 +113,12 @@ function createTransporter() {
       user,
       pass,
     },
-    // Useful timeout options so email delivery never hangs the worker
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    tls: {
+      rejectUnauthorized: false,
+    },
+    connectionTimeout: 12000,
+    greetingTimeout: 12000,
+    socketTimeout: 20000,
   });
 }
 
@@ -543,7 +546,23 @@ Fresh Vegetables Organic Delivery Service
       html: htmlContent,
     };
 
-    const sendResult = await transporter.sendMail(mailOptions);
+    let sendResult: any;
+    try {
+      sendResult = await transporter.sendMail(mailOptions);
+    } catch (primaryErr: any) {
+      console.warn(`[OrderEmailService] Primary transport failed (${primaryErr.message}). Retrying with alternative port...`);
+      // Try alternative port (if 587 -> try 465, if 465 -> try 587)
+      const currentPort = env.SMTP_PORT || 587;
+      const altPort = currentPort === 465 ? 587 : 465;
+      const altTransporter = createTransporter({ forcePort: altPort, forceSecure: altPort === 465 });
+      if (altTransporter) {
+        sendResult = await altTransporter.sendMail(mailOptions);
+        console.log(`[OrderEmailService] ✅ Order notification sent via fallback port ${altPort}`);
+      } else {
+        throw primaryErr;
+      }
+    }
+
     console.log(`[OrderEmailService] ✅ Order notification email sent to ${recipient} for Order #${orderNumber} (MessageId: ${sendResult.messageId})`);
 
     // 9. Update notification outbox and order records
@@ -587,3 +606,114 @@ Fresh Vegetables Organic Delivery Service
     return { success: false, message: errorMsg };
   }
 }
+
+/**
+ * Diagnostic test function for Admin to verify email configuration & delivery
+ */
+export async function testOrderEmailConnection(): Promise<{
+  success: boolean;
+  message: string;
+  config: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    recipient: string;
+    passConfigured: boolean;
+  };
+  details?: any;
+}> {
+  const user = env.SMTP_USER;
+  const pass = env.SMTP_PASS;
+  const recipient = env.ORDER_NOTIFICATION_EMAIL || 'freshvegitables29@gmail.com';
+
+  const config = {
+    host: env.SMTP_HOST || 'smtp.gmail.com',
+    port: env.SMTP_PORT || 587,
+    secure: env.SMTP_SECURE,
+    user: user || '(empty)',
+    recipient,
+    passConfigured: Boolean(pass && pass.trim().length > 0),
+  };
+
+  if (!user || !pass) {
+    return {
+      success: false,
+      message: 'SMTP credentials missing: SMTP_USER or SMTP_PASS environment variable is not configured on the server.',
+      config,
+    };
+  }
+
+  const transporter = createTransporter();
+  if (!transporter) {
+    return {
+      success: false,
+      message: 'Could not initialize email transporter.',
+      config,
+    };
+  }
+
+  try {
+    await transporter.verify();
+
+    const testInfo = await transporter.sendMail({
+      from: `"Fresh Vegetables Orders" <${user}>`,
+      to: recipient,
+      subject: `🔔 [DIAGNOSTIC TEST] Fresh Vegetables Order Email System is Online!`,
+      text: `Hello! This is an automated diagnostic test from Fresh Vegetables Organic.\n\nServer time: ${new Date().toISOString()}\nTarget: ${recipient}\nStatus: Operational!`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 550px; margin: 0 auto; padding: 24px; border: 2px solid #16a34a; border-radius: 12px; background: #f0fdf4;">
+          <h2 style="color: #166534; margin: 0 0 12px;">✅ Order Notification System Online!</h2>
+          <p style="color: #15803d; font-size: 14px; margin: 0 0 16px;">This diagnostic email confirms that your store email delivery pipeline is 100% operational.</p>
+          <div style="background: #ffffff; border-radius: 8px; padding: 14px; border: 1px solid #bbf7d0;">
+            <p style="margin: 4px 0; font-size: 13px;"><strong>Sender Account:</strong> ${escapeHtml(user)}</p>
+            <p style="margin: 4px 0; font-size: 13px;"><strong>Notification Recipient:</strong> ${escapeHtml(recipient)}</p>
+            <p style="margin: 4px 0; font-size: 13px;"><strong>Connection:</strong> ${config.host}:${config.port} (TLS: ${config.secure ? 'SSL' : 'STARTTLS'})</p>
+            <p style="margin: 4px 0; font-size: 13px;"><strong>Dispatched At:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</p>
+          </div>
+        </div>
+      `,
+    });
+
+    return {
+      success: true,
+      message: `Test email successfully delivered to ${recipient}!`,
+      config,
+      details: { messageId: testInfo.messageId },
+    };
+  } catch (err: any) {
+    // Attempt fallback port before returning error
+    const fallbackPort = (env.SMTP_PORT || 587) === 465 ? 587 : 465;
+    try {
+      const altTransporter = createTransporter({ forcePort: fallbackPort, forceSecure: fallbackPort === 465 });
+      if (altTransporter) {
+        await altTransporter.verify();
+        const altTestInfo = await altTransporter.sendMail({
+          from: `"Fresh Vegetables Orders" <${user}>`,
+          to: recipient,
+          subject: `🔔 [DIAGNOSTIC TEST - VIA PORT ${fallbackPort}] Fresh Vegetables Order Email System Online!`,
+          text: `Test email successfully delivered via fallback port ${fallbackPort}.`,
+          html: `<p>Test email successfully delivered via fallback port ${fallbackPort}.</p>`,
+        });
+        return {
+          success: true,
+          message: `Test email successfully delivered to ${recipient} (via fallback port ${fallbackPort})!`,
+          config: { ...config, port: fallbackPort },
+          details: { messageId: altTestInfo.messageId },
+        };
+      }
+    } catch {}
+
+    return {
+      success: false,
+      message: `Email test failed: ${err.message}`,
+      config,
+      details: {
+        code: err.code,
+        response: err.response,
+        responseCode: err.responseCode,
+      },
+    };
+  }
+}
+

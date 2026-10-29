@@ -8,9 +8,10 @@ import {
   X,
   ExternalLink,
   ShoppingBag,
-  Sparkles,
-  Sliders,
   Check,
+  Mail,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { useAdminOrderAlerts } from '../../context/AdminOrderAlertContext';
 
@@ -22,6 +23,7 @@ export const AdminOrderNotificationBar: React.FC = () => {
     volume,
     setVolume,
     testSound,
+    testEmailAlert,
     activeAlerts,
     dismissAlert,
     todayNewOrderCount,
@@ -32,6 +34,12 @@ export const AdminOrderNotificationBar: React.FC = () => {
   } = useAdminOrderAlerts();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
   const settingsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,10 +52,26 @@ export const AdminOrderNotificationBar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleTestEmail = async () => {
+    try {
+      setIsTestingEmail(true);
+      setEmailTestResult(null);
+      const res = await testEmailAlert();
+      setEmailTestResult(res);
+    } catch (err: any) {
+      setEmailTestResult({
+        success: false,
+        message: err.message || 'Failed to trigger test email',
+      });
+    } finally {
+      setIsTestingEmail(false);
+    }
+  };
+
   return (
     <>
       {/* ─── Top Bar Controls (Placed inside AdminLayout Header) ─── */}
-      <div className="flex items-center gap-2.5 relative" ref={settingsRef}>
+      <div className="flex items-center gap-2 relative" ref={settingsRef}>
         
         {/* Live New Order Counter Badge */}
         {todayNewOrderCount > 0 && (
@@ -58,6 +82,18 @@ export const AdminOrderNotificationBar: React.FC = () => {
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
             <span>{todayNewOrderCount} New</span>
+          </button>
+        )}
+
+        {/* Audio Unlocked Status Pill if not yet interacted */}
+        {!isAudioUnlocked && (
+          <button
+            onClick={unlockAudio}
+            className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-bold hover:bg-amber-500/20 transition-all cursor-pointer"
+            title="Click once to enable live audio playback in your browser"
+          >
+            <Bell className="w-3 h-3 text-amber-400 animate-bounce" />
+            <span>Enable Sound</span>
           </button>
         )}
 
@@ -82,13 +118,15 @@ export const AdminOrderNotificationBar: React.FC = () => {
           </span>
         </button>
 
-        {/* Sound Settings Dropdown Popover */}
+        {/* Sound & Notification Settings Dropdown Popover */}
         {isSettingsOpen && (
-          <div className="absolute right-0 top-11 w-72 rounded-2xl bg-slate-950 border border-slate-800 p-4 shadow-2xl z-50 text-slate-100 animate-in fade-in slide-in-from-top-2 duration-150 space-y-4">
+          <div className="absolute right-0 top-11 w-80 rounded-2xl bg-slate-950 border border-slate-800 p-4 shadow-2xl z-50 text-slate-100 animate-in fade-in slide-in-from-top-2 duration-150 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-emerald-400" />
-                <h4 className="font-extrabold text-xs uppercase tracking-wider text-white">Order Alert Settings</h4>
+                <h4 className="font-extrabold text-xs uppercase tracking-wider text-white">
+                  Order Alert Settings
+                </h4>
               </div>
               <button
                 onClick={() => setIsSettingsOpen(false)}
@@ -98,11 +136,11 @@ export const AdminOrderNotificationBar: React.FC = () => {
               </button>
             </div>
 
-            {/* Toggle Switch */}
+            {/* Chime Sound Toggle Switch */}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold text-white">Chime Sound Alert</p>
-                <p className="text-[10.5px] text-slate-400">Plays when new order is received</p>
+                <p className="text-[10.5px] text-slate-400">Plays when new order arrives</p>
               </div>
               <button
                 type="button"
@@ -124,7 +162,9 @@ export const AdminOrderNotificationBar: React.FC = () => {
               <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between text-xs font-semibold">
                   <span className="text-slate-400 text-[11px]">Volume</span>
-                  <span className="text-emerald-400 font-mono font-bold">{Math.round(volume * 100)}%</span>
+                  <span className="text-emerald-400 font-mono font-bold">
+                    {Math.round(volume * 100)}%
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -146,6 +186,48 @@ export const AdminOrderNotificationBar: React.FC = () => {
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>Test Chime Sound</span>
             </button>
+
+            {/* Email Notification Diagnostic Section */}
+            <div className="pt-2 border-t border-slate-800/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-white">Email Notification</p>
+                  <p className="text-[10px] text-slate-400">freshvegitables29@gmail.com</p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleTestEmail}
+                disabled={isTestingEmail}
+                className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-sky-400 hover:text-sky-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 disabled:opacity-50"
+              >
+                {isTestingEmail ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Mail className="w-3.5 h-3.5" />
+                )}
+                <span>{isTestingEmail ? 'Verifying SMTP...' : 'Test Email Alert'}</span>
+              </button>
+
+              {emailTestResult && (
+                <div
+                  className={`p-2.5 rounded-xl border text-[11px] leading-relaxed flex items-start gap-2 ${
+                    emailTestResult.success
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                  }`}
+                >
+                  {emailTestResult.success ? (
+                    <Check className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                  )}
+                  <div className="flex-1">
+                    <p className="font-semibold">{emailTestResult.message}</p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Desktop OS Notification Permission */}
             <div className="pt-2 border-t border-slate-800/80">
@@ -189,7 +271,11 @@ export const AdminOrderNotificationBar: React.FC = () => {
                     New Order #{alert.order_number}
                   </h4>
                   <p className="text-[11px] text-slate-400 truncate">
-                    {alert.customer_name} • {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {alert.customer_name} •{' '}
+                    {new Date(alert.created_at).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </p>
                 </div>
               </div>
@@ -204,7 +290,9 @@ export const AdminOrderNotificationBar: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-between text-xs bg-slate-900 px-3 py-2 rounded-xl border border-slate-800">
-              <span className="font-extrabold text-emerald-400 text-sm">₹{alert.total.toFixed(2)}</span>
+              <span className="font-extrabold text-emerald-400 text-sm">
+                ₹{alert.total.toFixed(2)}
+              </span>
               <span className="text-[10px] font-black uppercase tracking-wider bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">
                 {alert.payment_method} ({alert.payment_status})
               </span>
@@ -218,7 +306,7 @@ export const AdminOrderNotificationBar: React.FC = () => {
                 }}
                 className="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-98"
               >
-                <span>Open Order Details</span>
+                <span>View Order Details</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </button>
             </div>

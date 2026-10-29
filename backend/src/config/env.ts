@@ -55,8 +55,8 @@ export const env = {
 
   // Order Email Notifications & SMTP Configuration
   SMTP_HOST: process.env.SMTP_HOST || 'smtp.gmail.com',
-  SMTP_PORT: parseInt(process.env.SMTP_PORT || '465'),
-  SMTP_SECURE: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : (parseInt(process.env.SMTP_PORT || '465') === 465),
+  SMTP_PORT: parseInt(process.env.SMTP_PORT || '587'),
+  SMTP_SECURE: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : (parseInt(process.env.SMTP_PORT || '587') === 465),
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
   ORDER_NOTIFICATION_EMAIL: process.env.ORDER_NOTIFICATION_EMAIL || 'freshvegitables29@gmail.com',
