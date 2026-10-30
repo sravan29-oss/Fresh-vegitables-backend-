@@ -34,6 +34,21 @@ export interface StoreDeliverySettings {
   hub_longitude?: number | null;
   delivery_radius_km?: number;
   serviceability_enabled?: boolean;
+
+  // Delivery Time Slot & Operating Hours Configuration
+  operating_hours_start?: string;
+  operating_hours_end?: string;
+  express_enabled?: boolean;
+  express_start_time?: string;
+  express_end_time?: string;
+  morning_slot_enabled?: boolean;
+  morning_slot_start?: string;
+  morning_slot_end?: string;
+  morning_slot_cutoff?: string;
+  evening_slot_enabled?: boolean;
+  evening_slot_start?: string;
+  evening_slot_end?: string;
+  evening_slot_cutoff?: string;
 }
 
 export function readSettingsFromFile(): StoreDeliverySettings | null {
@@ -134,6 +149,19 @@ export function getPersistedDeliverySettings(): StoreDeliverySettings {
     hub_longitude: envHub.lng !== null ? envHub.lng : 78.516972,
     delivery_radius_km: envHub.radius > 0 ? envHub.radius : 5.0,
     serviceability_enabled: true,
+    operating_hours_start: '07:00',
+    operating_hours_end: '21:30',
+    express_enabled: true,
+    express_start_time: '07:00',
+    express_end_time: '21:00',
+    morning_slot_enabled: true,
+    morning_slot_start: '07:00',
+    morning_slot_end: '09:00',
+    morning_slot_cutoff: '08:30',
+    evening_slot_enabled: true,
+    evening_slot_start: '17:00',
+    evening_slot_end: '19:00',
+    evening_slot_cutoff: '18:30',
   };
 
   writeSettingsToFile(fallback);
@@ -193,6 +221,19 @@ export function savePersistedDeliverySettings(partial: Partial<StoreDeliverySett
     hub_longitude: newLng,
     delivery_radius_km: newRadius,
     serviceability_enabled: partial.serviceability_enabled !== undefined ? Boolean(partial.serviceability_enabled) : (current.serviceability_enabled !== false),
+    operating_hours_start: partial.operating_hours_start !== undefined ? String(partial.operating_hours_start) : (current.operating_hours_start || '07:00'),
+    operating_hours_end: partial.operating_hours_end !== undefined ? String(partial.operating_hours_end) : (current.operating_hours_end || '21:30'),
+    express_enabled: partial.express_enabled !== undefined ? Boolean(partial.express_enabled) : (current.express_enabled !== false),
+    express_start_time: partial.express_start_time !== undefined ? String(partial.express_start_time) : (current.express_start_time || '07:00'),
+    express_end_time: partial.express_end_time !== undefined ? String(partial.express_end_time) : (current.express_end_time || '21:00'),
+    morning_slot_enabled: partial.morning_slot_enabled !== undefined ? Boolean(partial.morning_slot_enabled) : (current.morning_slot_enabled !== false),
+    morning_slot_start: partial.morning_slot_start !== undefined ? String(partial.morning_slot_start) : (current.morning_slot_start || '07:00'),
+    morning_slot_end: partial.morning_slot_end !== undefined ? String(partial.morning_slot_end) : (current.morning_slot_end || '09:00'),
+    morning_slot_cutoff: partial.morning_slot_cutoff !== undefined ? String(partial.morning_slot_cutoff) : (current.morning_slot_cutoff || '08:30'),
+    evening_slot_enabled: partial.evening_slot_enabled !== undefined ? Boolean(partial.evening_slot_enabled) : (current.evening_slot_enabled !== false),
+    evening_slot_start: partial.evening_slot_start !== undefined ? String(partial.evening_slot_start) : (current.evening_slot_start || '17:00'),
+    evening_slot_end: partial.evening_slot_end !== undefined ? String(partial.evening_slot_end) : (current.evening_slot_end || '19:00'),
+    evening_slot_cutoff: partial.evening_slot_cutoff !== undefined ? String(partial.evening_slot_cutoff) : (current.evening_slot_cutoff || '18:30'),
     updated_at: new Date().toISOString(),
   };
 

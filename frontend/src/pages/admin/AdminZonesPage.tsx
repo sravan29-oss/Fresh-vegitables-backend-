@@ -117,7 +117,20 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
     Number(deliverySettings.surge_charge) !== Number(savedSettings.surge_charge) ||
     String(deliverySettings.estimated_delivery_time || '').trim() !== String(savedSettings.estimated_delivery_time || '').trim() ||
     Boolean(deliverySettings.enable_free_delivery) !== Boolean(savedSettings.enable_free_delivery) ||
-    Boolean(deliverySettings.is_delivery_active) !== Boolean(savedSettings.is_delivery_active);
+    Boolean(deliverySettings.is_delivery_active) !== Boolean(savedSettings.is_delivery_active) ||
+    String(deliverySettings.operating_hours_start || '') !== String(savedSettings.operating_hours_start || '') ||
+    String(deliverySettings.operating_hours_end || '') !== String(savedSettings.operating_hours_end || '') ||
+    Boolean(deliverySettings.express_enabled) !== Boolean(savedSettings.express_enabled) ||
+    String(deliverySettings.express_start_time || '') !== String(savedSettings.express_start_time || '') ||
+    String(deliverySettings.express_end_time || '') !== String(savedSettings.express_end_time || '') ||
+    Boolean(deliverySettings.morning_slot_enabled) !== Boolean(savedSettings.morning_slot_enabled) ||
+    String(deliverySettings.morning_slot_start || '') !== String(savedSettings.morning_slot_start || '') ||
+    String(deliverySettings.morning_slot_end || '') !== String(savedSettings.morning_slot_end || '') ||
+    String(deliverySettings.morning_slot_cutoff || '') !== String(savedSettings.morning_slot_cutoff || '') ||
+    Boolean(deliverySettings.evening_slot_enabled) !== Boolean(savedSettings.evening_slot_enabled) ||
+    String(deliverySettings.evening_slot_start || '') !== String(savedSettings.evening_slot_start || '') ||
+    String(deliverySettings.evening_slot_end || '') !== String(savedSettings.evening_slot_end || '') ||
+    String(deliverySettings.evening_slot_cutoff || '') !== String(savedSettings.evening_slot_cutoff || '');
 
   const handleResetSettings = () => {
     setDeliverySettings(savedSettings);
@@ -168,6 +181,19 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
           delivery_radius_km: s.delivery_radius_km ? Number(s.delivery_radius_km) : 5.0,
           serviceability_enabled: s.serviceability_enabled !== false,
           is_hub_configured: Boolean(s.is_hub_configured),
+          operating_hours_start: s.operating_hours_start || '07:00',
+          operating_hours_end: s.operating_hours_end || '21:30',
+          express_enabled: s.express_enabled !== false,
+          express_start_time: s.express_start_time || '07:00',
+          express_end_time: s.express_end_time || '21:00',
+          morning_slot_enabled: s.morning_slot_enabled !== false,
+          morning_slot_start: s.morning_slot_start || '07:00',
+          morning_slot_end: s.morning_slot_end || '09:00',
+          morning_slot_cutoff: s.morning_slot_cutoff || '08:30',
+          evening_slot_enabled: s.evening_slot_enabled !== false,
+          evening_slot_start: s.evening_slot_start || '17:00',
+          evening_slot_end: s.evening_slot_end || '19:00',
+          evening_slot_cutoff: s.evening_slot_cutoff || '18:30',
         };
         setDeliverySettings(normalized);
         setSavedSettings(normalized);
@@ -214,6 +240,19 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
         estimated_delivery_time: String(deliverySettings.estimated_delivery_time || '25–35 mins').trim(),
         surge_charge: Math.max(0, Number(deliverySettings.surge_charge) || 0),
         is_delivery_active: Boolean(deliverySettings.is_delivery_active),
+        operating_hours_start: deliverySettings.operating_hours_start || '07:00',
+        operating_hours_end: deliverySettings.operating_hours_end || '21:30',
+        express_enabled: deliverySettings.express_enabled !== false,
+        express_start_time: deliverySettings.express_start_time || '07:00',
+        express_end_time: deliverySettings.express_end_time || '21:00',
+        morning_slot_enabled: deliverySettings.morning_slot_enabled !== false,
+        morning_slot_start: deliverySettings.morning_slot_start || '07:00',
+        morning_slot_end: deliverySettings.morning_slot_end || '09:00',
+        morning_slot_cutoff: deliverySettings.morning_slot_cutoff || '08:30',
+        evening_slot_enabled: deliverySettings.evening_slot_enabled !== false,
+        evening_slot_start: deliverySettings.evening_slot_start || '17:00',
+        evening_slot_end: deliverySettings.evening_slot_end || '19:00',
+        evening_slot_cutoff: deliverySettings.evening_slot_cutoff || '18:30',
       };
 
       const res = await api.put('/delivery/settings', payload);
@@ -228,6 +267,19 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
           estimated_delivery_time: String(updated.estimated_delivery_time || '25–35 mins'),
           is_delivery_active: updated.is_delivery_active !== false,
           surge_charge: Number(updated.surge_charge || 0),
+          operating_hours_start: updated.operating_hours_start || '07:00',
+          operating_hours_end: updated.operating_hours_end || '21:30',
+          express_enabled: updated.express_enabled !== false,
+          express_start_time: updated.express_start_time || '07:00',
+          express_end_time: updated.express_end_time || '21:00',
+          morning_slot_enabled: updated.morning_slot_enabled !== false,
+          morning_slot_start: updated.morning_slot_start || '07:00',
+          morning_slot_end: updated.morning_slot_end || '09:00',
+          morning_slot_cutoff: updated.morning_slot_cutoff || '08:30',
+          evening_slot_enabled: updated.evening_slot_enabled !== false,
+          evening_slot_start: updated.evening_slot_start || '17:00',
+          evening_slot_end: updated.evening_slot_end || '19:00',
+          evening_slot_cutoff: updated.evening_slot_cutoff || '18:30',
         };
         setDeliverySettings(normalized);
         setSavedSettings(normalized);
@@ -1343,6 +1395,290 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                     </span>
                   </div>
                 </label>
+              </div>
+
+              {/* Delivery Time Slots & Operating Hours */}
+              <div className="pt-6 border-t border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-emerald-400" />
+                      Delivery Slots & Operating Hours (Real-Time IST)
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Configure operating windows and order cutoff times. Customers ordering at night or past cutoff will automatically see next-day slots.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Operating Hours */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-200">Store Daily Operating Window</span>
+                    <span className="text-[11px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 font-medium">
+                      IST (Asia/Kolkata)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        Opens At (Start Time)
+                      </label>
+                      <input
+                        type="time"
+                        value={deliverySettings.operating_hours_start || '07:00'}
+                        onChange={(e) =>
+                          setDeliverySettings((prev) => ({
+                            ...prev,
+                            operating_hours_start: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 focus:border-brand-500 rounded-xl text-xs text-white focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        Closes At (End Time)
+                      </label>
+                      <input
+                        type="time"
+                        value={deliverySettings.operating_hours_end || '21:30'}
+                        onChange={(e) =>
+                          setDeliverySettings((prev) => ({
+                            ...prev,
+                            operating_hours_end: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 focus:border-brand-500 rounded-xl text-xs text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3 Slot Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Express 30 Mins Slot */}
+                  <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={deliverySettings.express_enabled !== false}
+                          onChange={(e) =>
+                            setDeliverySettings((prev) => ({
+                              ...prev,
+                              express_enabled: e.target.checked,
+                            }))
+                          }
+                          className="w-3.5 h-3.5 rounded text-brand-500 accent-brand-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-white flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-amber-400" />
+                          Express 30 Mins
+                        </span>
+                      </label>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        deliverySettings.express_enabled !== false
+                          ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                          : 'bg-slate-800 text-slate-500'
+                      }`}>
+                        {deliverySettings.express_enabled !== false ? 'Active' : 'Disabled'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 pt-1">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Active From</label>
+                        <input
+                          type="time"
+                          value={deliverySettings.express_start_time || '07:00'}
+                          onChange={(e) =>
+                            setDeliverySettings((prev) => ({
+                              ...prev,
+                              express_start_time: e.target.value,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Active Until (Night Cutoff)</label>
+                        <input
+                          type="time"
+                          value={deliverySettings.express_end_time || '21:00'}
+                          onChange={(e) =>
+                            setDeliverySettings((prev) => ({
+                              ...prev,
+                              express_end_time: e.target.value,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-white"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Past cutoff, shows as "Offline at night" and disables instant dispatch.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Morning Slot */}
+                  <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={deliverySettings.morning_slot_enabled !== false}
+                          onChange={(e) =>
+                            setDeliverySettings((prev) => ({
+                              ...prev,
+                              morning_slot_enabled: e.target.checked,
+                            }))
+                          }
+                          className="w-3.5 h-3.5 rounded text-brand-500 accent-brand-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-white">
+                          Morning Batch
+                        </span>
+                      </label>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        deliverySettings.morning_slot_enabled !== false
+                          ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                          : 'bg-slate-800 text-slate-500'
+                      }`}>
+                        {deliverySettings.morning_slot_enabled !== false ? 'Active' : 'Disabled'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 pt-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Slot From</label>
+                          <input
+                            type="time"
+                            value={deliverySettings.morning_slot_start || '07:00'}
+                            onChange={(e) =>
+                              setDeliverySettings((prev) => ({
+                                ...prev,
+                                morning_slot_start: e.target.value,
+                              }))
+                            }
+                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Slot To</label>
+                          <input
+                            type="time"
+                            value={deliverySettings.morning_slot_end || '09:00'}
+                            onChange={(e) =>
+                              setDeliverySettings((prev) => ({
+                                ...prev,
+                                morning_slot_end: e.target.value,
+                              }))
+                            }
+                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-white"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Order Cutoff Time</label>
+                        <input
+                          type="time"
+                          value={deliverySettings.morning_slot_cutoff || '08:30'}
+                          onChange={(e) =>
+                            setDeliverySettings((prev) => ({
+                              ...prev,
+                              morning_slot_cutoff: e.target.value,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-white"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        After cutoff, automatically advances to "Tomorrow Morning".
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Evening Slot */}
+                  <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={deliverySettings.evening_slot_enabled !== false}
+                          onChange={(e) =>
+                            setDeliverySettings((prev) => ({
+                              ...prev,
+                              evening_slot_enabled: e.target.checked,
+                            }))
+                          }
+                          className="w-3.5 h-3.5 rounded text-brand-500 accent-brand-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-white">
+                          Evening Batch
+                        </span>
+                      </label>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        deliverySettings.evening_slot_enabled !== false
+                          ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                          : 'bg-slate-800 text-slate-500'
+                      }`}>
+                        {deliverySettings.evening_slot_enabled !== false ? 'Active' : 'Disabled'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 pt-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Slot From</label>
+                          <input
+                            type="time"
+                            value={deliverySettings.evening_slot_start || '17:00'}
+                            onChange={(e) =>
+                              setDeliverySettings((prev) => ({
+                                ...prev,
+                                evening_slot_start: e.target.value,
+                              }))
+                            }
+                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Slot To</label>
+                          <input
+                            type="time"
+                            value={deliverySettings.evening_slot_end || '19:00'}
+                            onChange={(e) =>
+                              setDeliverySettings((prev) => ({
+                                ...prev,
+                                evening_slot_end: e.target.value,
+                              }))
+                            }
+                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-white"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Order Cutoff Time</label>
+                        <input
+                          type="time"
+                          value={deliverySettings.evening_slot_cutoff || '18:30'}
+                          onChange={(e) =>
+                            setDeliverySettings((prev) => ({
+                              ...prev,
+                              evening_slot_cutoff: e.target.value,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-white"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        After cutoff, automatically advances to "Tomorrow Evening".
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Submit Button */}

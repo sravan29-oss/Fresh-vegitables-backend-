@@ -1,4 +1,3 @@
-
 {
   "id": "global_delivery_settings",
   "default_delivery_charge": 10,
@@ -15,5 +14,18 @@
   "hub_longitude": 78.516972,
   "delivery_radius_km": 5,
   "serviceability_enabled": true,
-  "updated_at": "2026-10-30T13:12:00.000Z"
+  "operating_hours_start": "07:00",
+  "operating_hours_end": "21:30",
+  "express_enabled": true,
+  "express_start_time": "07:00",
+  "express_end_time": "21:00",
+  "morning_slot_enabled": true,
+  "morning_slot_start": "07:00",
+  "morning_slot_end": "09:00",
+  "morning_slot_cutoff": "08:30",
+  "evening_slot_enabled": true,
+  "evening_slot_start": "17:00",
+  "evening_slot_end": "19:00",
+  "evening_slot_cutoff": "18:30",
+  "updated_at": "2026-10-30T18:25:00.000Z"
 }

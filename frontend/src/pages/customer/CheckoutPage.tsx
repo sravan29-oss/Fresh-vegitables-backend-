@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   MapPin,
@@ -25,6 +25,7 @@ import { Address, CouponValidationResult } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { SEOHead } from '../../components/common/SEOHead';
+import { getRealtimeDeliverySlots } from '../../utils/deliverySlots';
 
 export const CheckoutPage: React.FC = () => {
   const { cart, fetchCart, deliverySettings } = useCart();
@@ -34,10 +35,26 @@ export const CheckoutPage: React.FC = () => {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'upi' | 'online' | 'wallet'>('cod');
-  const [deliverySlot, setDeliverySlot] = useState<string>('morning');
+  const [deliverySlot, setDeliverySlot] = useState<string>('');
   const [orderNotes, setOrderNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // Dynamically calculate real-time available delivery slots based on IST
+  const availableSlots = useMemo(() => {
+    return getRealtimeDeliverySlots(deliverySettings);
+  }, [deliverySettings]);
+
+  // Automatically select the first valid real-time available slot
+  useEffect(() => {
+    const isCurrentValid = availableSlots.some((s) => s.id === deliverySlot && s.available);
+    if (!isCurrentValid) {
+      const firstValid = availableSlots.find((s) => s.available);
+      if (firstValid) {
+        setDeliverySlot(firstValid.id);
+      }
+    }
+  }, [availableSlots, deliverySlot]);
 
   // Payment Settings (Admin-Controlled COD & Online Gateway)
   const [paymentSettings, setPaymentSettings] = useState<{
@@ -731,24 +748,38 @@ export const CheckoutPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { id: 'express', title: 'Express 30 Mins', sub: 'Immediate harvest run' },
-                { id: 'morning', title: 'Morning (7 AM - 9 AM)', sub: 'Dawn fresh batch' },
-                { id: 'evening', title: 'Evening (5 PM - 7 PM)', sub: 'Post-work delivery' },
-              ].map((slot) => (
-                <div
-                  key={slot.id}
-                  onClick={() => setDeliverySlot(slot.id)}
-                  className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
-                    deliverySlot === slot.id
-                      ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 shadow-sm'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <p className="font-bold">{slot.title}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{slot.sub}</p>
-                </div>
-              ))}
+              {availableSlots.map((slot) => {
+                const isSelected = deliverySlot === slot.id;
+                const isAvailable = slot.available;
+
+                return (
+                  <div
+                    key={slot.id}
+                    onClick={() => {
+                      if (isAvailable) {
+                        setDeliverySlot(slot.id);
+                      }
+                    }}
+                    className={`p-4 rounded-2xl border transition-all relative ${
+                      !isAvailable
+                        ? 'opacity-60 bg-slate-50 border-slate-200 cursor-not-allowed select-none'
+                        : isSelected
+                        ? 'border-brand-600 bg-brand-50/70 font-bold text-brand-900 shadow-sm ring-1 ring-brand-500 cursor-pointer'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 cursor-pointer'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <p className="font-bold text-xs">{slot.title}</p>
+                      {slot.tag && (
+                        <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${slot.badgeColor || 'bg-slate-100 text-slate-600'}`}>
+                          {slot.tag}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">{slot.sub}</p>
+                  </div>
+                );
+              })}
             </div>
 
             <div>

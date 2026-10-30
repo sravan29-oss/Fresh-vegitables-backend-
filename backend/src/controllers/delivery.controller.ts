@@ -520,6 +520,19 @@ export async function getDeliverySettings(req: Request, res: Response, next: Nex
           hub_longitude: row.hub_longitude !== null && row.hub_longitude !== undefined ? Number(row.hub_longitude) : settings.hub_longitude,
           delivery_radius_km: row.delivery_radius_km ? Number(row.delivery_radius_km) : (settings.delivery_radius_km || 5.0),
           serviceability_enabled: row.serviceability_enabled !== false && settings.serviceability_enabled !== false,
+          operating_hours_start: row.operating_hours_start || settings.operating_hours_start || '07:00',
+          operating_hours_end: row.operating_hours_end || settings.operating_hours_end || '21:30',
+          express_enabled: row.express_enabled !== false && settings.express_enabled !== false,
+          express_start_time: row.express_start_time || settings.express_start_time || '07:00',
+          express_end_time: row.express_end_time || settings.express_end_time || '21:00',
+          morning_slot_enabled: row.morning_slot_enabled !== false && settings.morning_slot_enabled !== false,
+          morning_slot_start: row.morning_slot_start || settings.morning_slot_start || '07:00',
+          morning_slot_end: row.morning_slot_end || settings.morning_slot_end || '09:00',
+          morning_slot_cutoff: row.morning_slot_cutoff || settings.morning_slot_cutoff || '08:30',
+          evening_slot_enabled: row.evening_slot_enabled !== false && settings.evening_slot_enabled !== false,
+          evening_slot_start: row.evening_slot_start || settings.evening_slot_start || '17:00',
+          evening_slot_end: row.evening_slot_end || settings.evening_slot_end || '19:00',
+          evening_slot_cutoff: row.evening_slot_cutoff || settings.evening_slot_cutoff || '18:30',
           updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
         };
         savePersistedDeliverySettings(settings);
@@ -561,6 +574,19 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
       hub_longitude,
       delivery_radius_km,
       serviceability_enabled,
+      operating_hours_start,
+      operating_hours_end,
+      express_enabled,
+      express_start_time,
+      express_end_time,
+      morning_slot_enabled,
+      morning_slot_start,
+      morning_slot_end,
+      morning_slot_cutoff,
+      evening_slot_enabled,
+      evening_slot_start,
+      evening_slot_end,
+      evening_slot_cutoff,
     } = req.body;
 
     // Validate coordinates if provided
@@ -603,6 +629,19 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
       hub_longitude: hub_longitude !== undefined ? (hub_longitude === null || hub_longitude === '' ? null : Number(hub_longitude)) : undefined,
       delivery_radius_km: delivery_radius_km !== undefined ? Number(delivery_radius_km) : undefined,
       serviceability_enabled: serviceability_enabled !== undefined ? Boolean(serviceability_enabled) : undefined,
+      operating_hours_start,
+      operating_hours_end,
+      express_enabled,
+      express_start_time,
+      express_end_time,
+      morning_slot_enabled,
+      morning_slot_start,
+      morning_slot_end,
+      morning_slot_cutoff,
+      evening_slot_enabled,
+      evening_slot_start,
+      evening_slot_end,
+      evening_slot_cutoff,
     });
 
     // Also persist to PostgreSQL with UPSERT
@@ -624,10 +663,24 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           hub_longitude,
           delivery_radius_km,
           serviceability_enabled,
+          operating_hours_start,
+          operating_hours_end,
+          express_enabled,
+          express_start_time,
+          express_end_time,
+          morning_slot_enabled,
+          morning_slot_start,
+          morning_slot_end,
+          morning_slot_cutoff,
+          evening_slot_enabled,
+          evening_slot_start,
+          evening_slot_end,
+          evening_slot_cutoff,
           updated_at
         ) VALUES (
           'global_delivery_settings',
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+          $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           default_delivery_charge = EXCLUDED.default_delivery_charge,
@@ -644,6 +697,19 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           hub_longitude = EXCLUDED.hub_longitude,
           delivery_radius_km = EXCLUDED.delivery_radius_km,
           serviceability_enabled = EXCLUDED.serviceability_enabled,
+          operating_hours_start = EXCLUDED.operating_hours_start,
+          operating_hours_end = EXCLUDED.operating_hours_end,
+          express_enabled = EXCLUDED.express_enabled,
+          express_start_time = EXCLUDED.express_start_time,
+          express_end_time = EXCLUDED.express_end_time,
+          morning_slot_enabled = EXCLUDED.morning_slot_enabled,
+          morning_slot_start = EXCLUDED.morning_slot_start,
+          morning_slot_end = EXCLUDED.morning_slot_end,
+          morning_slot_cutoff = EXCLUDED.morning_slot_cutoff,
+          evening_slot_enabled = EXCLUDED.evening_slot_enabled,
+          evening_slot_start = EXCLUDED.evening_slot_start,
+          evening_slot_end = EXCLUDED.evening_slot_end,
+          evening_slot_cutoff = EXCLUDED.evening_slot_cutoff,
           updated_at = NOW()
         RETURNING *`,
         [
@@ -661,6 +727,19 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           updatedSettings.hub_longitude ?? null,
           updatedSettings.delivery_radius_km || 5.0,
           updatedSettings.serviceability_enabled !== false,
+          updatedSettings.operating_hours_start || '07:00',
+          updatedSettings.operating_hours_end || '21:30',
+          updatedSettings.express_enabled !== false,
+          updatedSettings.express_start_time || '07:00',
+          updatedSettings.express_end_time || '21:00',
+          updatedSettings.morning_slot_enabled !== false,
+          updatedSettings.morning_slot_start || '07:00',
+          updatedSettings.morning_slot_end || '09:00',
+          updatedSettings.morning_slot_cutoff || '08:30',
+          updatedSettings.evening_slot_enabled !== false,
+          updatedSettings.evening_slot_start || '17:00',
+          updatedSettings.evening_slot_end || '19:00',
+          updatedSettings.evening_slot_cutoff || '18:30',
         ]
       );
     } catch (dbErr) {

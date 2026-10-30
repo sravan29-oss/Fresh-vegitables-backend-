@@ -630,6 +630,21 @@ export interface DeliverySettings {
   serviceability_enabled?: boolean;
   is_hub_configured?: boolean;
   updated_at?: string;
+
+  // Real-time Delivery Slots & Operating Hours
+  operating_hours_start?: string;
+  operating_hours_end?: string;
+  express_enabled?: boolean;
+  express_start_time?: string;
+  express_end_time?: string;
+  morning_slot_enabled?: boolean;
+  morning_slot_start?: string;
+  morning_slot_end?: string;
+  morning_slot_cutoff?: string;
+  evening_slot_enabled?: boolean;
+  evening_slot_start?: string;
+  evening_slot_end?: string;
+  evening_slot_cutoff?: string;
 }
 
 export interface ServiceabilityState {
