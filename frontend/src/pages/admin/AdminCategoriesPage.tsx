@@ -205,12 +205,15 @@ export const AdminCategoriesPage: React.FC = () => {
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm('Are you sure you want to deactivate this category?')) return;
+    if (!confirm('Are you sure you want to permanently delete this category from the database?')) return;
     try {
+      // Optimistically remove from table immediately
+      setCategories((prev) => prev.filter((c) => c.id !== id));
       await api.delete(`/categories/${id}`);
       loadCategories();
-    } catch (err) {
-      alert('Failed to delete category');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to delete category');
+      loadCategories();
     }
   };
 

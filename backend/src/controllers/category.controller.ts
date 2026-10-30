@@ -126,10 +126,13 @@ export async function deleteCategory(req: AuthRequest, res: Response, next: Next
     const existing = await db.query('SELECT * FROM categories WHERE id = $1', [id]);
     if (existing.rows.length === 0) throw new NotFoundError('Category not found');
 
-    // Soft delete: set status to inactive
-    await db.query("UPDATE categories SET status = 'inactive' WHERE id = $1", [id]);
+    // Unlink any products referencing this category so products are preserved safely
+    await db.query('UPDATE products SET category_id = NULL WHERE category_id = $1', [id]);
 
-    sendSuccess(res, 'Category deactivated successfully');
+    // Permanently delete category from database
+    await db.query('DELETE FROM categories WHERE id = $1', [id]);
+
+    sendSuccess(res, 'Category deleted permanently from database');
   } catch (error) {
     next(error);
   }

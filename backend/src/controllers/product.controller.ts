@@ -436,10 +436,10 @@ export async function deleteProduct(req: AuthRequest, res: Response, next: NextF
     const existing = await db.query('SELECT * FROM products WHERE id = $1', [id]);
     if (existing.rows.length === 0) throw new NotFoundError('Product not found');
 
-    // Soft delete
-    await db.query("UPDATE products SET status = 'inactive' WHERE id = $1", [id]);
+    // Permanently delete product from database
+    await db.query('DELETE FROM products WHERE id = $1', [id]);
 
-    sendSuccess(res, 'Product deactivated successfully');
+    sendSuccess(res, 'Product deleted permanently from database');
   } catch (error) {
     next(error);
   }

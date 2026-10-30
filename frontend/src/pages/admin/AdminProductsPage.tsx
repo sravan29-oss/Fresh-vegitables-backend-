@@ -250,13 +250,15 @@ export const AdminProductsPage: React.FC = () => {
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (!confirm('Are you sure you want to deactivate this product?')) return;
+    if (!confirm('Are you sure you want to permanently delete this product from the database?')) return;
     try {
+      setProducts((prev) => prev.filter((p) => p.id !== id));
       await api.delete(`/products/${id}`);
       loadProducts();
       notifyLiveUpdate('products');
-    } catch (err) {
-      alert('Failed to delete product');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to delete product');
+      loadProducts();
     }
   };
 
