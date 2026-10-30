@@ -116,10 +116,13 @@ export const App: React.FC = () => {
                   <Route path="orders/:id" element={<AdminOrdersPage />} />
                   <Route path="deliveries" element={<AdminDeliveriesPage />} />
 
+                  <Route path="settings" element={<AdminZonesPage initialTab="service_area" />} />
+                  <Route path="delivery-service-area" element={<AdminZonesPage initialTab="service_area" />} />
                   <Route path="delivery-charges" element={<AdminZonesPage />} />
                   <Route path="zones" element={<AdminZonesPage />} />
                   <Route path="sellers" element={<AdminSellersPage />} />
                   <Route path="payments" element={<AdminPaymentsPage />} />
+                  <Route path="payment-settings" element={<AdminPaymentsPage initialTab="settings" />} />
                   <Route path="loyalty" element={<AdminLoyaltyPage />} />
                   <Route path="coupons" element={<AdminCouponsPage />} />
                   <Route path="notifications" element={<AdminNotificationsPage />} />

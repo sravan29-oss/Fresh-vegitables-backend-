@@ -8,5 +8,11 @@
   "estimated_delivery_time": "25–35 mins",
   "is_delivery_active": true,
   "surge_charge": 0,
-  "updated_at": "2026-10-28T09:40:52.841Z"
+  "hub_name": "Fresh Vegetables Central Hub",
+  "hub_address": "",
+  "hub_latitude": null,
+  "hub_longitude": null,
+  "delivery_radius_km": 5,
+  "serviceability_enabled": true,
+  "updated_at": "2026-10-30T00:00:00.000Z"
 }

@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
 
 export const CartDrawer: React.FC = () => {
-  const { cart, isCartOpen, setIsCartOpen, updateQuantity, removeFromCart, itemCount, deliverySettings } = useCart();
+  const { cart, isCartOpen, setIsCartOpen, updateQuantity, removeFromCart, itemCount, deliverySettings, serviceability, setIsLocationModalOpen } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -208,6 +208,29 @@ export const CartDrawer: React.FC = () => {
                 </div>
               </div>
 
+              {/* Serviceability Outside Zone Warning in Cart */}
+              {serviceability.checked && !serviceability.serviceable && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1.5 text-xs text-rose-900">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-800">
+                    <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                    <span>Sorry, delivery unavailable in your area</span>
+                  </div>
+                  <p className="text-[11px] text-rose-700 leading-snug">
+                    Your location is outside our 5 km delivery zone. Please choose a serviceable delivery location to complete your order.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCartOpen(false);
+                      setIsLocationModalOpen(true);
+                    }}
+                    className="w-full mt-1 py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Choose a Different Location
+                  </button>
+                </div>
+              )}
+
               {deliverySettings?.min_order_amount > 0 && currentSubtotal < deliverySettings.min_order_amount && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-900 text-[11px] p-2.5 rounded-xl font-medium flex items-center justify-between">
                   <span>Minimum order: ₹{deliverySettings.min_order_amount}</span>
@@ -217,15 +240,22 @@ export const CartDrawer: React.FC = () => {
 
               <button
                 onClick={handleCheckoutClick}
-                className="w-full bg-[#0c831f] hover:bg-[#0a701a] active:scale-[0.99] text-white py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-between shadow-md transition-all cursor-pointer"
+                disabled={serviceability.checked && !serviceability.serviceable}
+                className="w-full bg-[#0c831f] hover:bg-[#0a701a] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed active:scale-[0.99] text-white py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-between shadow-md disabled:shadow-none transition-all cursor-pointer"
               >
                 <div className="flex flex-col text-left leading-tight">
                   <span className="text-[10px] text-emerald-100 uppercase font-semibold">Total Bill</span>
                   <span className="font-black text-base">₹{cart.total}</span>
                 </div>
                 <div className="flex items-center gap-1.5 font-bold">
-                  <span>Proceed to Checkout</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {serviceability.checked && !serviceability.serviceable ? (
+                    <span>Delivery Unavailable</span>
+                  ) : (
+                    <>
+                      <span>Proceed to Checkout</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </div>
               </button>
 

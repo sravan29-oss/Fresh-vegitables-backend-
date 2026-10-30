@@ -23,6 +23,9 @@ import {
   Compass,
   CheckCircle2,
   Navigation,
+  Target,
+  Radio,
+  Layers,
 } from 'lucide-react';
 import api from '../../services/api';
 import { DeliveryZone, Store, DeliverySettings } from '../../types';
@@ -44,11 +47,21 @@ const HYDERABAD_ZONE_PRESETS = [
   { label: 'Pragathi Nagar', name: 'Pragathi Nagar & JNTU Zone', colony: 'Pragathi Nagar', pincode: '500090', lat: 17.5142, lng: 78.3887, radius: 7.5 },
 ];
 
-export const AdminZonesPage: React.FC = () => {
+interface AdminZonesPageProps {
+  initialTab?: 'service_area' | 'settings' | 'zones' | 'stores';
+}
+
+export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'service_area' }) => {
   const { fetchDeliverySettings: syncCartDeliverySettings } = useCart();
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'settings' | 'zones' | 'stores'>('settings');
+  const [activeTab, setActiveTab] = useState<'service_area' | 'settings' | 'zones' | 'stores'>(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Delivery Zones & Stores State
   const [zones, setZones] = useState<DeliveryZone[]>([]);
@@ -57,6 +70,22 @@ export const AdminZonesPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Delivery Service Area (5 KM Hub) State
+  const [hubName, setHubName] = useState('Fresh Vegetables Central Hub');
+  const [hubAddress, setHubAddress] = useState('');
+  const [hubLat, setHubLat] = useState<string | number>('');
+  const [hubLng, setHubLng] = useState<string | number>('');
+  const [hubRadius, setHubRadius] = useState<number>(5.0);
+  const [serviceabilityEnabled, setServiceabilityEnabled] = useState<boolean>(true);
+  const [isSavingHub, setIsSavingHub] = useState(false);
+  const [isLocatingHub, setIsLocatingHub] = useState(false);
+
+  // Serviceability Test Simulator State
+  const [testLat, setTestLat] = useState<string>('17.4938');
+  const [testLng, setTestLng] = useState<string>('78.3995');
+  const [testResult, setTestResult] = useState<any>(null);
+  const [isTestingCoord, setIsTestingCoord] = useState(false);
 
   // Global Delivery Settings State
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -131,9 +160,22 @@ export const AdminZonesPage: React.FC = () => {
           estimated_delivery_time: String(s.estimated_delivery_time || '25–35 mins'),
           is_delivery_active: s.is_delivery_active !== false,
           surge_charge: Number(s.surge_charge || 0),
+          hub_name: s.hub_name || 'Fresh Vegetables Central Hub',
+          hub_address: s.hub_address || '',
+          hub_latitude: s.hub_latitude !== null && s.hub_latitude !== undefined ? Number(s.hub_latitude) : null,
+          hub_longitude: s.hub_longitude !== null && s.hub_longitude !== undefined ? Number(s.hub_longitude) : null,
+          delivery_radius_km: s.delivery_radius_km ? Number(s.delivery_radius_km) : 5.0,
+          serviceability_enabled: s.serviceability_enabled !== false,
+          is_hub_configured: Boolean(s.is_hub_configured),
         };
         setDeliverySettings(normalized);
         setSavedSettings(normalized);
+        setHubName(normalized.hub_name || 'Fresh Vegetables Central Hub');
+        setHubAddress(normalized.hub_address || '');
+        setHubLat(normalized.hub_latitude !== null && normalized.hub_latitude !== undefined ? normalized.hub_latitude : '');
+        setHubLng(normalized.hub_longitude !== null && normalized.hub_longitude !== undefined ? normalized.hub_longitude : '');
+        setHubRadius(normalized.delivery_radius_km || 5.0);
+        setServiceabilityEnabled(normalized.serviceability_enabled !== false);
         try {
           localStorage.setItem('fresh_veg_delivery_settings', JSON.stringify(normalized));
         } catch {}
@@ -200,6 +242,170 @@ export const AdminZonesPage: React.FC = () => {
       showToast(err.response?.data?.message || 'Failed to update delivery settings', 'error');
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  // ================= SAVE DELIVERY SERVICE AREA (5 KM HUB) =================
+  const handleSaveHubSettings = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    try {
+      setIsSavingHub(true);
+      let parsedLat: number | null = null;
+      let parsedLng: number | null = null;
+
+      if (hubLat !== '' && hubLat !== null && hubLat !== undefined) {
+        parsedLat = Number(hubLat);
+        if (isNaN(parsedLat) || parsedLat < -90 || parsedLat > 90) {
+          showToast('Hub latitude must be a valid number between -90 and 90', 'error');
+          setIsSavingHub(false);
+          return;
+        }
+      }
+
+      if (hubLng !== '' && hubLng !== null && hubLng !== undefined) {
+        parsedLng = Number(hubLng);
+        if (isNaN(parsedLng) || parsedLng < -180 || parsedLng > 180) {
+          showToast('Hub longitude must be a valid number between -180 and 180', 'error');
+          setIsSavingHub(false);
+          return;
+        }
+      }
+
+      if ((parsedLat !== null && parsedLng === null) || (parsedLat === null && parsedLng !== null)) {
+        showToast('Both hub latitude and longitude must be provided together, or both cleared', 'error');
+        setIsSavingHub(false);
+        return;
+      }
+
+      const radius = Number(hubRadius);
+      if (isNaN(radius) || radius <= 0 || radius > 100) {
+        showToast('Delivery radius must be greater than 0 and within 100 km', 'error');
+        setIsSavingHub(false);
+        return;
+      }
+
+      const payload = {
+        ...deliverySettings,
+        hub_name: hubName.trim() || 'Fresh Vegetables Central Hub',
+        hub_address: hubAddress.trim(),
+        hub_latitude: parsedLat,
+        hub_longitude: parsedLng,
+        delivery_radius_km: radius,
+        serviceability_enabled: Boolean(serviceabilityEnabled),
+      };
+
+      const res = await api.put('/delivery/settings', payload);
+      if (res.data?.data) {
+        const updated = res.data.data;
+        const normalized: DeliverySettings = {
+          ...deliverySettings,
+          hub_name: updated.hub_name,
+          hub_address: updated.hub_address,
+          hub_latitude: updated.hub_latitude !== null && updated.hub_latitude !== undefined ? Number(updated.hub_latitude) : null,
+          hub_longitude: updated.hub_longitude !== null && updated.hub_longitude !== undefined ? Number(updated.hub_longitude) : null,
+          delivery_radius_km: Number(updated.delivery_radius_km || 5.0),
+          serviceability_enabled: Boolean(updated.serviceability_enabled),
+          is_hub_configured: Boolean(updated.is_hub_configured),
+        };
+        setDeliverySettings(normalized);
+        setSavedSettings(normalized);
+        try {
+          localStorage.setItem('fresh_veg_delivery_settings', JSON.stringify(normalized));
+        } catch {}
+
+        await syncCartDeliverySettings();
+        notifyLiveUpdate('all');
+
+        if (normalized.is_hub_configured) {
+          showToast(`Delivery Hub saved & 5 KM geofenced delivery activated! (Radius: ${normalized.delivery_radius_km} km)`);
+        } else {
+          showToast('Delivery Hub coordinates cleared. Store is now in fail-safe mode (checkout blocked until hub coordinates are set).');
+        }
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to update delivery hub settings', 'error');
+    } finally {
+      setIsSavingHub(false);
+    }
+  };
+
+  const handleClearHub = async () => {
+    if (!window.confirm('Are you sure you want to clear the delivery hub coordinates? The store will enter fail-safe mode (customers will be notified that delivery is being configured, and checkout will be safely paused).')) {
+      return;
+    }
+    setHubLat('');
+    setHubLng('');
+    try {
+      setIsSavingHub(true);
+      const res = await api.put('/delivery/settings', {
+        ...deliverySettings,
+        hub_name: hubName,
+        hub_address: hubAddress,
+        hub_latitude: null,
+        hub_longitude: null,
+        delivery_radius_km: hubRadius,
+        serviceability_enabled: serviceabilityEnabled,
+      });
+      if (res.data?.data) {
+        const updated = res.data.data;
+        setDeliverySettings(updated);
+        setSavedSettings(updated);
+        await syncCartDeliverySettings();
+        notifyLiveUpdate('all');
+        showToast('Hub coordinates cleared. Fail-safe mode is now active.');
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to clear hub coordinates', 'error');
+    } finally {
+      setIsSavingHub(false);
+    }
+  };
+
+  const handleDetectHubLocation = () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation is not supported by your browser', 'error');
+      return;
+    }
+    setIsLocatingHub(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        setHubLat(lat);
+        setHubLng(lng);
+        setIsLocatingHub(false);
+        showToast(`Detected location: ${lat}, ${lng}. Remember to click "Save & Activate 5 KM Service Area"!`);
+      },
+      (err) => {
+        setIsLocatingHub(false);
+        showToast(`Location error: ${err.message}`, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleTestServiceability = async () => {
+    const lat = Number(testLat);
+    const lng = Number(testLng);
+    if (isNaN(lat) || isNaN(lng)) {
+      showToast('Please enter valid test latitude and longitude', 'error');
+      return;
+    }
+    try {
+      setIsTestingCoord(true);
+      setTestResult(null);
+      const res = await api.post('/delivery/check-serviceability', {
+        latitude: lat,
+        longitude: lng,
+      });
+      setTestResult(res.data?.data);
+    } catch (err: any) {
+      setTestResult(err.response?.data || { serviceable: false, message: 'Check failed' });
+    } finally {
+      setIsTestingCoord(false);
     }
   };
 
@@ -409,6 +615,31 @@ export const AdminZonesPage: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-1">
           <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span>5 KM Hub Status</span>
+            <Target className="w-3.5 h-3.5 text-brand-400" />
+          </div>
+          <div className="text-xl font-black text-white flex items-center gap-2">
+            {deliverySettings.is_hub_configured ? (
+              <span className="text-emerald-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Active ({deliverySettings.delivery_radius_km || 5} km)
+              </span>
+            ) : (
+              <span className="text-amber-400 text-base flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-amber-400" />
+                Config Pending
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-slate-500 font-medium">
+            {deliverySettings.is_hub_configured
+              ? `${deliverySettings.hub_name || 'Central Hub'}`
+              : 'Checkout safely disabled'}
+          </div>
+        </div>
+
+        <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-1">
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             <span>Base Delivery Fee</span>
             <Truck className="w-3.5 h-3.5 text-brand-400" />
           </div>
@@ -433,17 +664,6 @@ export const AdminZonesPage: React.FC = () => {
 
         <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-1">
           <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            <span>Minimum Order</span>
-            <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-          </div>
-          <div className="text-2xl font-black text-white">
-            ₹{deliverySettings.min_order_amount}
-          </div>
-          <div className="text-[11px] text-slate-500 font-medium">Lowest checkout subtotal</div>
-        </div>
-
-        <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-1">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             <span>Active Coverage</span>
             <MapPin className="w-3.5 h-3.5 text-sky-400" />
           </div>
@@ -455,10 +675,27 @@ export const AdminZonesPage: React.FC = () => {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('service_area')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
+            activeTab === 'service_area'
+              ? 'bg-brand-500 text-slate-950 shadow-md shadow-brand-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          <Target className="w-4 h-4" />
+          <span>Delivery Service Area (5 KM Hub)</span>
+          {deliverySettings.is_hub_configured ? (
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          ) : (
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          )}
+        </button>
+
         <button
           onClick={() => setActiveTab('settings')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
             activeTab === 'settings'
               ? 'bg-brand-500 text-slate-950 shadow-md shadow-brand-500/20'
               : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -470,7 +707,7 @@ export const AdminZonesPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('zones')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
             activeTab === 'zones'
               ? 'bg-brand-500 text-slate-950 shadow-md shadow-brand-500/20'
               : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -482,7 +719,7 @@ export const AdminZonesPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('stores')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
             activeTab === 'stores'
               ? 'bg-brand-500 text-slate-950 shadow-md shadow-brand-500/20'
               : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -492,6 +729,389 @@ export const AdminZonesPage: React.FC = () => {
           <span>Fulfillment Hubs ({stores.length})</span>
         </button>
       </div>
+
+      {/* ================= TAB 0: DELIVERY SERVICE AREA (5 KM HUB) ================= */}
+      {activeTab === 'service_area' && (
+        <div className="space-y-6">
+          {/* Header & Status Banner */}
+          <div className="bg-slate-950/90 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-wider text-brand-400 flex items-center gap-2">
+                  <span>Admin</span>
+                  <span>→</span>
+                  <span>Settings</span>
+                  <span>→</span>
+                  <span>Delivery Service Area</span>
+                </div>
+                <h2 className="text-xl font-black text-white tracking-tight mt-1 flex items-center gap-2.5">
+                  <Target className="w-5 h-5 text-brand-400" />
+                  Delivery Hub &amp; 5 KM Straight-Line Service Area
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Configure your primary delivery hub coordinates. The backend authoritatively calculates straight-line distance via Haversine formula. Orders beyond {hubRadius || 5} km are automatically blocked from checkout.
+                </p>
+              </div>
+
+              {/* Status Pill */}
+              <div className="shrink-0">
+                {deliverySettings.is_hub_configured ? (
+                  <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-extrabold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Live 5 KM Geofence Active</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-extrabold">
+                    <AlertCircle className="w-4 h-4 text-amber-400 animate-pulse" />
+                    <span>Configuration Pending (Fail-Safe Enforced)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Alert Message for Fail-Safe Mode */}
+            {!deliverySettings.is_hub_configured && (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs space-y-1">
+                <div className="font-extrabold flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Fail-Safe Protection Active</span>
+                </div>
+                <p className="text-slate-300">
+                  Because delivery hub coordinates are not yet configured, the storefront safely displays:
+                  <span className="font-bold text-amber-300 ml-1">
+                    “Delivery availability is being configured. Please try again shortly.”
+                  </span>
+                  {' '}Checkout is safely blocked for all customers until valid coordinates are saved below.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Form and Interactive Map Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Column: Form Controls */}
+            <div className="lg:col-span-5 bg-slate-950/80 border border-slate-800 rounded-3xl p-6 space-y-5">
+              <div className="border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <Compass className="w-4 h-4 text-brand-400" />
+                  Hub Coordinates &amp; Radius Configuration
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Set the latitude and longitude of your dispatch warehouse.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveHubSettings} className="space-y-4">
+                {/* Hub Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Building className="w-3.5 h-3.5 text-brand-400" />
+                    Delivery Hub Name
+                  </label>
+                  <input
+                    type="text"
+                    value={hubName}
+                    onChange={(e) => setHubName(e.target.value)}
+                    placeholder="e.g. Fresh Vegetables Central Hub"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
+                    required
+                  />
+                </div>
+
+                {/* Hub Address */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-brand-400" />
+                    Hub Physical Address
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={hubAddress}
+                    onChange={(e) => setHubAddress(e.target.value)}
+                    placeholder="e.g. Plot 42, Phase 1, KPHB Colony, Kukatpally, Hyderabad 500072"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 resize-none"
+                  />
+                </div>
+
+                {/* Latitude & Longitude */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-300">
+                        Latitude
+                      </label>
+                      <span className="text-[10px] text-slate-500">-90 to 90</span>
+                    </div>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={hubLat}
+                      onChange={(e) => setHubLat(e.target.value)}
+                      placeholder="e.g. 17.493800"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-300">
+                        Longitude
+                      </label>
+                      <span className="text-[10px] text-slate-500">-180 to 180</span>
+                    </div>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={hubLng}
+                      onChange={(e) => setHubLng(e.target.value)}
+                      placeholder="e.g. 78.399500"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-brand-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Delivery Radius */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-brand-400" />
+                      Delivery Radius (Kilometres)
+                    </label>
+                    <span className="text-xs font-mono font-extrabold text-brand-400">
+                      {hubRadius} km
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    max="50"
+                    value={hubRadius}
+                    onChange={(e) => setHubRadius(Number(e.target.value))}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-brand-500"
+                  />
+                  {/* Preset quick buttons */}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    {[3, 5, 8, 10].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setHubRadius(r)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all ${
+                          Number(hubRadius) === r
+                            ? 'bg-brand-500 text-slate-950 border-brand-400 font-extrabold'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {r} km {r === 5 && '(Standard)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Serviceability Enabled Switch */}
+                <div className="pt-2">
+                  <label className="flex items-start gap-3 p-3 rounded-2xl bg-slate-900/90 border border-slate-800 cursor-pointer hover:border-slate-700 transition-all">
+                    <input
+                      type="checkbox"
+                      checked={serviceabilityEnabled}
+                      onChange={(e) => setServiceabilityEnabled(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded text-brand-500 bg-slate-950 border-slate-700 focus:ring-0 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-extrabold text-white block">
+                        Strict 5 KM Serviceability Enforcement
+                      </span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5 leading-relaxed">
+                        When enabled, backend will strictly reject orders located outside the {hubRadius} km radius from this delivery hub.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="pt-2 space-y-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingHub}
+                    className="w-full bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingHub ? 'Saving & Enforcing...' : 'Save & Activate 5 KM Service Area'}</span>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDetectHubLocation}
+                      disabled={isLocatingHub}
+                      className="w-full bg-slate-900 hover:bg-slate-850 text-slate-300 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border border-slate-800 transition-all"
+                    >
+                      <Navigation className={`w-3.5 h-3.5 text-brand-400 ${isLocatingHub ? 'animate-spin' : ''}`} />
+                      <span>{isLocatingHub ? 'Detecting...' : 'Use My GPS'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleClearHub}
+                      disabled={isSavingHub}
+                      className="w-full bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border border-slate-800 hover:border-rose-900 transition-all"
+                      title="Clear hub coordinates to test fail-safe mode"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Clear (Test Fail-Safe)</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {/* Haversine Formula Notice */}
+              <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
+                <div className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-brand-400" />
+                  <span>Authoritative Backend Measurement</span>
+                </div>
+                <p>
+                  The delivery radius is measured in a straight line from this hub using the spherical Haversine formula on the backend. It does not rely on browser client state or road navigation networks.
+                </p>
+              </div>
+            </div>
+
+            {/* Right Column: Interactive Map & Live Tester */}
+            <div className="lg:col-span-7 space-y-6">
+              {/* Map Container */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-brand-400" />
+                      Hub Interactive Map &amp; Geofence Circle
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Click anywhere on the map or drag the pin to set the delivery hub location. The circle outlines the {hubRadius} km boundary.
+                    </p>
+                  </div>
+                  {hubLat !== '' && hubLng !== '' && (
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                      {Number(hubLat).toFixed(4)}, {Number(hubLng).toFixed(4)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="rounded-2xl overflow-hidden border border-slate-800">
+                  <InteractiveLocationMap
+                    initialCenter={
+                      hubLat !== '' && hubLng !== '' && !isNaN(Number(hubLat)) && !isNaN(Number(hubLng))
+                        ? [Number(hubLat), Number(hubLng)]
+                        : [17.4474, 78.3762]
+                    }
+                    markerPosition={
+                      hubLat !== '' && hubLng !== '' && !isNaN(Number(hubLat)) && !isNaN(Number(hubLng))
+                        ? [Number(hubLat), Number(hubLng)]
+                        : null
+                    }
+                    circleRadiusKm={Number(hubRadius) || 5.0}
+                    height="380px"
+                    showSearchBar={true}
+                    showDetectLocationBtn={true}
+                    onPositionChange={(lat, lng, details) => {
+                      setHubLat(Number(lat.toFixed(6)));
+                      setHubLng(Number(lng.toFixed(6)));
+                      if (details?.fullAddress) {
+                        setHubAddress(details.fullAddress);
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                  <span>Pin: Hub Coordinates</span>
+                  <span>Green Circle: {hubRadius} KM Straight-Line Service Area</span>
+                </div>
+              </div>
+
+              {/* Live Serviceability Tester Widget */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-5 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-brand-400" />
+                    <h3 className="text-xs font-black text-white uppercase tracking-wider">
+                      Live Backend Serviceability Verification
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    POST /api/delivery/check-serviceability
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-400">
+                  Test any customer coordinate against the live backend endpoint to verify inside/outside zone distance calculation.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                  <div className="sm:col-span-4 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Customer Lat</label>
+                    <input
+                      type="text"
+                      value={testLat}
+                      onChange={(e) => setTestLat(e.target.value)}
+                      placeholder="17.4938"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-brand-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-4 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Customer Lng</label>
+                    <input
+                      type="text"
+                      value={testLng}
+                      onChange={(e) => setTestLng(e.target.value)}
+                      placeholder="78.3995"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-brand-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <button
+                      type="button"
+                      onClick={handleTestServiceability}
+                      disabled={isTestingCoord}
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-brand-400 font-extrabold text-xs py-2 px-3 rounded-xl border border-brand-500/30 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Crosshair className={`w-3.5 h-3.5 ${isTestingCoord ? 'animate-spin' : ''}`} />
+                      <span>{isTestingCoord ? 'Checking...' : 'Test Backend'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Test Result Display */}
+                {testResult && (
+                  <div
+                    className={`mt-3 p-3.5 rounded-2xl border text-xs font-mono transition-all ${
+                      testResult.serviceable
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold pb-1 mb-1 border-b border-current/20">
+                      <span className="flex items-center gap-1.5 font-sans font-black text-xs">
+                        {testResult.serviceable ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-rose-400" />
+                        )}
+                        {testResult.serviceable ? 'SERVICEABLE (Inside 5 KM)' : 'NOT SERVICEABLE (Outside Zone)'}
+                      </span>
+                      <span>{testResult.distanceKm !== undefined ? `${testResult.distanceKm} km away` : 'N/A'}</span>
+                    </div>
+                    <div className="text-[11px] font-mono opacity-90 break-words">
+                      {JSON.stringify(testResult, null, 2)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= TAB 1: GLOBAL STORE DELIVERY CHARGES ================= */}
       {activeTab === 'settings' && (

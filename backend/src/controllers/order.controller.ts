@@ -6,6 +6,9 @@ import { AppError, NotFoundError, ValidationError } from '../utils/appError';
 import { generateOrderNumber, parsePaginationParams } from '../utils/helpers';
 import { memoryStore } from '../config/mockDb';
 import { getPersistedDeliverySettings } from '../services/deliverySettings.service';
+import { checkServiceability, isValidCoordinate } from '../services/serviceability.service';
+import { getPersistedPaymentSettings } from '../services/paymentSettings.service';
+import { createAdminNotification, logPaymentTransaction } from './payment.controller';
 import {
   sendNewOrderAdminEmail,
   sendCustomerOrderConfirmedEmail,
@@ -37,6 +40,62 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     );
     if (addressResult.rows.length === 0) throw new NotFoundError('Address not found');
     const address = addressResult.rows[0];
+
+    // MANDATORY BACKEND LOCATION-BASED SERVICEABILITY VALIDATION
+    // Resolve delivery coordinates from address or request body
+    let deliveryLat: number | null = null;
+    let deliveryLng: number | null = null;
+
+    if (req.body.latitude !== undefined && req.body.longitude !== undefined) {
+      if (isValidCoordinate(req.body.latitude, req.body.longitude)) {
+        deliveryLat = Number(req.body.latitude);
+        deliveryLng = Number(req.body.longitude);
+      }
+    }
+
+    if (deliveryLat === null && address.latitude !== null && address.latitude !== undefined) {
+      if (isValidCoordinate(address.latitude, address.longitude)) {
+        deliveryLat = Number(address.latitude);
+        deliveryLng = Number(address.longitude);
+      }
+    }
+
+    // 1. Coordinates must exist and be verified (no pretending un-geocoded text has coordinates)
+    if (deliveryLat === null || deliveryLng === null) {
+      throw new ValidationError(
+        'Delivery address does not have verified geographic coordinates. Please select an exact location on the map.'
+      );
+    }
+
+    // 2. Authoritatively evaluate serviceability against configured delivery hub
+    const serviceability = checkServiceability(deliveryLat, deliveryLng);
+
+    // 3. Reject order if delivery hub is not configured or serviceability disabled
+    if (!serviceability.configured) {
+      throw new ValidationError(
+        serviceability.message || 'Delivery availability is being configured. Please try again shortly.'
+      );
+    }
+
+    // 4. Reject order if location is outside the service area (> 5 km)
+    if (!serviceability.serviceable) {
+      throw new ValidationError(
+        serviceability.message ||
+        `Sorry, we are currently unavailable in your area. Your location is ${serviceability.distanceKm} km from our hub, exceeding our ${serviceability.radiusKm} km delivery zone.`
+      );
+    }
+
+    // Persist coordinates to address record if previously missing
+    if (address.latitude === null || address.longitude === null) {
+      try {
+        await client.query(
+          'UPDATE addresses SET latitude = $1, longitude = $2 WHERE id = $3',
+          [deliveryLat, deliveryLng, address.id]
+        );
+      } catch (addrUpdateErr) {
+        console.warn('Could not backfill address coordinates:', addrUpdateErr);
+      }
+    }
 
     // 2. Get cart items (CRITICAL: fetch current prices from DB, not from frontend)
     const cartResult = await client.query('SELECT id FROM carts WHERE user_id = $1', [userId]);
@@ -130,11 +189,37 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       throw new ValidationError(`Minimum order amount for delivery is ₹${minOrderAmount}. Please add more items to your cart.`);
     }
 
+    // MANDATORY BACKEND PAYMENT SETTINGS VALIDATION
+    const paymentSettings = getPersistedPaymentSettings();
+    const isCod = payment_method === 'cod';
+    const isOnline = ['online', 'upi', 'wallet'].includes(payment_method);
+
+    if (!paymentSettings.cod_enabled && !paymentSettings.online_enabled) {
+      throw new ValidationError('Sorry, we are temporarily not accepting orders. Please check again later.');
+    }
+
+    if (isCod) {
+      if (!paymentSettings.cod_enabled) {
+        throw new ValidationError('Cash on Delivery is currently unavailable. Please choose an online payment method.');
+      }
+      if (paymentSettings.cod_min_amount > 0 && subtotal < paymentSettings.cod_min_amount) {
+        throw new ValidationError(`Minimum order amount for Cash on Delivery is ₹${paymentSettings.cod_min_amount}.`);
+      }
+      if (paymentSettings.cod_max_amount > 0 && subtotal > paymentSettings.cod_max_amount) {
+        throw new ValidationError(`Maximum order amount for Cash on Delivery is ₹${paymentSettings.cod_max_amount}. Please select online payment.`);
+      }
+    } else if (isOnline) {
+      if (!paymentSettings.online_enabled) {
+        throw new ValidationError('Online payment is currently unavailable. Please select Cash on Delivery.');
+      }
+    }
+
     const isFree = enableFreeDelivery && subtotal >= freeThreshold;
     const deliveryCharge = isFree ? 0 : Math.round((applicableDeliveryFee + surgeCharge) * 100) / 100;
+    const codFee = isCod && paymentSettings.cod_fee > 0 ? Number(paymentSettings.cod_fee) : 0;
     const discount = 0; // Can be extended with coupon system
     const tax = 0;
-    const total = Math.round((subtotal + deliveryCharge - discount + tax) * 100) / 100;
+    const total = Math.round((subtotal + deliveryCharge + codFee - discount + tax) * 100) / 100;
 
     // 6. Create address snapshot (so historical orders aren't affected by address changes)
     const addressSnapshot = {
@@ -148,20 +233,23 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       state: address.state,
       pincode: address.pincode,
       address_type: address.address_type,
-      latitude: address.latitude ? Number(address.latitude) : null,
-      longitude: address.longitude ? Number(address.longitude) : null,
+      latitude: deliveryLat,
+      longitude: deliveryLng,
+      distance_km: serviceability.distanceKm,
     };
 
-
-    // 7. Create order
+    // 7. Create order with authoritative payment status:
+    // COD starts as 'awaiting_cod_collection' (never falsely marked paid)
+    // Online starts as 'pending'
+    const initialPaymentStatus = isCod ? 'awaiting_cod_collection' : 'pending';
     const orderNumber = generateOrderNumber();
     const orderResult = await client.query(
       `INSERT INTO orders (order_number, user_id, address_snapshot, subtotal, delivery_charge,
        discount, tax, total, payment_method, payment_status, order_status, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        RETURNING *`,
-      [orderNumber, userId, JSON.stringify(addressSnapshot), subtotal, deliveryCharge,
-       discount, tax, total, payment_method, 'pending', 'pending', notes || null]
+      [orderNumber, userId, JSON.stringify(addressSnapshot), subtotal, deliveryCharge + codFee,
+       discount, tax, total, payment_method, initialPaymentStatus, 'pending', notes || null]
     );
 
     // 8. Create order items
@@ -179,7 +267,7 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     // 9. Create payment record
     await client.query(
       `INSERT INTO payments (order_id, method, amount, status) VALUES ($1,$2,$3,$4)`,
-      [orderResult.rows[0].id, payment_method, total, 'pending']
+      [orderResult.rows[0].id, payment_method, total, initialPaymentStatus]
     );
 
     // 10. Clear cart
@@ -191,6 +279,32 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     await client.query('COMMIT');
 
     const createdOrder = orderResult.rows[0];
+
+    // Log initial transaction record
+    await logPaymentTransaction(
+      createdOrder.id,
+      payment_method,
+      total,
+      'none',
+      initialPaymentStatus,
+      'CUSTOMER_ORDER',
+      createdOrder.order_number,
+      isCod ? 'Awaiting COD collection on delivery' : 'Pending online gateway authorization'
+    );
+
+    // Trigger persistent admin notification for new order
+    await createAdminNotification(
+      'NEW_ORDER',
+      'New Order Placed! 🛒',
+      `Order #${createdOrder.order_number} for ₹${createdOrder.total} placed by ${address.full_name} (${isCod ? 'Cash on Delivery' : 'Online Payment'}).`,
+      createdOrder.id,
+      {
+        order_number: createdOrder.order_number,
+        total: createdOrder.total,
+        customer_name: address.full_name,
+        payment_method: payment_method,
+      }
+    );
 
     // Trigger asynchronous background notifications (Email & Live Admin Dashboard Stream)
     // Executes strictly after successful DB COMMIT so customer order persistence is guaranteed
@@ -667,25 +781,48 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     // Update payment status if order delivered and COD
     if (order_status === 'delivered' && prevOrder.payment_method === 'cod') {
       await db.query(
-        "UPDATE payments SET status = 'success' WHERE order_id = $1",
+        "UPDATE payments SET status = 'PAID' WHERE order_id = $1",
         [id]
       );
       await db.query(
-        "UPDATE orders SET payment_status = 'paid' WHERE id = $1",
+        "UPDATE orders SET payment_status = 'cod_collected' WHERE id = $1",
         [id]
+      );
+      await logPaymentTransaction(
+        id,
+        'cod',
+        Number(prevOrder.total),
+        prevOrder.payment_status,
+        'cod_collected',
+        req.user?.name || req.user?.email || 'DELIVERY_PARTNER',
+        `COD-DEL-${Date.now()}`,
+        'COD payment collected upon final doorstep delivery'
       );
     }
 
-    // Trigger automated email notifications ONLY when genuinely transitioning
+    // Trigger automated email and admin notifications ONLY when genuinely transitioning
     if (order_status === 'cancelled' && prevOrder.order_status !== 'cancelled') {
       const reason = cancellation_reason || req.body.notes || 'Cancelled by store operations';
       handleOrderNotificationEvent('ORDER_CANCELLED', id, { reason }).catch((err) => {
         console.error('[OrderController] Cancellation email event error:', err.message);
       });
+      createAdminNotification(
+        'ORDER_CANCELLED',
+        'Order Cancelled ❌',
+        `Order #${prevOrder.order_number || id.slice(0, 8)} was cancelled (${reason}).`,
+        id,
+        { reason }
+      ).catch(() => {});
     } else if (order_status === 'delivered' && prevOrder.order_status !== 'delivered') {
       handleOrderNotificationEvent('ORDER_DELIVERED', id).catch((err) => {
         console.error('[OrderController] Delivery email event error:', err.message);
       });
+      createAdminNotification(
+        'DELIVERY_COMPLETED',
+        'Order Delivered! 🚚',
+        `Order #${prevOrder.order_number || id.slice(0, 8)} was marked delivered.`,
+        id
+      ).catch(() => {});
     }
 
     // Automatically create in-app notification for the customer

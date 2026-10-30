@@ -11,13 +11,15 @@ import {
   updateDriverLocation,
   getDeliverySettings,
   updateDeliverySettings,
+  checkDeliveryServiceability,
 } from '../controllers/delivery.controller';
 import { authenticateAdmin } from '../middleware/auth';
 
 const router = Router();
 
-// Public / Customer delivery settings & tracking
+// Public / Customer delivery settings, serviceability & tracking
 router.get('/settings', getDeliverySettings);
+router.post('/check-serviceability', checkDeliveryServiceability);
 router.get('/tracking/:id', getOrderTracking);
 router.post('/location', updateDriverLocation);
 

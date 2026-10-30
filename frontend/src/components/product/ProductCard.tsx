@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Minus, Check, Clock, Ban, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, Check, Clock, Ban, AlertTriangle, AlertCircle } from 'lucide-react';
 import { Product, ProductVariant } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -12,7 +12,7 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { user } = useAuth();
-  const { addToCart, updateQuantity, cart } = useCart();
+  const { addToCart, updateQuantity, cart, serviceability } = useCart();
   const navigate = useNavigate();
 
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
@@ -109,9 +109,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Delivery ETA Pill (Iconic Quick Commerce Badge) - High Z-Index */}
-        <div className="absolute bottom-1.5 left-1.5 z-30 flex items-center gap-1 bg-white/95 backdrop-blur-xs px-1.5 py-0.5 rounded-md border border-slate-200/90 shadow-xs text-[9px] sm:text-[9.5px] font-extrabold text-slate-800 tracking-tight pointer-events-none">
-          <Clock className="w-2.5 h-2.5 text-emerald-600 stroke-[2.5]" />
-          <span>15 MINS</span>
+        <div className={`absolute bottom-1.5 left-1.5 z-30 flex items-center gap-1 backdrop-blur-xs px-1.5 py-0.5 rounded-md border shadow-xs text-[9px] sm:text-[9.5px] font-extrabold tracking-tight pointer-events-none ${
+          serviceability.checked && !serviceability.serviceable
+            ? 'bg-rose-50/95 border-rose-200 text-rose-800'
+            : 'bg-white/95 border-slate-200/90 text-slate-800'
+        }`}>
+          {serviceability.checked && !serviceability.serviceable ? (
+            <>
+              <AlertCircle className="w-2.5 h-2.5 text-rose-600 stroke-[2.5]" />
+              <span>OUTSIDE 5 KM</span>
+            </>
+          ) : (
+            <>
+              <Clock className="w-2.5 h-2.5 text-emerald-600 stroke-[2.5]" />
+              <span>15 MINS</span>
+            </>
+          )}
         </div>
 
         {/* Vegetable Image - Strictly bounded within stage bounds */}
@@ -227,7 +240,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
           {/* Action Button: Blinkit/Zepto "ADD" button or Stepper */}
           <div className="shrink-0">
-            {isOutOfStock ? (
+            {serviceability.checked && !serviceability.serviceable ? (
+              <button
+                disabled
+                title="Delivery unavailable at this location. Please choose a different delivery location."
+                aria-label="Delivery unavailable at this location"
+                className="h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-400 font-bold text-[9px] sm:text-[9.5px] flex items-center gap-1 cursor-not-allowed select-none"
+              >
+                <span>Delivery unavailable</span>
+              </button>
+            ) : isOutOfStock ? (
               <button
                 disabled
                 className="h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-400 font-bold text-[10px] sm:text-[10.5px] flex items-center gap-1 cursor-not-allowed select-none"

@@ -4,6 +4,7 @@ import {
   ArrowUpDown,
   CheckCircle2,
   RotateCcw,
+  AlertCircle,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Product, Category } from '../../types';
@@ -11,8 +12,10 @@ import { ProductCard } from '../../components/product/ProductCard';
 import { ProductGridSkeleton } from '../../components/product/ProductGridSkeleton';
 import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { subscribeLiveUpdates } from '../../services/liveSync';
+import { useCart } from '../../context/CartContext';
 
 export const ProductsPage: React.FC = () => {
+  const { serviceability, setIsLocationModalOpen } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -125,7 +128,33 @@ export const ProductsPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 pb-24 md:pb-12 animate-slide-up">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 pb-24 md:pb-12 animate-slide-up space-y-4">
+      {/* Outside 5 km Service Area Prominent Banner */}
+      {serviceability.checked && !serviceability.serviceable && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+              <AlertCircle className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-black text-sm sm:text-base text-amber-950">
+                Sorry, we are currently unavailable in your area.
+              </h3>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Your selected location is outside our 5 km delivery zone. Choose a different location to check availability.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsLocationModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-98 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer whitespace-nowrap self-start sm:self-center"
+          >
+            Choose a Different Location
+          </button>
+        </div>
+      )}
+
       {/* ─── Compact Top Catalog Command Bar ─── */}
       <div className="bg-white/95 backdrop-blur-md rounded-xl border border-slate-200/90 px-3 py-2.5 sm:px-5 sm:py-3 shadow-xs mb-4 sm:mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">

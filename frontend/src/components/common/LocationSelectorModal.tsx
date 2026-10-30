@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   MapPin,
@@ -15,16 +15,21 @@ import {
   ShieldCheck,
   Compass,
   CheckCircle2,
+  Sliders,
+  Home,
+  Briefcase,
+  AlertTriangle,
 } from 'lucide-react';
 import api from '../../services/api';
-import { DeliveryZone } from '../../types';
+import { DeliveryZone, Address, ServiceabilityState } from '../../types';
+import { useCart } from '../../context/CartContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   InteractiveLocationMap,
   AddressDetails,
 } from './InteractiveLocationMap';
 import {
   HYDERABAD_COLONIES,
-  HyderabadArea,
 } from '../../data/hyderabadColonies';
 
 interface LocationModalProps {
@@ -38,7 +43,7 @@ const DEFAULT_ZONES: DeliveryZone[] = [
     id: 'zone-kphb',
     name: 'Kukatpally & KPHB Zone',
     pincodes: ['500072', '500085', '500090', '500018', '500038'],
-    delivery_radius_km: 8.5,
+    delivery_radius_km: 5.0,
     delivery_fee: 20.0,
     min_order_amount: 199.0,
     free_delivery_threshold: 499.0,
@@ -47,35 +52,8 @@ const DEFAULT_ZONES: DeliveryZone[] = [
     latitude: 17.4938,
     longitude: 78.3995,
   },
-  {
-    id: 'zone-hitech',
-    name: 'Hitech City, Madhapur & Gachibowli',
-    pincodes: ['500081', '500032', '500084', '500046', '500033', '500034', '500089'],
-    delivery_radius_km: 10.0,
-    delivery_fee: 25.0,
-    min_order_amount: 199.0,
-    free_delivery_threshold: 499.0,
-    estimated_delivery_time: '25–35 mins',
-    status: 'ACTIVE',
-    latitude: 17.4474,
-    longitude: 78.3762,
-  },
-  {
-    id: 'zone-miyapur',
-    name: 'Miyapur, Chandanagar & BHEL',
-    pincodes: ['500049', '500050', '500019', '502032'],
-    delivery_radius_km: 9.0,
-    delivery_fee: 25.0,
-    min_order_amount: 249.0,
-    free_delivery_threshold: 549.0,
-    estimated_delivery_time: '30–40 mins',
-    status: 'ACTIVE',
-    latitude: 17.4968,
-    longitude: 78.3547,
-  },
 ];
 
-// Highlighted popular Hyderabad quick-picker colonies
 const POPULAR_QUICK_COLONIES = [
   'KPHB Colony Phase 1',
   'KPHB Colony Phase 3 & 4',
@@ -94,23 +72,116 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
   onClose,
   onZoneSelected,
 }) => {
+  const { user } = useAuth();
+  const { checkLocationServiceability, deliverySettings } = useCart();
+
   const [zones, setZones] = useState<DeliveryZone[]>(DEFAULT_ZONES);
   const [selectedZone, setSelectedZone] = useState<DeliveryZone | null>(null);
   const [selectedColony, setSelectedColony] = useState<string>('KPHB Phase 1');
   const [selectedAddress, setSelectedAddress] = useState<string>(
     'Phase 1, KPHB Main Road, Hyderabad - 500072'
   );
-  const [currentCoords, setCurrentCoords] = useState<[number, number]>([
-    17.4938, 78.3995,
-  ]);
+  const [currentCoords, setCurrentCoords] = useState<[number, number]>([17.4938, 78.3995]);
   const [pincodeInput, setPincodeInput] = useState('');
   const [isCheckingPincode, setIsCheckingPincode] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Manual Coordinates Input Tab & State
+  const [showManualInputs, setShowManualInputs] = useState(false);
+  const [manualLatInput, setManualLatInput] = useState('17.4938');
+  const [manualLngInput, setManualLngInput] = useState('78.3995');
+
+  // Customer Saved Addresses
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+
+  // Live Serviceability Status for the chosen location
+  const [serviceCheck, setServiceCheck] = useState<{
+    loading: boolean;
+    checked: boolean;
+    configured: boolean;
+    serviceable: boolean;
+    distanceKm?: number;
+    radiusKm: number;
+    message?: string;
+  }>({
+    loading: false,
+    checked: false,
+    configured: true,
+    serviceable: true,
+    radiusKm: deliverySettings?.delivery_radius_km || 5.0,
+  });
+
+  // Verify coordinates with backend serviceability endpoint
+  const verifyServiceability = useCallback(async (lat: number, lng: number) => {
+    setServiceCheck((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await api.post('/delivery/check-serviceability', {
+        latitude: lat,
+        longitude: lng,
+      });
+      const data = res.data?.data || res.data;
+      setServiceCheck({
+        loading: false,
+        checked: true,
+        configured: Boolean(data.configured),
+        serviceable: Boolean(data.serviceable),
+        distanceKm: data.distanceKm,
+        radiusKm: data.radiusKm || 5.0,
+        message: data.message,
+      });
+    } catch (err: any) {
+      const resp = err.response?.data;
+      setServiceCheck({
+        loading: false,
+        checked: true,
+        configured: resp?.configured !== undefined ? Boolean(resp.configured) : true,
+        serviceable: false,
+        radiusKm: 5.0,
+        message: resp?.message || 'Unable to check delivery availability.',
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+
+      // Load cached delivery preferences
+      const savedZone = localStorage.getItem('fresh_delivery_zone');
+      const savedColony = localStorage.getItem('fresh_delivery_colony');
+      const savedAddr = localStorage.getItem('fresh_delivery_address');
+      const savedCoords = localStorage.getItem('fresh_delivery_coords');
+
+      let initCoords: [number, number] = [17.4938, 78.3995];
+
+      if (savedCoords) {
+        try {
+          const parsed = JSON.parse(savedCoords);
+          if (parsed.latitude && parsed.longitude) {
+            initCoords = [Number(parsed.latitude), Number(parsed.longitude)];
+          }
+        } catch {}
+      } else if (savedZone) {
+        try {
+          const parsed = JSON.parse(savedZone);
+          setSelectedZone(parsed);
+          if (parsed.latitude && parsed.longitude) {
+            initCoords = [Number(parsed.latitude), Number(parsed.longitude)];
+          }
+        } catch {}
+      }
+
+      setCurrentCoords(initCoords);
+      setManualLatInput(initCoords[0].toString());
+      setManualLngInput(initCoords[1].toString());
+
+      if (savedColony) setSelectedColony(savedColony);
+      if (savedAddr) setSelectedAddress(savedAddr);
+
+      // Verify current location
+      verifyServiceability(initCoords[0], initCoords[1]);
 
       // Fetch active delivery zones
       api
@@ -122,25 +193,19 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
         })
         .catch(() => {});
 
-      // Load cached delivery preferences
-      const savedZone = localStorage.getItem('fresh_delivery_zone');
-      const savedColony = localStorage.getItem('fresh_delivery_colony');
-      const savedAddr = localStorage.getItem('fresh_delivery_address');
-
-      if (savedZone) {
-        try {
-          const parsed = JSON.parse(savedZone);
-          setSelectedZone(parsed);
-          if (parsed.latitude && parsed.longitude) {
-            setCurrentCoords([parsed.latitude, parsed.longitude]);
-          }
-        } catch (e) {}
-      } else {
-        setSelectedZone(DEFAULT_ZONES[0]);
+      // Fetch saved user addresses if authenticated
+      if (user) {
+        setIsLoadingAddresses(true);
+        api
+          .get('/addresses')
+          .then((res) => {
+            if (res.data?.data) {
+              setSavedAddresses(res.data.data);
+            }
+          })
+          .catch(() => {})
+          .finally(() => setIsLoadingAddresses(false));
       }
-
-      if (savedColony) setSelectedColony(savedColony);
-      if (savedAddr) setSelectedAddress(savedAddr);
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -148,7 +213,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen]);
+  }, [isOpen, user, verifyServiceability]);
 
   // Handle location change from interactive map
   const handleMapPositionChange = (
@@ -157,7 +222,12 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
     details?: AddressDetails
   ) => {
     setCurrentCoords([lat, lng]);
+    setManualLatInput(lat.toFixed(6));
+    setManualLngInput(lng.toFixed(6));
     setErrorMsg(null);
+    setSuccessMsg(null);
+
+    verifyServiceability(lat, lng);
 
     if (details) {
       if (details.colony) setSelectedColony(details.colony);
@@ -175,6 +245,8 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
     const found = HYDERABAD_COLONIES.find((c) => c.name === colonyName);
     if (found) {
       setCurrentCoords([found.lat, found.lng]);
+      setManualLatInput(found.lat.toString());
+      setManualLngInput(found.lng.toString());
       setSelectedColony(found.colony);
       setSelectedAddress(`${found.colony}, Hyderabad - ${found.pincode}`);
       setPincodeInput(found.pincode);
@@ -185,6 +257,49 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
 
       setSelectedZone(matched);
       setErrorMsg(null);
+      verifyServiceability(found.lat, found.lng);
+    }
+  };
+
+  // Manual Coordinates Apply
+  const handleApplyManualCoords = (e: React.FormEvent) => {
+    e.preventDefault();
+    const lat = parseFloat(manualLatInput);
+    const lng = parseFloat(manualLngInput);
+
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      setErrorMsg('Latitude must be between -90 and 90');
+      return;
+    }
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      setErrorMsg('Longitude must be between -180 and 180');
+      return;
+    }
+
+    setCurrentCoords([lat, lng]);
+    setErrorMsg(null);
+    setSuccessMsg(`Coordinates applied: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+    verifyServiceability(lat, lng);
+  };
+
+  // Select Saved Address
+  const handleSelectSavedAddress = (addr: Address) => {
+    if (addr.latitude && addr.longitude) {
+      const lat = Number(addr.latitude);
+      const lng = Number(addr.longitude);
+      setCurrentCoords([lat, lng]);
+      setManualLatInput(lat.toString());
+      setManualLngInput(lng.toString());
+      setSelectedColony(addr.area || addr.city);
+      const full = [addr.house_number, addr.street, addr.area, addr.landmark, addr.city, addr.pincode]
+        .filter(Boolean)
+        .join(', ');
+      setSelectedAddress(full);
+      setPincodeInput(addr.pincode);
+      verifyServiceability(lat, lng);
+      setSuccessMsg(`Loaded saved address: ${addr.area || addr.city}`);
+    } else {
+      setErrorMsg(`Saved address "${addr.area}" has no verified coordinates. Please pick on the map.`);
     }
   };
 
@@ -206,51 +321,62 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       if (data?.serviceable && data?.zone) {
         setSelectedZone(data.zone);
         if (data.zone.latitude && data.zone.longitude) {
-          setCurrentCoords([data.zone.latitude, data.zone.longitude]);
+          const lat = Number(data.zone.latitude);
+          const lng = Number(data.zone.longitude);
+          setCurrentCoords([lat, lng]);
+          setManualLatInput(lat.toString());
+          setManualLngInput(lng.toString());
+          verifyServiceability(lat, lng);
         }
-        setSuccessMsg(`Pincode ${pincodeInput} is serviceable!`);
+        setSuccessMsg(`Pincode ${pincodeInput} matched zone.`);
       } else {
-        // Fallback local check
-        const local = zones.find(
-          (z) => Array.isArray(z.pincodes) && z.pincodes.includes(pincodeInput.trim())
-        );
-        if (local) {
-          setSelectedZone(local);
-          setSuccessMsg(`Pincode matched: ${local.name}`);
-        } else {
-          setErrorMsg(
-            data?.message || `Pincode ${pincodeInput} is outside current express zone.`
-          );
-        }
+        setErrorMsg(data?.message || `Pincode ${pincodeInput} is outside express delivery zone.`);
       }
-    } catch (err: any) {
-      const local = zones.find(
-        (z) => Array.isArray(z.pincodes) && z.pincodes.includes(pincodeInput.trim())
-      );
-      if (local) {
-        setSelectedZone(local);
-      } else {
-        setErrorMsg('Pincode not currently serviceable. Expanding to your area soon!');
-      }
+    } catch {
+      setErrorMsg('Pincode check error. Please select location on the map.');
     } finally {
       setIsCheckingPincode(false);
     }
   };
 
   // Final Confirmation
-  const handleConfirmLocation = () => {
-    const finalZone = selectedZone || DEFAULT_ZONES[0];
+  const handleConfirmLocation = async () => {
+    const lat = currentCoords[0];
+    const lng = currentCoords[1];
+
+    // Recheck with authoritative backend
+    const servResult = await checkLocationServiceability(lat, lng);
+
+    const finalZone = selectedZone || {
+      id: 'zone-custom',
+      name: selectedColony,
+      pincodes: [pincodeInput || '500072'],
+      delivery_radius_km: servResult.radiusKm || 5.0,
+      delivery_fee: 20.0,
+      min_order_amount: 199.0,
+      free_delivery_threshold: 499.0,
+      estimated_delivery_time: '25–35 mins',
+      status: 'ACTIVE',
+      latitude: lat,
+      longitude: lng,
+    };
+
     localStorage.setItem('fresh_delivery_zone', JSON.stringify(finalZone));
     localStorage.setItem('fresh_delivery_colony', selectedColony);
     localStorage.setItem('fresh_delivery_address', selectedAddress);
+    localStorage.setItem('fresh_delivery_coords', JSON.stringify({ latitude: lat, longitude: lng }));
 
-    // Dispatch global event for instant reactive update in Header and entire app
+    // Global event for instant reactive update across app
     window.dispatchEvent(
       new CustomEvent('fresh_delivery_location_changed', {
         detail: {
           zone: finalZone,
           colony: selectedColony,
           address: selectedAddress,
+          latitude: lat,
+          longitude: lng,
+          serviceable: servResult.serviceable,
+          distanceKm: servResult.distanceKm,
         },
       })
     );
@@ -259,10 +385,15 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       onZoneSelected(finalZone, selectedColony);
     }
 
-    setSuccessMsg(`Delivering to ${selectedColony}!`);
+    if (servResult.serviceable) {
+      setSuccessMsg(`Delivering to ${selectedColony}!`);
+    } else {
+      setErrorMsg(servResult.message || 'Outside delivery zone');
+    }
+
     setTimeout(() => {
       onClose();
-    }, 450);
+    }, 400);
   };
 
   if (!isOpen) return null;
@@ -278,27 +409,27 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       style={{ minHeight: '100vh', width: '100vw' }}
     >
       <div
-        className="bg-[#05180f] border border-emerald-500/40 text-white w-full max-w-4xl rounded-3xl p-5 sm:p-6 shadow-[0_25px_80px_rgba(0,0,0,0.9)] relative space-y-4 my-auto max-h-[92vh] overflow-y-auto"
+        className="bg-[#05180f] border border-emerald-500/40 text-white w-full max-w-4xl rounded-3xl p-4 sm:p-6 shadow-[0_25px_80px_rgba(0,0,0,0.9)] relative space-y-4 my-auto max-h-[94vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header with Title, Live Status and Close Button */}
-        <div className="flex items-center justify-between pb-3.5 border-b border-emerald-500/20">
+        {/* Header with Title and Close Button */}
+        <div className="flex items-center justify-between pb-3 border-b border-emerald-500/20">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-inner">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-inner">
               <MapPin className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-black text-white text-base sm:text-lg tracking-tight">
-                  Choose Exact Delivery Colony &amp; Area
+                  Choose Delivery Location
                 </h3>
-                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Hyderabad Live Maps
+                  5 KM Radius
                 </span>
               </div>
               <p className="text-xs text-emerald-200/60 mt-0.5">
-                Search or move pin to your building, colony, or road for fast 30-min farm delivery
+                Pinpoint your exact location. Delivery is available within 5 km straight-line distance from our hub.
               </p>
             </div>
           </div>
@@ -311,14 +442,59 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
           </button>
         </div>
 
-        {/* Quick Hyderabad Colony Chips Carousel */}
+        {/* Saved Addresses Quick Picker (if logged in and has addresses) */}
+        {savedAddresses.length > 0 && (
+          <div className="space-y-1.5 bg-[#03140b] p-3 rounded-2xl border border-emerald-500/20">
+            <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
+              <span className="flex items-center gap-1.5">
+                <Home className="w-3.5 h-3.5" />
+                Select From Your Saved Addresses
+              </span>
+              <span className="text-[10px] text-emerald-200/50 lowercase">tap address to verify</span>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1">
+              {savedAddresses.map((addr) => {
+                const hasCoords = addr.latitude && addr.longitude;
+                return (
+                  <button
+                    key={addr.id}
+                    type="button"
+                    onClick={() => handleSelectSavedAddress(addr)}
+                    className="h-8 px-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/30 text-xs font-bold text-emerald-200 hover:text-white flex items-center gap-2 shrink-0 transition-all cursor-pointer"
+                  >
+                    {addr.address_type === 'work' ? (
+                      <Briefcase className="w-3.5 h-3.5 text-teal-400" />
+                    ) : (
+                      <Home className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span className="truncate max-w-[120px]">{addr.area || addr.city}</span>
+                    {hasCoords ? (
+                      <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.2 rounded">GPS</span>
+                    ) : (
+                      <span className="text-[9px] bg-amber-500/30 text-amber-300 px-1.5 py-0.2 rounded">Needs GPS</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Hyderabad Colony Chips */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[11px] text-emerald-400/80 font-bold uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
               <Compass className="w-3.5 h-3.5" />
-              Quick Select Popular Colonies
+              Quick Select Popular Hyderabad Areas
             </span>
-            <span className="text-[10px] text-emerald-200/50 lowercase">tap any area to pinpoint</span>
+            <button
+              type="button"
+              onClick={() => setShowManualInputs(!showManualInputs)}
+              className="text-[10.5px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+            >
+              <Sliders className="w-3 h-3" />
+              <span>{showManualInputs ? 'Hide Coordinates' : 'Manual Coordinates'}</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
@@ -343,9 +519,49 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
           </div>
         </div>
 
+        {/* Optional Manual Coordinate Entry Section */}
+        {showManualInputs && (
+          <form
+            onSubmit={handleApplyManualCoords}
+            className="p-3 bg-[#03150b] border border-emerald-500/30 rounded-2xl flex flex-wrap items-center gap-3 animate-fade-in text-xs"
+          >
+            <div className="flex items-center gap-1.5 flex-1 min-w-[130px]">
+              <span className="text-slate-400 font-bold">Lat:</span>
+              <input
+                type="number"
+                step="0.000001"
+                min="-90"
+                max="90"
+                value={manualLatInput}
+                onChange={(e) => setManualLatInput(e.target.value)}
+                placeholder="17.4938"
+                className="w-full h-8 px-2.5 rounded-lg bg-[#05180f] border border-emerald-500/40 text-white font-mono text-xs focus:outline-none focus:border-emerald-400"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 flex-1 min-w-[130px]">
+              <span className="text-slate-400 font-bold">Lng:</span>
+              <input
+                type="number"
+                step="0.000001"
+                min="-180"
+                max="180"
+                value={manualLngInput}
+                onChange={(e) => setManualLngInput(e.target.value)}
+                placeholder="78.3995"
+                className="w-full h-8 px-2.5 rounded-lg bg-[#05180f] border border-emerald-500/40 text-white font-mono text-xs focus:outline-none focus:border-emerald-400"
+              />
+            </div>
+            <button
+              type="submit"
+              className="h-8 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-xs cursor-pointer transition-all"
+            >
+              Apply GPS Pin
+            </button>
+          </form>
+        )}
+
         {/* ─── Interactive Map & Details Split Container ─── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-          
           {/* Interactive Map Section (7 cols on desktop) */}
           <div className="lg:col-span-7 space-y-2">
             <InteractiveLocationMap
@@ -354,110 +570,138 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
               onPositionChange={handleMapPositionChange}
               zones={zones}
               selectedZoneId={selectedZone?.id}
-              height="350px"
+              height="340px"
               showSearchBar={true}
               showDetectLocationBtn={true}
-              placeholder="Search colony (e.g. KPHB, Madhapur, DLF Gachibowli, Kondapur...)"
+              placeholder="Search colony, area or landmark in Hyderabad..."
             />
+            <p className="text-[10px] text-slate-400 text-center">
+              💡 Drag the pin or click on the map to select your building or doorstep.
+            </p>
           </div>
 
-          {/* Right Sidebar: Location Intel & Confirmation (5 cols on desktop) */}
-          <div className="lg:col-span-5 space-y-3.5 flex flex-col justify-between">
-            
+          {/* Right Sidebar: Serviceability Feedback & Confirmation (5 cols on desktop) */}
+          <div className="lg:col-span-5 space-y-3 flex flex-col justify-between">
+            {/* Live Serviceability Verdict Banner */}
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                serviceCheck.loading
+                  ? 'bg-slate-900/80 border-slate-700 text-slate-300'
+                  : !serviceCheck.configured
+                  ? 'bg-amber-950/60 border-amber-500/50 text-amber-200'
+                  : serviceCheck.serviceable
+                  ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-200'
+                  : 'bg-rose-950/60 border-rose-500/50 text-rose-200'
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                {serviceCheck.loading ? (
+                  <Loader2 className="w-5 h-5 text-slate-400 animate-spin shrink-0 mt-0.5" />
+                ) : !serviceCheck.configured ? (
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                ) : serviceCheck.serviceable ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                )}
+
+                <div className="space-y-0.5 min-w-0">
+                  <h4 className="font-black text-xs sm:text-sm">
+                    {serviceCheck.loading
+                      ? 'Checking delivery availability...'
+                      : !serviceCheck.configured
+                      ? 'Delivery Setup Pending'
+                      : serviceCheck.serviceable
+                      ? 'Delivery Available at your location'
+                      : 'Sorry, we are currently unavailable in your area'}
+                  </h4>
+
+                  <p className="text-[11px] leading-relaxed opacity-90">
+                    {serviceCheck.loading ? (
+                      'Calculating straight-line distance to our delivery hub...'
+                    ) : !serviceCheck.configured ? (
+                      serviceCheck.message || 'Delivery availability is being configured. Please try again shortly.'
+                    ) : serviceCheck.serviceable ? (
+                      <span>
+                        Your selected location is <strong>{serviceCheck.distanceKm} km</strong> from our delivery hub (within our {serviceCheck.radiusKm} km zone).
+                      </span>
+                    ) : (
+                      <span>
+                        Your location is <strong>{serviceCheck.distanceKm} km</strong> away, which exceeds our <strong>5 km delivery zone</strong>. Choose a different location to check availability.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Selected Location Card */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/60 to-[#071f14] border border-emerald-500/35 space-y-2 shadow-inner">
+            <div className="p-3.5 rounded-2xl bg-[#04150c] border border-emerald-500/25 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  Exact Delivery Area
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                  Selected Address
                 </span>
                 <span className="text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  {pincodeInput || '500072'}
+                  {currentCoords[0].toFixed(4)}, {currentCoords[1].toFixed(4)}
                 </span>
               </div>
 
               <div>
-                <h4 className="text-base font-extrabold text-white leading-snug">
-                  {selectedColony || 'KPHB Colony Phase 1'}
+                <h4 className="text-sm font-extrabold text-white leading-snug">
+                  {selectedColony || 'KPHB Colony'}
                 </h4>
                 <p className="text-xs text-emerald-200/70 mt-0.5 line-clamp-2">
-                  {selectedAddress || 'Phase 1, KPHB Main Road, Hyderabad'}
+                  {selectedAddress || 'Hyderabad, Telangana'}
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+              <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs text-emerald-300 font-bold">
+                <div className="flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{selectedZone?.estimated_delivery_time || '25–35 mins'}</span>
+                  <span>25–35 mins</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                <div className="flex items-center gap-1.5">
                   <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>₹{selectedZone?.delivery_fee || 20} Delivery</span>
+                  <span>₹20 Express Delivery</span>
                 </div>
               </div>
             </div>
 
-            {/* Matched Zone Badge & Policy */}
-            <div className="p-3.5 rounded-2xl bg-[#04150c] border border-emerald-500/25 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Assigned Hub Zone:</span>
-                <span className="font-extrabold text-white">{selectedZone?.name || 'Kukatpally & KPHB Zone'}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Free Delivery Above:</span>
-                <span className="font-bold text-emerald-300">₹{selectedZone?.free_delivery_threshold || 499}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Min Order Requirement:</span>
-                <span className="font-bold text-slate-300">₹{selectedZone?.min_order_amount || 199}</span>
-              </div>
+            {/* Explanatory Notice */}
+            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-[10.5px] text-slate-400 leading-normal">
+              ℹ️ <strong>Straight-Line Distance:</strong> Our 5 km delivery radius is measured in a direct straight line from our delivery hub to ensure vegetables arrive crisp and farm-fresh.
             </div>
 
-            {/* Direct Pincode Lookup Fallback */}
-            <form onSubmit={handlePincodeSearch} className="space-y-1">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-400/80">
-                Or Verify by Hyderabad Pincode
-              </label>
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  maxLength={6}
-                  placeholder="e.g. 500072, 500081, 500049"
-                  value={pincodeInput}
-                  onChange={(e) => setPincodeInput(e.target.value)}
-                  className="w-full h-9 pl-3 pr-20 text-xs bg-[#04150c] border border-emerald-500/25 rounded-xl text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
-                />
-                <button
-                  type="submit"
-                  disabled={isCheckingPincode}
-                  className="absolute right-1 h-7 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
-                >
-                  {isCheckingPincode ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Check'}
-                </button>
-              </div>
-
-              {errorMsg && (
-                <p className="text-[11px] text-rose-400 flex items-center gap-1 pt-0.5">
-                  <AlertCircle className="w-3 h-3 shrink-0" />
-                  <span>{errorMsg}</span>
-                </p>
-              )}
-              {successMsg && (
-                <p className="text-[11px] text-emerald-300 font-bold flex items-center gap-1 pt-0.5">
-                  <Check className="w-3 h-3 shrink-0" />
-                  <span>{successMsg}</span>
-                </p>
-              )}
-            </form>
+            {errorMsg && (
+              <p className="text-[11px] text-rose-400 flex items-center gap-1 pt-0.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{errorMsg}</span>
+              </p>
+            )}
+            {successMsg && (
+              <p className="text-[11px] text-emerald-300 font-bold flex items-center gap-1 pt-0.5">
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span>{successMsg}</span>
+              </p>
+            )}
 
             {/* Primary Confirm CTA Button */}
             <button
               type="button"
               onClick={handleConfirmLocation}
-              className="w-full h-12 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-[0_6px_25px_rgba(16,185,129,0.4)] transition-all cursor-pointer active:scale-98"
+              className={`w-full h-11 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 shadow-md ${
+                serviceCheck.serviceable
+                  ? 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 text-white shadow-emerald-500/25'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600'
+              }`}
             >
-              <Check className="w-4.5 h-4.5 stroke-[2.5]" />
-              <span>Confirm &amp; Deliver to {selectedColony.split(',')[0]}</span>
+              <Check className="w-4 h-4 stroke-[2.5]" />
+              <span>
+                {serviceCheck.serviceable
+                  ? `Confirm & Deliver to ${selectedColony.split(',')[0]}`
+                  : `Select This Location (Unavailable for Ordering)`}
+              </span>
             </button>
           </div>
         </div>

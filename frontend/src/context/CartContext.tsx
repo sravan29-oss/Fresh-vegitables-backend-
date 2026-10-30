@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
-import { Cart, CartItem, DeliverySettings } from '../types';
+import { Cart, CartItem, DeliverySettings, ServiceabilityState } from '../types';
 import { useAuth } from './AuthContext';
 import { subscribeLiveUpdates, notifyLiveUpdate } from '../services/liveSync';
 
@@ -18,6 +18,11 @@ interface CartContextType {
   isLoading: boolean;
   isCartOpen: boolean;
   deliverySettings: DeliverySettings;
+  serviceability: ServiceabilityState;
+  isLocationModalOpen: boolean;
+  setIsLocationModalOpen: (open: boolean) => void;
+  checkLocationServiceability: (lat: number, lng: number) => Promise<ServiceabilityState>;
+  recheckServiceability: () => Promise<void>;
   setIsCartOpen: (open: boolean) => void;
   fetchCart: () => Promise<void>;
   fetchDeliverySettings: () => Promise<void>;
@@ -45,6 +50,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [cart, setCart] = useState<Cart | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+
+  // Authoritative location serviceability state
+  const [serviceability, setServiceability] = useState<ServiceabilityState>(() => {
+    try {
+      const cached = localStorage.getItem('fresh_delivery_serviceability');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return {
+      checked: false,
+      configured: false,
+      serviceable: false,
+      radiusKm: 5,
+      checking: false,
+      coordinates: null,
+    };
+  });
+
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>(() => {
     try {
       const cached = localStorage.getItem(STORAGE_DELIVERY_KEY);
@@ -59,8 +82,93 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       estimated_delivery_time: '25–35 mins',
       is_delivery_active: true,
       surge_charge: 0,
+      delivery_radius_km: 5,
+      serviceability_enabled: true,
     };
   });
+
+  const checkLocationServiceability = useCallback(async (lat: number, lng: number): Promise<ServiceabilityState> => {
+    setServiceability((prev) => ({ ...prev, checking: true }));
+    try {
+      const res = await api.post('/delivery/check-serviceability', {
+        latitude: Number(lat),
+        longitude: Number(lng),
+      });
+
+      const data = res.data?.data || res.data;
+      const result: ServiceabilityState = {
+        checked: true,
+        configured: Boolean(data.configured),
+        serviceable: Boolean(data.serviceable),
+        distanceKm: data.distanceKm,
+        radiusKm: Number(data.radiusKm) || 5,
+        message: data.message,
+        hubName: data.hubName,
+        hubAddress: data.hubAddress,
+        checking: false,
+        coordinates: { latitude: Number(lat), longitude: Number(lng) },
+      };
+
+      setServiceability(result);
+      try {
+        localStorage.setItem('fresh_delivery_coords', JSON.stringify({ latitude: Number(lat), longitude: Number(lng) }));
+        localStorage.setItem('fresh_delivery_serviceability', JSON.stringify(result));
+      } catch {}
+
+      return result;
+    } catch (err: any) {
+      const respData = err.response?.data;
+      const isConfigured = respData?.configured !== undefined ? Boolean(respData.configured) : true;
+      const msg = respData?.message || 'Unable to verify delivery serviceability at this location.';
+
+      const result: ServiceabilityState = {
+        checked: true,
+        configured: isConfigured,
+        serviceable: false,
+        radiusKm: 5,
+        message: msg,
+        checking: false,
+        coordinates: { latitude: Number(lat), longitude: Number(lng) },
+      };
+
+      setServiceability(result);
+      try {
+        localStorage.setItem('fresh_delivery_serviceability', JSON.stringify(result));
+      } catch {}
+
+      return result;
+    }
+  }, []);
+
+  const recheckServiceability = useCallback(async () => {
+    let lat: number | null = null;
+    let lng: number | null = null;
+
+    try {
+      const savedCoords = localStorage.getItem('fresh_delivery_coords');
+      if (savedCoords) {
+        const parsed = JSON.parse(savedCoords);
+        if (parsed.latitude && parsed.longitude) {
+          lat = Number(parsed.latitude);
+          lng = Number(parsed.longitude);
+        }
+      }
+      if (lat === null) {
+        const savedZone = localStorage.getItem('fresh_delivery_zone');
+        if (savedZone) {
+          const pz = JSON.parse(savedZone);
+          if (pz.latitude && pz.longitude) {
+            lat = Number(pz.latitude);
+            lng = Number(pz.longitude);
+          }
+        }
+      }
+    } catch {}
+
+    if (lat !== null && lng !== null) {
+      await checkLocationServiceability(lat, lng);
+    }
+  }, [checkLocationServiceability]);
 
   const fetchDeliverySettings = useCallback(async () => {
     try {
@@ -76,6 +184,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           estimated_delivery_time: String(d.estimated_delivery_time || '25–35 mins'),
           is_delivery_active: d.is_delivery_active !== false,
           surge_charge: Number(d.surge_charge || 0),
+          hub_name: d.hub_name,
+          hub_address: d.hub_address,
+          hub_latitude: d.hub_latitude,
+          hub_longitude: d.hub_longitude,
+          delivery_radius_km: d.delivery_radius_km,
+          serviceability_enabled: d.serviceability_enabled,
+          is_hub_configured: d.is_hub_configured,
         };
         setDeliverySettings(normalized);
         try {
@@ -90,6 +205,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     fetchDeliverySettings();
   }, [fetchDeliverySettings]);
+
+  // Initial serviceability check on app boot & listener for location change events
+  useEffect(() => {
+    recheckServiceability();
+
+    const handleLocationChanged = (e: any) => {
+      const detail = e.detail;
+      if (detail?.latitude && detail?.longitude) {
+        checkLocationServiceability(Number(detail.latitude), Number(detail.longitude));
+      } else if (detail?.zone?.latitude && detail?.zone?.longitude) {
+        checkLocationServiceability(Number(detail.zone.latitude), Number(detail.zone.longitude));
+      }
+    };
+
+    const handleOpenModal = () => {
+      setIsLocationModalOpen(true);
+    };
+
+    window.addEventListener('fresh_delivery_location_changed', handleLocationChanged);
+    window.addEventListener('fresh_open_location_modal', handleOpenModal);
+
+    return () => {
+      window.removeEventListener('fresh_delivery_location_changed', handleLocationChanged);
+      window.removeEventListener('fresh_open_location_modal', handleOpenModal);
+    };
+  }, [checkLocationServiceability, recheckServiceability]);
 
   // Helper for guest cart in localStorage
   const readGuestCart = (): Cart => {
@@ -210,6 +351,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     quantity = 1,
     meta?: ProductMeta
   ): Promise<boolean> => {
+    // Serviceability Guard: If outside zone or unconfigured, block add to cart and prompt location selector
+    if (serviceability.checked && !serviceability.serviceable) {
+      setIsLocationModalOpen(true);
+      return false;
+    }
+
     try {
       if (user && user.role !== 'admin') {
         // Authenticated customer: backend API
@@ -266,6 +413,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateQuantity = async (itemId: string, quantity: number) => {
     if (quantity <= 0) {
       await removeFromCart(itemId);
+      return;
+    }
+
+    if (serviceability.checked && !serviceability.serviceable) {
+      setIsLocationModalOpen(true);
       return;
     }
 
@@ -344,6 +496,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         isCartOpen,
         deliverySettings,
+        serviceability,
+        isLocationModalOpen,
+        setIsLocationModalOpen,
+        checkLocationServiceability,
+        recheckServiceability,
         setIsCartOpen,
         fetchCart,
         fetchDeliverySettings,

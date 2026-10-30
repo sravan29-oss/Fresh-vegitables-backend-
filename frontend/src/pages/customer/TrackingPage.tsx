@@ -1,594 +1,197 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
+  ArrowLeft,
+  RefreshCw,
+  Clock,
+  CheckCircle2,
+  Truck,
   MapPin,
   Phone,
   MessageCircle,
-  Truck,
-  CheckCircle2,
-  Clock,
-  ShieldCheck,
-  ChevronRight,
-  RefreshCw,
-  Navigation,
-  ArrowLeft,
-  Sparkles,
-  Package,
-  Box,
-  Check,
-  ExternalLink,
-  Calendar,
   AlertCircle,
-  Info,
+  Package,
+  Check,
+  ShoppingBag,
+  ExternalLink,
+  ChevronRight,
+  ShieldCheck,
+  CreditCard,
+  Copy,
 } from 'lucide-react';
 import api from '../../services/api';
-import { DeliveryTrackingResponse, DeliveryTimelineEvent } from '../../types';
+import { DeliveryTrackingResponse, DeliveryTimelineEvent, Order, OrderItem } from '../../types';
 import { subscribeLiveUpdates } from '../../services/liveSync';
 import { useAuth } from '../../context/AuthContext';
-
-const DEFAULT_TRACKING_DATA: DeliveryTrackingResponse = {
-  order: {
-    id: 'demo-order',
-    order_number: 'FV-884291',
-    user_id: 'cust-1',
-    address_id: 'addr-1',
-    subtotal: 580,
-    delivery_charge: 0,
-    discount: 50,
-    total: 530,
-    payment_method: 'cod',
-    payment_status: 'pending',
-    order_status: 'confirmed',
-    customer_name: 'Customer',
-    customer_mobile: '+91 8106970384',
-    delivery_address: {
-      house_number: '102',
-      address_line1: 'Flat 102, KPHB Colony',
-      address_line2: 'Phase 1',
-      area: 'KPHB Colony',
-      city: 'Hyderabad',
-      state: 'Telangana',
-      pincode: '500072',
-      full_address: 'Flat 102, KPHB Colony, Phase 1, Hyderabad, Telangana - 500072',
-    },
-    created_at: new Date().toISOString(),
-  },
-  show_driver: false,
-  carrier_name: 'FreshVeg Logistics Express',
-  tracking_number: 'TRK-FV884291',
-  expected_delivery: 'Today, within 25–35 mins',
-  logistics_status: 'confirmed',
-  fulfillment_center: 'Fresh Vegetables Central Hub, KPHB, Hyderabad',
-  package_type: 'Eco-Insulated Cold-Chain Fresh Harvest Box',
-  tracking: {
-    order_id: 'demo-order',
-    status: 'OUT_FOR_DELIVERY',
-    partner_name: 'Ravi Kumar',
-    partner_phone: '+91 98123 45678',
-    partner_rating: 4.88,
-    vehicle_type: 'Electric Scooter (Eco-Harvest)',
-    vehicle_number: 'TS-09-EV-4421',
-    partner_lat: 17.4938,
-    partner_lng: 78.3995,
-    estimated_delivery_time: '12-15 mins',
-    notes: 'Temperature-controlled insulated fresh crate',
-    show_driver: false,
-  },
-  store_location: {
-    name: 'Fresh Vegetables Central Organic Hub',
-    latitude: 17.4938,
-    longitude: 78.3995,
-  },
-  destination: {
-    address: 'KPHB Colony, Hyderabad, Telangana - 500072',
-    latitude: 17.4938,
-    longitude: 78.3995,
-  },
-};
 
 export const TrackingPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user: authUser } = useAuth();
   const [data, setData] = useState<DeliveryTrackingResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [driverProgress, setDriverProgress] = useState(0.65);
-  const [etaMinutes, setEtaMinutes] = useState(14);
-  const [mapTheme, setMapTheme] = useState<'emerald' | 'amber'>('emerald');
-  const [pulseTick, setPulseTick] = useState(0);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [copiedId, setCopiedId] = useState<boolean>(false);
 
-  // Manual status override state for testing/demoing logistics updates
-  const [demoStatus, setDemoStatus] = useState<string | null>(null);
-
-  const fetchTracking = async (silent = false) => {
+  const fetchTracking = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      let trackingResult: DeliveryTrackingResponse | null = null;
+      else setIsRefreshing(true);
 
       const cleanId = id && id !== 'undefined' ? id : 'latest';
+      let trackingResult: DeliveryTrackingResponse | null = null;
+
       try {
         const res = await api.get(`/delivery/tracking/${cleanId}`);
         if (res.data?.data) {
           trackingResult = res.data.data;
         }
       } catch (err) {
-        // Fallback to direct order query below
+        console.warn('Could not fetch via /delivery/tracking, falling back to /orders:', err);
       }
 
-      // Check if order details or address need enrichment from /orders/:id
-      const currentOrder = trackingResult?.order;
-      const currentAddr = currentOrder?.delivery_address || currentOrder?.address_snapshot;
-      const needsOrderFetch =
-        !trackingResult ||
-        !currentOrder ||
-        currentOrder.id === 'demo-order' ||
-        !currentAddr ||
-        !currentOrder.customer_name ||
-        currentOrder.customer_name === 'Rahul Sharma';
+      // If order details or items missing, fetch /orders/:id directly
+      if (!trackingResult || !trackingResult.order || trackingResult.order.id === 'demo-order' || !trackingResult.order.items?.length) {
+        if (cleanId && cleanId !== 'latest') {
+          try {
+            const ordRes = await api.get(`/orders/${cleanId}`);
+            if (ordRes.data?.data) {
+              const rawOrd = ordRes.data.data;
+              const addr = rawOrd.address_snapshot || rawOrd.delivery_address || {};
+              const resolvedName = rawOrd.customer_name || addr.full_name || authUser?.name || 'Customer';
+              const resolvedPhone = rawOrd.customer_mobile || addr.phone || authUser?.mobile || '';
 
-      if (needsOrderFetch && cleanId && cleanId !== 'latest') {
-        try {
-          const ordRes = await api.get(`/orders/${cleanId}`);
-          if (ordRes.data?.data) {
-            const rawOrd = ordRes.data.data;
-            const addr = rawOrd.address_snapshot || rawOrd.delivery_address || {};
-            const fullAddr = [
-              addr.house_number ? (String(addr.house_number).toLowerCase().includes('flat') || String(addr.house_number).toLowerCase().includes('house') ? addr.house_number : `Flat/House ${addr.house_number}`) : '',
-              addr.street,
-              addr.area,
-              addr.landmark ? `Near ${addr.landmark}` : '',
-              addr.city || 'Hyderabad',
-              addr.state || 'Telangana',
-              addr.pincode ? `- ${addr.pincode}` : '',
-            ].filter(Boolean).join(', ');
+              const fullAddr =
+                addr.full_address ||
+                [
+                  addr.house_number
+                    ? String(addr.house_number).toLowerCase().includes('flat') || String(addr.house_number).toLowerCase().includes('house')
+                      ? addr.house_number
+                      : `Flat/House ${addr.house_number}`
+                    : '',
+                  addr.street,
+                  addr.area,
+                  addr.landmark ? `Near ${addr.landmark}` : '',
+                  addr.city || 'Hyderabad',
+                  addr.state || 'Telangana',
+                  addr.pincode ? `- ${addr.pincode}` : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ') || 'Doorstep Delivery Address';
 
-            const resolvedRecipient = rawOrd.customer_name || addr.full_name || authUser?.name || 'Customer';
-            const resolvedPhone = rawOrd.customer_mobile || addr.phone || authUser?.mobile || '+91 8106970384';
+              const normalizedAddr = {
+                ...addr,
+                full_name: resolvedName,
+                phone: resolvedPhone,
+                full_address: fullAddr,
+              };
 
-            const normalizedDeliveryAddr = {
-              ...addr,
-              full_name: resolvedRecipient,
-              phone: resolvedPhone,
-              area: addr.area || 'KPHB Colony',
-              city: addr.city || 'Hyderabad',
-              state: addr.state || 'Telangana',
-              pincode: addr.pincode || '500072',
-              full_address: fullAddr || 'KPHB Colony, Hyderabad, Telangana - 500072',
-            };
-
-            trackingResult = {
-              ...(trackingResult || DEFAULT_TRACKING_DATA),
-              order: {
-                ...rawOrd,
-                customer_name: resolvedRecipient,
-                customer_mobile: resolvedPhone,
-                delivery_address: normalizedDeliveryAddr,
-                address_snapshot: addr,
-              },
-              destination: {
-                address: fullAddr || 'KPHB Colony, Hyderabad, Telangana - 500072',
-                latitude: Number(addr.latitude) || 17.4938,
-                longitude: Number(addr.longitude) || 78.3995,
-              },
-            };
+              trackingResult = {
+                order: {
+                  ...rawOrd,
+                  customer_name: resolvedName,
+                  customer_mobile: resolvedPhone,
+                  delivery_address: normalizedAddr,
+                  address_snapshot: addr,
+                  items: rawOrd.items || rawOrd.order_items || [],
+                },
+                tracking: null,
+                show_driver: false,
+                carrier_name: 'Fresh Vegetables Direct Express',
+                tracking_number: `TRK-${(rawOrd.order_number || cleanId).replace(/[^A-Za-z0-9]/g, '').slice(-8)}`,
+                expected_delivery:
+                  rawOrd.order_status === 'delivered'
+                    ? 'Delivered'
+                    : rawOrd.order_status === 'out_for_delivery'
+                    ? 'Arriving Today'
+                    : 'Today, within delivery slot',
+                logistics_status: rawOrd.order_status,
+                fulfillment_center: 'Fresh Vegetables Store & Fulfillment Hub',
+                package_type: 'Fresh Farm Packaging',
+                store_location: {
+                  name: 'Fresh Vegetables Hub',
+                  latitude: 17.4938,
+                  longitude: 78.3995,
+                },
+                destination: {
+                  address: fullAddr,
+                  latitude: Number(addr.latitude) || 17.4938,
+                  longitude: Number(addr.longitude) || 78.3995,
+                },
+              };
+            }
+          } catch (e) {
+            console.warn('Direct order lookup failed:', e);
           }
-        } catch (e) {
-          // Direct order fetch failed
         }
       }
 
       if (trackingResult) {
-        // Guarantee clean destination address and recipient data
-        const ord = trackingResult.order;
-        const addr = ord.delivery_address || ord.address_snapshot || {};
-        const formatted = addr.full_address || [
-          addr.house_number ? (String(addr.house_number).toLowerCase().includes('flat') || String(addr.house_number).toLowerCase().includes('house') ? addr.house_number : `Flat/House ${addr.house_number}`) : '',
-          addr.street,
-          addr.area,
-          addr.landmark ? `Near ${addr.landmark}` : '',
-          addr.city || 'Hyderabad',
-          addr.state || 'Telangana',
-          addr.pincode ? `- ${addr.pincode}` : '',
-        ].filter(Boolean).join(', ');
-
-        if (!trackingResult.destination || !trackingResult.destination.address || trackingResult.destination.address.includes('Satellite Road')) {
-          trackingResult.destination = {
-            address: formatted || 'KPHB Colony, Hyderabad, Telangana - 500072',
-            latitude: Number(addr.latitude) || 17.4938,
-            longitude: Number(addr.longitude) || 78.3995,
-          };
-        }
-
         setData(trackingResult);
-      } else {
-        setData(DEFAULT_TRACKING_DATA);
       }
-    } catch {
-      setData(DEFAULT_TRACKING_DATA);
+    } catch (err) {
+      console.error('Error fetching tracking info:', err);
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [id, authUser]);
 
   useEffect(() => {
     fetchTracking();
 
-    // Auto-poll tracking every 20s for live driver and delivery updates
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return;
-      fetchTracking(true);
-    }, 20000);
-
+    // Auto-refresh when tab gains focus
     const handleFocus = () => fetchTracking(true);
     window.addEventListener('focus', handleFocus);
 
+    // Live sync: auto-update as soon as admin updates order status
     const unsubscribeSync = subscribeLiveUpdates(['orders', 'all'], () => {
       fetchTracking(true);
     });
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
       unsubscribeSync();
     };
-  }, [id]);
+  }, [fetchTracking]);
 
-  // Simulate smooth live driver movement along route if out_for_delivery
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDriverProgress((prev) => {
-        if (prev >= 0.95) return 0.95;
-        return Number((prev + 0.02).toFixed(3));
-      });
-      setEtaMinutes((prev) => (prev > 2 ? prev - 1 : 2));
-    }, 6000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Animated radar ripple pulse loop for map
-  useEffect(() => {
-    let frameId: number;
-    let tick = 0;
-    const animateRadar = () => {
-      tick += 0.04;
-      setPulseTick(tick);
-      frameId = requestAnimationFrame(animateRadar);
-    };
-    frameId = requestAnimationFrame(animateRadar);
-    return () => cancelAnimationFrame(frameId);
-  }, []);
-
-  const trackingData = data || DEFAULT_TRACKING_DATA;
-  const rawStatus = (demoStatus || trackingData.order.order_status || trackingData.logistics_status || 'confirmed').toLowerCase();
-
-  const isCancelled = rawStatus === 'cancelled';
-  // Check if driver details should be unlocked (Amazon/Flipkart rule: only when Out for Delivery or Delivered)
-  const isOutForDelivery = !isCancelled && (rawStatus === 'out_for_delivery' || rawStatus === 'delivered');
-  const isDelivered = !isCancelled && rawStatus === 'delivered';
-
-  // Draw interactive route map canvas only when out for delivery
-  useEffect(() => {
-    if (!isOutForDelivery) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const isEmerald = mapTheme === 'emerald';
-
-    const colors = isEmerald
-      ? {
-          base: '#090d14',
-          block: '#111722',
-          blockBorder: '#1c2432',
-          highway: '#202937',
-          highwayStripe: '#334155',
-          street: '#151c27',
-          water: '#071520',
-          waterBorder: '#0f2b3e',
-          park: '#081c12',
-          parkBorder: '#10b98133',
-          parkText: '#34d399',
-          routeGlow: '#00e599',
-          routeCore: '#ecfdf5',
-          riderPuck: '#00e599',
-          riderRing: 'rgba(0, 229, 153, 0.4)',
-          depot: '#10b981',
-          dest: '#f43f5e',
-          textMuted: '#64748b',
-          textBright: '#e2e8f0',
-        }
-      : {
-          base: '#0d1117',
-          block: '#161c24',
-          blockBorder: '#232c38',
-          highway: '#242b35',
-          highwayStripe: '#3e4956',
-          street: '#19202a',
-          water: '#081724',
-          waterBorder: '#102e48',
-          park: '#0a1d13',
-          parkBorder: '#eab30833',
-          parkText: '#facc15',
-          routeGlow: '#f59e0b',
-          routeCore: '#fffbeb',
-          riderPuck: '#f59e0b',
-          riderRing: 'rgba(245, 158, 11, 0.4)',
-          depot: '#10b981',
-          dest: '#ef4444',
-          textMuted: '#788290',
-          textBright: '#f1f5f9',
-        };
-
-    // 1. Terrain base
-    ctx.fillStyle = colors.base;
-    ctx.fillRect(0, 0, width, height);
-
-    // 2. City blocks
-    const blocks = [
-      { x: 30, y: 30, w: width * 0.2 - 20, h: height * 0.24 },
-      { x: width * 0.28, y: 30, w: width * 0.35, h: height * 0.24 },
-      { x: width * 0.68, y: 30, w: width * 0.28, h: height * 0.24 },
-      { x: 30, y: height * 0.36, w: width * 0.2 - 20, h: height * 0.22 },
-      { x: width * 0.28, y: height * 0.36, w: width * 0.35, h: height * 0.22 },
-      { x: width * 0.68, y: height * 0.36, w: width * 0.28, h: height * 0.22 },
-      { x: 30, y: height * 0.66, w: width * 0.35, h: height * 0.28 },
-      { x: width * 0.46, y: height * 0.66, w: width * 0.2, h: height * 0.28 },
-      { x: width * 0.72, y: height * 0.66, w: width * 0.25, h: height * 0.28 },
-    ];
-
-    blocks.forEach((b) => {
-      ctx.fillStyle = colors.block;
-      ctx.strokeStyle = colors.blockBorder;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(b.x, b.y, b.w, b.h, 6);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = isEmerald ? '#151d2b' : '#1c232e';
-      ctx.fillRect(b.x + 8, b.y + 8, b.w * 0.4, b.h * 0.35);
-      ctx.fillRect(b.x + b.w * 0.52, b.y + 8, b.w * 0.4, b.h * 0.35);
-      ctx.fillRect(b.x + 8, b.y + b.h * 0.5, b.w * 0.35, b.h * 0.4);
-      ctx.fillRect(b.x + b.w * 0.48, b.y + b.h * 0.5, b.w * 0.45, b.h * 0.4);
-    });
-
-    // 3. Botanical Corridor
-    ctx.fillStyle = colors.park;
-    ctx.strokeStyle = colors.parkBorder;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(width * 0.48, height * 0.68, width * 0.18, height * 0.24, 10);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = colors.parkText;
-    ctx.font = 'bold 10px Inter, sans-serif';
-    ctx.fillText('🌿 Agro Green Reserve', width * 0.49, height * 0.78);
-
-    // 4. Urban Canal
-    ctx.strokeStyle = colors.water;
-    ctx.lineWidth = 26;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-10, height * 0.12);
-    ctx.bezierCurveTo(width * 0.32, height * 0.04, width * 0.68, height * 0.22, width + 10, height * 0.08);
-    ctx.stroke();
-
-    ctx.strokeStyle = colors.waterBorder;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // 5. Roads
-    ctx.strokeStyle = colors.highway;
-    ctx.lineWidth = 22;
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    ctx.moveTo(0, height * 0.31);
-    ctx.lineTo(width, height * 0.31);
-    ctx.moveTo(0, height * 0.61);
-    ctx.lineTo(width, height * 0.61);
-    ctx.moveTo(width * 0.24, 0);
-    ctx.lineTo(width * 0.24, height);
-    ctx.moveTo(width * 0.66, 0);
-    ctx.lineTo(width * 0.66, height);
-    ctx.stroke();
-
-    // Divider stripes
-    ctx.strokeStyle = colors.highwayStripe;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([12, 10]);
-    ctx.beginPath();
-    ctx.moveTo(0, height * 0.31);
-    ctx.lineTo(width, height * 0.31);
-    ctx.moveTo(0, height * 0.61);
-    ctx.lineTo(width, height * 0.61);
-    ctx.moveTo(width * 0.24, 0);
-    ctx.lineTo(width * 0.24, height);
-    ctx.moveTo(width * 0.66, 0);
-    ctx.lineTo(width * 0.66, height);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Secondary streets
-    ctx.strokeStyle = colors.street;
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    ctx.moveTo(0, height * 0.88);
-    ctx.lineTo(width, height * 0.88);
-    ctx.moveTo(width * 0.44, 0);
-    ctx.lineTo(width * 0.44, height);
-    ctx.stroke();
-
-    // Street labels
-    ctx.fillStyle = colors.textMuted;
-    ctx.font = 'bold 9px Inter, sans-serif';
-    ctx.fillText('SATELLITE EXPRESS CORRIDOR', width * 0.05, height * 0.295);
-    ctx.fillText('OUTER RING ROAD', width * 0.7, height * 0.595);
-
-    // 6. Delivery Route Polyline
-    const startX = width * 0.18;
-    const startY = height * 0.68;
-    const endX = width * 0.82;
-    const endY = height * 0.25;
-
-    const midX1 = width * 0.42;
-    const midY1 = height * 0.68;
-    const midX2 = width * 0.42;
-    const midY2 = height * 0.25;
-
-    // Glowing Neon Aura
-    ctx.shadowColor = colors.routeGlow;
-    ctx.shadowBlur = 18;
-    ctx.strokeStyle = colors.routeGlow;
-    ctx.lineWidth = 7;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(midX1, midY1);
-    ctx.lineTo(midX2, midY2);
-    ctx.lineTo(endX, endY);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Inner bright core
-    ctx.strokeStyle = colors.routeCore;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(midX1, midY1);
-    ctx.lineTo(midX2, midY2);
-    ctx.lineTo(endX, endY);
-    ctx.stroke();
-
-    // 7. Calculate driver position
-    const currentProg = isDelivered ? 1 : driverProgress;
-    let currentX = startX;
-    let currentY = startY;
-
-    if (currentProg <= 0.35) {
-      const p = currentProg / 0.35;
-      currentX = startX + (midX1 - startX) * p;
-      currentY = startY;
-    } else if (currentProg <= 0.7) {
-      const p = (currentProg - 0.35) / 0.35;
-      currentX = midX1;
-      currentY = midY1 + (midY2 - midY1) * p;
-    } else {
-      const p = (currentProg - 0.7) / 0.3;
-      currentX = midX2 + (endX - midX2) * p;
-      currentY = midY2;
-    }
-
-    // 8. Start Depot
-    ctx.fillStyle = colors.depot;
-    ctx.beginPath();
-    ctx.arc(startX, startY, 11, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 10px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('🌱', startX, startY + 4);
-
-    // Destination
-    ctx.fillStyle = colors.dest;
-    ctx.beginPath();
-    ctx.arc(endX, endY, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('📍', endX, endY + 4);
-
-    // Destination badge
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.roundRect(endX - 48, endY - 26, 96, 18, 4);
-    ctx.fill();
-    ctx.fillStyle = '#fda4af';
-    ctx.font = 'bold 9px Inter, sans-serif';
-    ctx.fillText('YOUR DOORSTEP', endX, endY - 14);
-
-    // 9. Driver Scooter Marker
-    const wave1 = (pulseTick * 18) % 36;
-    const wave2 = (pulseTick * 18 + 18) % 36;
-    ctx.strokeStyle = colors.riderRing;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(currentX, currentY, 14 + wave1, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(currentX, currentY, 14 + wave2, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.shadowColor = colors.routeGlow;
-    ctx.shadowBlur = 16;
-    ctx.fillStyle = colors.riderPuck;
-    ctx.beginPath();
-    ctx.arc(currentX, currentY, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.arc(currentX, currentY, 13, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '14px Inter, sans-serif';
-    ctx.fillText('🛵', currentX, currentY + 5);
-
-    // Floating rider pill
-    const tagWidth = 140;
-    const tagHeight = 22;
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = colors.routeGlow;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(currentX - tagWidth / 2, currentY - 36, tagWidth, tagHeight, 11);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = colors.routeGlow;
-    ctx.font = 'bold 9px Inter, sans-serif';
-    ctx.fillText(
-      isDelivered ? '✅ Delivered Safely' : '🟢 28 km/h • Ravi (4.9★)',
-      currentX,
-      currentY - 22
-    );
-  }, [driverProgress, isOutForDelivery, isDelivered, mapTheme, pulseTick]);
+  const handleCopyOrderNumber = (num: string) => {
+    if (!num) return;
+    navigator.clipboard.writeText(num);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
 
   if (loading && !data) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-24 text-center">
-        <RefreshCw className="w-10 h-10 text-brand-600 animate-spin mx-auto mb-4" />
-        <p className="text-slate-800 text-base font-bold">Connecting to Logistics Tracking Server...</p>
-        <p className="text-slate-400 text-xs mt-1">Retrieving parcel lifecycle status & transit updates</p>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center px-4 py-20 text-center">
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <h3 className="text-base font-bold text-slate-900">Loading Order Tracking...</h3>
+        <p className="text-xs text-slate-500 mt-1">Retrieving live fulfillment milestones</p>
       </div>
     );
   }
 
-  const { order, tracking, destination } = trackingData;
+  const order = data?.order || ({} as Partial<Order>);
+  const currentStatus = (order.order_status || data?.logistics_status || 'confirmed').toLowerCase();
+  const isCancelled = currentStatus === 'cancelled';
+  const isDelivered = currentStatus === 'delivered';
+  const isOutForDelivery = currentStatus === 'out_for_delivery';
 
-  // Amazon/Flipkart milestone stages
+  // 5 Real milestone stages
   const milestoneStages = isCancelled
     ? [
-        { key: 'placed', label: 'Order Placed', time: 'Verified' },
-        { key: 'cancelled', label: 'Order Cancelled', time: 'Terminated by Admin' },
+        { key: 'placed', label: 'Order Placed', desc: 'Received & Verified' },
+        { key: 'cancelled', label: 'Order Cancelled', desc: 'Cancelled by Store' },
       ]
     : [
-        { key: 'placed', label: 'Order Placed', time: 'Verified' },
-        { key: 'confirmed', label: 'Confirmed', time: 'Hub Accepted' },
-        { key: 'packed', label: 'Harvested & Packed', time: 'Cold-Chain Ready' },
-        { key: 'out_for_delivery', label: 'Out for Delivery', time: 'Courier Dispatched' },
-        { key: 'delivered', label: 'Delivered', time: 'Doorstep' },
+        { key: 'pending', label: 'Order Placed', desc: 'Received & Verified' },
+        { key: 'confirmed', label: 'Confirmed', desc: 'Accepted by Store' },
+        { key: 'packed', label: 'Harvested & Packed', desc: 'Ready for Dispatch' },
+        { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'On the Way' },
+        { key: 'delivered', label: 'Delivered', desc: 'Doorstep Completed' },
       ];
 
-  const getStageIndex = (st: string) => {
+  const getStepIndex = (st: string) => {
     switch (st) {
       case 'pending':
         return 0;
@@ -608,718 +211,566 @@ export const TrackingPage: React.FC = () => {
     }
   };
 
-  const currentStepIdx = getStageIndex(rawStatus);
+  const currentStepIdx = getStepIndex(currentStatus);
 
-  // Default Amazon/Flipkart shipment activity history
-  const defaultActivities: DeliveryTimelineEvent[] = [
-    {
-      id: 'a1',
-      status: 'pending',
-      title: 'Order Placed & Verified',
-      description: `Order #${order.order_number} confirmed. Payment via ${order.payment_method?.toUpperCase() || 'UPI'}.`,
-      timestamp: 'Today, 10:15 AM',
-      location: 'Fresh Farm Online Portal',
-      completed: true,
-    },
-    {
-      id: 'a2',
-      status: 'confirmed',
-      title: 'Order Confirmed by Fulfillment Hub',
-      description: 'Accepted by Central Fulfillment Center. Harvest batch assigned to partner organic farm.',
-      timestamp: 'Today, 10:24 AM',
-      location: 'Central Farm Depot, Agro Hub 04',
-      completed: currentStepIdx >= 1,
-    },
-    {
-      id: 'a3',
-      status: 'packed',
-      title: 'Harvested & Packed in Insulated Crate',
-      description: 'Vegetables harvested fresh, washed, quality graded, and packed in eco-chill insulated containers.',
-      timestamp: currentStepIdx >= 2 ? 'Today, 10:48 AM' : 'Expected within 20 mins',
-      location: 'Sorting & Packaging Center Hub 04, Hyderabad',
-      completed: currentStepIdx >= 2,
-    },
-    {
-      id: 'a4',
-      status: 'out_for_delivery',
-      title: isOutForDelivery ? 'Out for Delivery (Courier Assigned)' : 'Out for Delivery (Upcoming)',
-      description: isOutForDelivery
-        ? `Handed over to delivery executive ${tracking?.partner_name || 'Ravi Kumar'} on ${tracking?.vehicle_type || 'Electric Scooter'}. En route to your address.`
-        : 'Package will be assigned to a local delivery executive once dispatched from sorting facility.',
-      timestamp: isOutForDelivery ? 'Today, 11:10 AM' : 'Scheduled upon dispatch',
-      location: `Local Delivery Hub, ${order.delivery_address?.area || 'KPHB Colony'}`,
-      completed: isOutForDelivery,
-    },
-    {
-      id: 'a5',
-      status: 'delivered',
-      title: 'Delivered',
-      description: isDelivered ? 'Package delivered to doorstep. Verified by recipient.' : 'Expected doorstep delivery.',
-      timestamp: isDelivered ? 'Today, 11:32 AM' : 'Expected Today by 8:00 PM',
-      location: order.delivery_address?.area || 'Customer Address',
-      completed: isDelivered,
-    },
-  ];
+  // Status visual attributes
+  const getStatusPresentation = () => {
+    switch (currentStatus) {
+      case 'pending':
+        return {
+          title: 'Order Placed & Awaiting Confirmation',
+          description: 'Your order has been received. Our fulfillment team is reviewing and scheduling harvest.',
+          badge: 'Order Placed',
+          badgeBg: 'bg-amber-500/10 text-amber-700 border-amber-200',
+          icon: Clock,
+          color: 'text-amber-600',
+        };
+      case 'confirmed':
+        return {
+          title: 'Order Confirmed by Store',
+          description: 'Your order has been approved. Fresh farm procurement is underway.',
+          badge: 'Confirmed',
+          badgeBg: 'bg-blue-500/10 text-blue-700 border-blue-200',
+          icon: CheckCircle2,
+          color: 'text-blue-600',
+        };
+      case 'preparing':
+      case 'packed':
+        return {
+          title: 'Harvested Fresh & Packed',
+          description: 'Your vegetables have been freshly harvested, quality-checked, and packed for delivery.',
+          badge: 'Packed & Ready',
+          badgeBg: 'bg-purple-500/10 text-purple-700 border-purple-200',
+          icon: Package,
+          color: 'text-purple-600',
+        };
+      case 'out_for_delivery':
+        return {
+          title: 'Out for Delivery — Arriving Today',
+          description: 'Your package is on its way to your delivery address. Please keep your phone available.',
+          badge: 'Out for Delivery',
+          badgeBg: 'bg-emerald-500/10 text-emerald-800 border-emerald-300 font-black',
+          icon: Truck,
+          color: 'text-emerald-600',
+        };
+      case 'delivered':
+        return {
+          title: 'Delivered Successfully 🎉',
+          description: 'Your package has been safely delivered to your doorstep. Thank you for choosing organic!',
+          badge: 'Delivered',
+          badgeBg: 'bg-emerald-600 text-white border-transparent font-black',
+          icon: CheckCircle2,
+          color: 'text-emerald-600',
+        };
+      case 'cancelled':
+        return {
+          title: 'Order Cancelled',
+          description: 'This order was cancelled by store operations. Produce has been returned to inventory.',
+          badge: 'Cancelled',
+          badgeBg: 'bg-rose-500/10 text-rose-700 border-rose-200',
+          icon: AlertCircle,
+          color: 'text-rose-600',
+        };
+      default:
+        return {
+          title: 'Processing Order',
+          description: 'We are preparing your fresh farm order.',
+          badge: currentStatus.toUpperCase(),
+          badgeBg: 'bg-slate-100 text-slate-700 border-slate-200',
+          icon: Clock,
+          color: 'text-slate-600',
+        };
+    }
+  };
 
-  const activities = trackingData.activities && trackingData.activities.length > 0 ? trackingData.activities : defaultActivities;
+  const statusPresentation = getStatusPresentation();
+  const StatusIcon = statusPresentation.icon;
+
+  // Real chronological activities
+  const createdAt = new Date(order.created_at || Date.now());
+  const orderDateStr = createdAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const orderTimeStr = createdAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+  const activities: DeliveryTimelineEvent[] = isCancelled
+    ? [
+        {
+          id: '1',
+          status: 'pending',
+          title: 'Order Placed & Verified',
+          description: `Order #${order.order_number || 'FV'} received with ${order.payment_method?.toUpperCase() || 'COD'} payment mode.`,
+          timestamp: `${orderDateStr}, ${orderTimeStr}`,
+          location: 'Fresh Farm Online Portal',
+          completed: true,
+        },
+        {
+          id: '2',
+          status: 'cancelled',
+          title: 'Order Cancelled',
+          description: 'Order was cancelled by store operations. Reserved produce restored to inventory.',
+          timestamp: `${orderDateStr}, ${orderTimeStr}`,
+          location: 'Store Operations Hub, Hyderabad',
+          completed: true,
+        },
+      ]
+    : [
+        {
+          id: '1',
+          status: 'pending',
+          title: 'Order Placed & Verified',
+          description: `Order #${order.order_number || 'FV'} received with ${order.payment_method?.toUpperCase() || 'COD'} payment mode.`,
+          timestamp: `${orderDateStr}, ${orderTimeStr}`,
+          location: 'Online Store Portal',
+          completed: true,
+        },
+        {
+          id: '2',
+          status: 'confirmed',
+          title: 'Order Confirmed',
+          description: 'Order accepted by store fulfillment team and scheduled for farm procurement.',
+          timestamp: currentStepIdx >= 1 ? `${orderDateStr}, ${orderTimeStr}` : 'Expected shortly',
+          location: 'Fresh Vegetables Hub',
+          completed: currentStepIdx >= 1,
+        },
+        {
+          id: '3',
+          status: 'packed',
+          title: 'Harvested Fresh & Quality Graded',
+          description: 'Produce harvested fresh from local organic plots. Sorted, cleaned, and packed.',
+          timestamp: currentStepIdx >= 2 ? `${orderDateStr}, ${orderTimeStr}` : 'Pending harvest & packing',
+          location: 'Sorting & Packaging Station',
+          completed: currentStepIdx >= 2,
+        },
+        {
+          id: '4',
+          status: 'out_for_delivery',
+          title: isOutForDelivery || isDelivered ? 'Out for Delivery' : 'Out for Delivery (Upcoming)',
+          description:
+            isOutForDelivery || isDelivered
+              ? 'Package dispatched from store hub and is on the way to your delivery address.'
+              : 'Package will be dispatched as soon as harvesting and packing are completed.',
+          timestamp: currentStepIdx >= 3 ? `${orderDateStr}, ${orderTimeStr}` : 'Scheduled upon packing',
+          location: 'Local Delivery Station',
+          completed: currentStepIdx >= 3,
+        },
+        {
+          id: '5',
+          status: 'delivered',
+          title: isDelivered ? 'Delivered' : 'Delivery at Doorstep',
+          description: isDelivered
+            ? 'Package safely delivered to your doorstep.'
+            : 'Expected doorstep delivery within estimated time.',
+          timestamp: isDelivered ? `${orderDateStr}, ${orderTimeStr}` : 'Estimated today',
+          location: order.delivery_address?.full_address || 'Customer Doorstep',
+          completed: isDelivered,
+        },
+      ];
+
+  const addr = (order.delivery_address || order.address_snapshot || {}) as any;
+  const recipientName = order.customer_name || addr.full_name || authUser?.name || 'Customer';
+  const recipientPhone = order.customer_mobile || addr.phone || authUser?.mobile || '';
+  const fullAddressText =
+    addr.full_address ||
+    [
+      addr.house_number
+        ? String(addr.house_number).toLowerCase().includes('flat') || String(addr.house_number).toLowerCase().includes('house')
+          ? addr.house_number
+          : `Flat/House ${addr.house_number}`
+        : '',
+      addr.street,
+      addr.area,
+      addr.landmark ? `Near ${addr.landmark}` : '',
+      addr.city || 'Hyderabad',
+      addr.state || 'Telangana',
+      addr.pincode ? `- ${addr.pincode}` : '',
+    ]
+      .filter(Boolean)
+      .join(', ') || 'Customer Doorstep Address';
+
+  const orderItems: OrderItem[] = (order.items || (order as any).order_items || []) as OrderItem[];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Top Header & Breadcrumb */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
+    <div className="min-h-screen bg-slate-50/60 pb-16">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
+        {/* Navigation Breadcrumb & Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <Link
               to="/orders"
-              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 mb-2.5 transition-colors group"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-emerald-700 transition-colors mb-2 group"
             >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" /> Back to My Orders
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Back to My Orders</span>
             </Link>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                Package Tracking
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                Order Tracking
               </h1>
-              <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-brand-100 text-brand-800 flex items-center gap-1.5">
-                <Truck className="w-3.5 h-3.5" />
-                {trackingData.carrier_name || 'FreshVeg Logistics Express'}
-              </span>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-mono font-bold border border-slate-200">
+                <span>#{order.order_number || id}</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyOrderNumber(order.order_number || id || '')}
+                  title="Copy Order ID"
+                  className="text-slate-400 hover:text-slate-700 transition-colors ml-0.5"
+                >
+                  {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-slate-700">Order #{order.order_number}</span>
-              <span>•</span>
-              <span className="font-mono text-slate-600">Tracking ID: {trackingData.tracking_number || `TRK-${order.order_number}`}</span>
-              <span>•</span>
-              <span>Total ₹{order.total} ({order.payment_method?.toUpperCase()})</span>
+            <p className="text-xs text-slate-500 mt-1">
+              Placed on {createdAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} at{' '}
+              {orderTimeStr}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => fetchTracking(false)}
-              className="text-xs font-bold bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-              Refresh Status
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => fetchTracking(true)}
+            disabled={isRefreshing}
+            className="self-start sm:self-center inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 shadow-xs transition-all disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${isRefreshing ? 'animate-spin text-emerald-600' : ''}`} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh Status'}</span>
+          </button>
         </div>
 
-        {/* Demo Status Switcher Bar (Allows testing Amazon/Flipkart logistics transitions) */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-brand-600 shrink-0" />
-            <span className="font-bold text-slate-700">Logistics Status Preview:</span>
-            <span className="text-slate-500 hidden md:inline">
-              Driver details & live map only appear when status is <strong>Out for Delivery</strong>.
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {[
-              { id: 'confirmed', label: '1. Confirmed' },
-              { id: 'packed', label: '2. Packed' },
-              { id: 'out_for_delivery', label: '3. Out for Delivery 🛵' },
-              { id: 'delivered', label: '4. Delivered ✅' },
-              { id: 'cancelled', label: '🛑 Cancelled' },
-            ].map((btn) => (
-              <button
-                key={btn.id}
-                onClick={() => setDemoStatus(btn.id)}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
-                  rawStatus === btn.id
-                    ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-500/30'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+        {/* HERO STATUS CARD */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-8 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+            <div className="flex items-start gap-4">
+              <div
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border ${
+                  isCancelled
+                    ? 'bg-rose-50 border-rose-200 text-rose-600'
+                    : isDelivered
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+                    : isOutForDelivery
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700'
+                    : 'bg-slate-100 border-slate-200 text-slate-700'
                 }`}
               >
-                {btn.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Delivery Status Hero Card (Amazon / Flipkart Style) */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className={`text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
-                isCancelled
-                  ? 'text-rose-700 bg-rose-50 border border-rose-300'
-                  : 'text-brand-700 bg-brand-50 border border-brand-200'
-              }`}>
-                {isCancelled ? 'Order Cancelled' : 'Shipment Status'}
-              </span>
-              <span className="text-xs text-slate-400 font-medium">
-                {isCancelled ? 'Operations Update' : 'Standard 2-Hour Express Delivery'}
-              </span>
-            </div>
-
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {isCancelled
-                ? 'Order Cancelled'
-                : isDelivered
-                ? 'Delivered to your doorstep'
-                : isOutForDelivery
-                ? 'Out for delivery — Arriving today'
-                : rawStatus === 'packed'
-                ? 'Packed & Ready for Dispatch'
-                : 'Order Confirmed & Farm Harvesting'}
-            </h2>
-
-            <p className="text-sm font-semibold text-slate-600 mt-1 flex items-center gap-2">
-              {isCancelled ? (
-                <>
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span className="text-rose-700 font-bold">
-                    This order was cancelled by store operations. Delivery has been stopped.
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Clock className="w-4 h-4 text-brand-600" />
-                  <span>
-                    {isDelivered
-                      ? 'Delivered successfully'
-                      : isOutForDelivery
-                      ? `Estimated arrival: ~${etaMinutes} mins (${trackingData.expected_delivery || 'Today, by 8:00 PM'})`
-                      : `Expected Delivery: ${trackingData.expected_delivery || 'Today, by 8:00 PM'}`}
-                  </span>
-                </>
-              )}
-            </p>
-          </div>
-
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-xs space-y-1.5 min-w-[240px]">
-            <div className="flex justify-between text-slate-500">
-              <span>Carrier:</span>
-              <span className="font-bold text-slate-800">{trackingData.carrier_name || 'FreshVeg Express'}</span>
-            </div>
-            <div className="flex justify-between text-slate-500">
-              <span>Fulfillment Hub:</span>
-              <span className="font-bold text-slate-800">Depot Hub 04</span>
-            </div>
-            <div className="flex justify-between text-slate-500">
-              <span>Packaging:</span>
-              <span className={`font-bold ${isCancelled ? 'text-rose-600' : 'text-emerald-700'}`}>
-                {isCancelled ? 'Cancelled & Stock Restored' : 'Cold-Chain Insulated'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Cancellation Notice Banner */}
-        {isCancelled && (
-          <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-start gap-3.5 text-rose-900 animate-in fade-in duration-300">
-            <AlertCircle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <h4 className="text-sm font-black text-rose-900 uppercase tracking-wide">
-                Order Cancelled by Store Operations
-              </h4>
-              <p className="text-xs text-rose-700 leading-relaxed font-medium">
-                This order was marked as <strong>Cancelled</strong> by store operations. Any harvest and courier dispatch for this package has been halted. If you paid online via UPI/Card, your refund has been processed.
-              </p>
-              <div className="pt-2 flex items-center gap-3">
-                <Link
-                  to="/products"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-sm"
-                >
-                  Browse Fresh Produce
-                </Link>
-                <a
-                  href="tel:+918106970384"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-bold transition-all"
-                >
-                  <Phone className="w-3.5 h-3.5" /> Call Support
-                </a>
+                <StatusIcon className="w-7 h-7" />
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Amazon/Flipkart Stepper */}
-        <div className="py-2">
-          {isCancelled ? (
-            <div className="max-w-md mx-auto grid grid-cols-2 gap-4 relative">
-              <div className="absolute top-4 left-1/4 right-1/4 h-1 bg-rose-200 rounded-full"></div>
-              <div className="flex flex-col items-center text-center relative z-10">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-emerald-600 text-white shadow-md ring-4 ring-white">
-                  <Check className="w-4 h-4 stroke-[3]" />
-                </div>
-                <span className="text-xs font-black mt-2.5 text-slate-900">Order Placed</span>
-                <span className="text-[10px] text-slate-400 mt-0.5 font-medium">Verified</span>
-              </div>
-              <div className="flex flex-col items-center text-center relative z-10">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-rose-600 text-white shadow-md ring-4 ring-white">
-                  ✕
-                </div>
-                <span className="text-xs font-black mt-2.5 text-rose-700">Cancelled</span>
-                <span className="text-[10px] text-rose-500 mt-0.5 font-medium">Order Terminated</span>
-              </div>
-            </div>
-          ) : (
-            <div className="relative">
-              {/* Background connecting line */}
-              <div className="absolute top-4 left-6 right-6 h-1 bg-slate-100 rounded-full hidden sm:block"></div>
-              {/* Active filled connecting line */}
-              <div
-                className="absolute top-4 left-6 h-1 bg-brand-600 rounded-full transition-all duration-700 hidden sm:block"
-                style={{
-                  width: `${(currentStepIdx / (milestoneStages.length - 1)) * 90}%`,
-                }}
-              ></div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 relative z-10">
-                {milestoneStages.map((st, idx) => {
-                  const isCompleted = idx <= currentStepIdx;
-                  const isCurrent = idx === currentStepIdx;
-
-                  return (
-                    <div key={st.key} className="flex flex-col items-center text-center">
-                      <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
-                          isCompleted
-                            ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30 ring-4 ring-white'
-                            : 'bg-white text-slate-400 border-2 border-slate-200'
-                        } ${isCurrent && !isDelivered ? 'ring-4 ring-brand-200 animate-pulse' : ''}`}
-                      >
-                        {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : idx + 1}
-                      </div>
-                      <span
-                        className={`text-xs font-black mt-2.5 ${
-                          isCompleted ? 'text-slate-900' : 'text-slate-400'
-                        }`}
-                      >
-                        {st.label}
-                      </span>
-                      <span className="text-[10px] text-slate-400 mt-0.5 font-medium">{st.time}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Grid Layout: Left Column (Logistics / Live Map) + Right Column (Driver details / Order details) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column (8 cols): Either Live Route Map (if Out for Delivery) OR Logistics Information Card (if Before Out for Delivery) */}
-        <div className="lg:col-span-8 space-y-6">
-          {isOutForDelivery ? (
-            /* OUT FOR DELIVERY ACTIVE: Live Map & Telemetry */
-            <div className="space-y-4">
-              <div className="bg-slate-950 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden relative ring-1 ring-slate-800">
-                {/* Top-Left Live ETA Banner overlay */}
-                <div className="absolute top-4 left-4 z-10 bg-slate-950/90 backdrop-blur-xl text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-800/80 flex items-center gap-3">
-                  <div
-                    className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-2xl shadow-inner ${
-                      mapTheme === 'emerald'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                    }`}
-                  >
-                    🛵
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                      <span>{mapTheme === 'emerald' ? 'Fresh Express Delivery' : 'Fresh Priority Lane'}</span>
-                    </div>
-                    <p className="text-xl font-black text-white flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-brand-400" /> {etaMinutes} Mins
-                      <span className="text-xs font-semibold text-slate-400">• 3.2 km</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Top-Right Theme Toggle & Controls */}
-                <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-                  <div className="bg-slate-950/90 backdrop-blur-xl p-1 rounded-2xl border border-slate-800/80 shadow-2xl flex items-center gap-1 text-xs font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setMapTheme('emerald')}
-                      className={`px-3 py-1.5 rounded-xl transition-all ${
-                        mapTheme === 'emerald'
-                          ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Emerald 🌙
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMapTheme('amber')}
-                      className={`px-3 py-1.5 rounded-xl transition-all ${
-                        mapTheme === 'amber'
-                          ? 'bg-amber-400 text-slate-950 shadow-md font-black'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Amber ⚡
-                    </button>
-                  </div>
-                </div>
-
-                {/* Delivery address badge overlay */}
-                <div className="absolute bottom-4 left-4 z-10 bg-slate-950/90 backdrop-blur-xl text-slate-200 px-4 py-2.5 rounded-2xl shadow-xl border border-slate-800/80 text-xs font-semibold flex items-center gap-2 max-w-sm">
-                  <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
-                  <span className="truncate">Destination: {destination.address}</span>
-                </div>
-
-                {/* Speed & GPS telemetry overlay */}
-                <div className="absolute bottom-4 right-4 z-10 hidden sm:flex items-center gap-2 bg-slate-950/90 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-slate-800 text-[11px] font-bold text-slate-300">
-                  <Navigation className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                  <span>Speed: 28 km/h</span>
-                  <span className="text-slate-600">|</span>
-                  <span className="text-emerald-400">GPS: Live</span>
-                </div>
-
-                {/* Canvas Map */}
-                <canvas
-                  ref={canvasRef}
-                  width={800}
-                  height={450}
-                  className="w-full h-[400px] sm:h-[480px] object-cover block cursor-crosshair"
-                />
-              </div>
-
-              {/* Transit badge */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between text-xs text-slate-600">
-                <div className="flex items-center gap-2 font-bold text-slate-900">
-                  <Sparkles className="w-4 h-4 text-brand-600" />
-                  <span>Insulated Thermal Packaging Active</span>
-                </div>
+              <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-                  <span className="font-semibold text-emerald-700">Driver Active on GPS Route</span>
-                </div>
-              </div>
-            </div>
-          ) : isCancelled ? (
-            /* CANCELLED ORDER: Store Operations Cancellation Screen */
-            <div className="space-y-6">
-              <div className="bg-gradient-to-br from-rose-950 via-slate-950 to-slate-900 rounded-3xl border border-rose-900/60 shadow-xl p-8 sm:p-10 text-white relative overflow-hidden">
-                <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-rose-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-                <div className="max-w-xl space-y-4 relative z-10">
-                  <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-inner">
-                    <AlertCircle className="w-7 h-7" />
-                  </div>
-
-                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                    Order Cancelled by Operations
-                  </h3>
-
-                  <p className="text-slate-300 text-sm leading-relaxed">
-                    This order was cancelled by store operations. Produce harvesting has ceased and courier dispatch has been halted.
-                  </p>
-
-                  <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 backdrop-blur-md text-xs text-rose-200 space-y-2">
-                    <div className="flex items-center gap-2 font-bold text-rose-400">
-                      <Info className="w-4 h-4" />
-                      <span>Order & Payment Resolution</span>
-                    </div>
-                    <p className="text-rose-200/80 leading-normal">
-                      For COD orders, no amount was charged. If this order was prepaid via UPI, Card, or Digital Wallet, an automatic refund has been queued back to your source account.
-                    </p>
-                  </div>
-
-                  <div className="pt-2 flex flex-wrap items-center gap-3">
-                    <Link
-                      to="/orders"
-                      className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs rounded-xl shadow transition-all"
-                    >
-                      View All My Orders
-                    </Link>
-                    <a
-                      href="tel:+918106970384"
-                      className="px-4 py-2.5 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-700/50 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
-                    >
-                      <Phone className="w-3.5 h-3.5" /> Call Customer Support
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* BEFORE OUT FOR DELIVERY: Amazon/Flipkart Logistics Information Screen */
-            <div className="space-y-6">
-              <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-brand-950 rounded-3xl border border-slate-800 shadow-xl p-8 sm:p-10 text-white relative overflow-hidden">
-                <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-                <div className="max-w-xl space-y-4 relative z-10">
-                  <div className="w-14 h-14 rounded-2xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shadow-inner">
-                    <Box className="w-7 h-7" />
-                  </div>
-
-                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                    Driver Details Available Upon Dispatch
-                  </h3>
-
-                  <p className="text-slate-300 text-sm leading-relaxed">
-                    Your farm-fresh organic produce is currently undergoing harvest inspection and temperature-controlled packaging at our central facility.
-                  </p>
-
-                  <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md text-xs text-slate-300 space-y-2">
-                    <div className="flex items-center gap-2 font-bold text-brand-400">
-                      <Sparkles className="w-4 h-4" />
-                      <span>Logistics & Fulfillment Policy</span>
-                    </div>
-                    <p className="text-slate-400 leading-normal">
-                      Like Amazon and Flipkart, assigned delivery partner contact details, vehicle registration, and real-time live GPS map tracking unlock automatically as soon as your package status changes to <strong>Out for Delivery</strong>.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
-                    <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl">
-                      <p className="text-slate-400">Current Facility</p>
-                      <p className="font-bold text-white mt-0.5">Central Agro Depot Hub 04</p>
-                    </div>
-                    <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl">
-                      <p className="text-slate-400">Packaging Type</p>
-                      <p className="font-bold text-emerald-400 mt-0.5">Cold-Chain Insulated Box</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quality & Safety Banner */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
-                <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-brand-600" />
-                  Freshness & Quality Assurance
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-slate-600">
-                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
-                    <p className="font-bold text-slate-800">🌱 100% Farm Fresh</p>
-                    <p className="text-slate-500">Harvested within hours of dispatch</p>
-                  </div>
-                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
-                    <p className="font-bold text-slate-800">❄️ Cold-Chain 4°C</p>
-                    <p className="text-slate-500">Insulated transit to preserve crispness</p>
-                  </div>
-                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
-                    <p className="font-bold text-slate-800">📦 Sealed Crate</p>
-                    <p className="text-slate-500">Tamper-evident hygiene seal on box</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Amazon / Flipkart Detailed Shipment Activity Updates Feed */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">Shipment Activity & Updates</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Full chronological logistics transit milestones</p>
-              </div>
-              <span className="text-xs font-bold text-brand-700 bg-brand-50 px-3 py-1 rounded-full border border-brand-100">
-                Live Updates
-              </span>
-            </div>
-
-            <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-              {activities.map((act) => (
-                <div key={act.id} className="relative flex items-start gap-4">
-                  <div
-                    className={`absolute -left-6 mt-1 w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] ${
-                      act.completed
-                        ? 'bg-brand-600 text-white ring-4 ring-white'
-                        : 'bg-slate-200 text-slate-400 ring-4 ring-white'
-                    }`}
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusPresentation.badgeBg}`}
                   >
-                    {act.completed ? '✓' : ''}
-                  </div>
-
-                  <div className="flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className={`text-xs font-black ${act.completed ? 'text-slate-900' : 'text-slate-400'}`}>
-                        {act.title}
-                      </p>
-                      <span className="text-[11px] font-semibold text-slate-400">{act.timestamp}</span>
-                    </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">{act.description}</p>
-                    <p className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-slate-400" /> {act.location}
-                    </p>
-                  </div>
+                    {statusPresentation.badge}
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-400">Doorstep Delivery</span>
                 </div>
-              ))}
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  {statusPresentation.title}
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
+                  {statusPresentation.description}
+                </p>
+              </div>
             </div>
+
+            {/* Quick summary pill */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-xs space-y-1.5 shrink-0 min-w-[210px]">
+              <div className="flex justify-between text-slate-500">
+                <span>Payment Mode:</span>
+                <span className="font-bold text-slate-800 uppercase">{order.payment_method || 'COD'}</span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>Payment Status:</span>
+                <span
+                  className={`font-bold uppercase ${
+                    order.payment_status === 'paid' || order.payment_status === 'cod_collected'
+                      ? 'text-emerald-600'
+                      : 'text-amber-600'
+                  }`}
+                >
+                  {order.payment_status?.replace(/_/g, ' ') || 'Pending'}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>Grand Total:</span>
+                <span className="font-extrabold text-emerald-700 text-sm">₹{order.total}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stepper Progress Bar */}
+          <div className="pt-2">
+            {isCancelled ? (
+              <div className="max-w-md mx-auto grid grid-cols-2 gap-4 relative">
+                <div className="absolute top-4 left-1/4 right-1/4 h-1 bg-rose-200 rounded-full" />
+                <div className="flex flex-col items-center text-center relative z-10">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-emerald-600 text-white shadow-md ring-4 ring-white">
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  </div>
+                  <span className="text-xs font-black mt-2 text-slate-900">Order Placed</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5 font-medium">Verified</span>
+                </div>
+                <div className="flex flex-col items-center text-center relative z-10">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-rose-600 text-white shadow-md ring-4 ring-white">
+                    ✕
+                  </div>
+                  <span className="text-xs font-black mt-2 text-rose-700">Cancelled</span>
+                  <span className="text-[10px] text-rose-500 mt-0.5 font-medium">Order Terminated</span>
+                </div>
+              </div>
+            ) : (
+              <div className="relative">
+                {/* Connecting background bar */}
+                <div className="absolute top-4 left-6 right-6 h-1 bg-slate-100 rounded-full hidden sm:block" />
+                {/* Filled active connecting bar */}
+                <div
+                  className="absolute top-4 left-6 h-1 bg-emerald-600 rounded-full transition-all duration-700 hidden sm:block"
+                  style={{
+                    width: `${(currentStepIdx / (milestoneStages.length - 1)) * 90}%`,
+                  }}
+                />
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 relative z-10">
+                  {milestoneStages.map((stage, idx) => {
+                    const isCompleted = idx <= currentStepIdx;
+                    const isCurrent = idx === currentStepIdx;
+
+                    return (
+                      <div key={stage.key} className="flex flex-col items-center text-center">
+                        <div
+                          className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
+                            isCompleted
+                              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-4 ring-white'
+                              : 'bg-white text-slate-400 border-2 border-slate-200'
+                          } ${isCurrent && !isDelivered ? 'ring-4 ring-emerald-200 animate-pulse' : ''}`}
+                        >
+                          {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : idx + 1}
+                        </div>
+                        <span
+                          className={`text-xs font-black mt-2 ${
+                            isCompleted ? 'text-slate-900' : 'text-slate-400'
+                          }`}
+                        >
+                          {stage.label}
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5 font-medium">{stage.desc}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right Column (4 cols): Driver Profile (ONLY if Out for Delivery) + Delivery Details Card */}
-        <div className="lg:col-span-4 space-y-6">
-          {isOutForDelivery && tracking ? (
-            /* DRIVER DETAILS CARD: Only shown when Out for Delivery / Delivered */
-            <div className="bg-white p-6 rounded-3xl border border-brand-200/80 shadow-md shadow-brand-500/5 space-y-5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-brand-600 text-white text-[10px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider">
-                Assigned Driver
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-400">Delivery Executive</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  ⭐ {tracking.partner_rating || 4.88} (48 Deliveries)
+        {/* 2-COLUMN MAIN CONTENT GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* LEFT COLUMN: Timeline & Order Items (7 cols) */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* Timeline Milestones Card */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">Shipment Activity & Updates</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Chronological fulfillment progress</p>
+                </div>
+                <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                  Live Status
                 </span>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-emerald-400 text-white font-black text-2xl flex items-center justify-center shadow-md">
-                  {tracking.partner_name?.charAt(0) || 'R'}
+              <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
+                {activities.map((act) => (
+                  <div key={act.id} className="relative flex items-start gap-4">
+                    <div
+                      className={`absolute -left-6 mt-1 w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] ${
+                        act.completed
+                          ? 'bg-emerald-600 text-white ring-4 ring-white'
+                          : 'bg-slate-200 text-slate-400 ring-4 ring-white'
+                      }`}
+                    >
+                      {act.completed ? '✓' : ''}
+                    </div>
+
+                    <div className="flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className={`text-xs font-black ${act.completed ? 'text-slate-900' : 'text-slate-400'}`}>
+                          {act.title}
+                        </p>
+                        <span className="text-[11px] font-semibold text-slate-400">{act.timestamp}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">{act.description}</p>
+                      <p className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-slate-400" /> {act.location}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Order Items List Card */}
+            {orderItems.length > 0 && (
+              <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                    <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                    <span>Items in this Order ({orderItems.length})</span>
+                  </h3>
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {orderItems.map((item, idx) => {
+                    const price = Number(item.price || item.price_snapshot || 0);
+                    const qty = Number(item.quantity || 1);
+                    const lineTotal = Number(item.total || item.subtotal || price * qty);
+                    const unitStr = item.unit || item.unit_snapshot || 'Standard';
+                    const imgUrl = item.image_url || (item.product_images && item.product_images[0]) || '';
+
+                    return (
+                      <div key={item.id || idx} className="py-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {imgUrl ? (
+                            <img
+                              src={imgUrl}
+                              alt={item.product_name || 'Produce'}
+                              className="w-12 h-12 rounded-xl object-cover border border-slate-100 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-lg shrink-0">
+                              🥬
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 text-xs truncate">
+                              {item.product_name || 'Farm Fresh Produce'}
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {unitStr} × {qty} {price > 0 && `(@ ₹${price})`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="font-extrabold text-slate-900 text-xs">₹{lineTotal}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT COLUMN: Address, Payment & Support (5 cols) */}
+          <div className="lg:col-span-5 space-y-6">
+            {/* Delivery Address Card */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 space-y-3.5 text-xs">
+              <h4 className="font-extrabold text-slate-900 border-b border-slate-100 pb-3 text-sm flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-emerald-600" />
+                <span>Delivery Address</span>
+              </h4>
+
+              <div className="space-y-2 text-slate-600">
+                <p>
+                  <strong className="text-slate-800 font-bold">Recipient:</strong> {recipientName}
+                </p>
+                {recipientPhone && (
+                  <p className="flex items-center gap-1.5">
+                    <strong className="text-slate-800 font-bold">Phone:</strong>
+                    <a href={`tel:${recipientPhone}`} className="text-emerald-700 hover:underline font-mono font-bold">
+                      {recipientPhone}
+                    </a>
+                  </p>
+                )}
+                <p className="leading-relaxed pt-1">
+                  <strong className="text-slate-800 font-bold block mb-0.5">Doorstep Location:</strong>
+                  <span className="text-slate-700">{fullAddressText}</span>
+                </p>
+                {addr.landmark && (
+                  <p className="text-[11px] text-slate-500">
+                    <strong>Landmark:</strong> Near {addr.landmark}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Bill & Payment Summary Card */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 space-y-3 text-xs">
+              <h4 className="font-extrabold text-slate-900 border-b border-slate-100 pb-3 text-sm flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-emerald-600" />
+                <span>Payment & Bill Summary</span>
+              </h4>
+
+              <div className="space-y-2 text-slate-600">
+                <div className="flex justify-between">
+                  <span>Items Subtotal:</span>
+                  <span className="font-semibold text-slate-800">₹{order.subtotal || order.total}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Delivery Charges:</span>
+                  <span className="font-semibold text-slate-800">
+                    {Number(order.delivery_charge || 0) > 0 ? `₹${order.delivery_charge}` : 'FREE'}
+                  </span>
+                </div>
+                {Number(order.discount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-semibold">
+                    <span>Discount Applied:</span>
+                    <span>-₹{order.discount}</span>
+                  </div>
+                )}
+                <div className="border-t border-slate-100 pt-2.5 flex justify-between items-center text-sm">
+                  <span className="font-extrabold text-slate-900">Total Payable:</span>
+                  <span className="font-black text-emerald-700 text-base">₹{order.total}</span>
+                </div>
+
+                <div className="pt-2 flex items-center justify-between border-t border-slate-100 text-[11px]">
+                  <span className="text-slate-500">Method:</span>
+                  <span className="font-bold text-slate-800 uppercase">{order.payment_method || 'COD'}</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500">Payment Status:</span>
+                  <span
+                    className={`font-bold uppercase ${
+                      order.payment_status === 'paid' || order.payment_status === 'cod_collected'
+                        ? 'text-emerald-700'
+                        : 'text-amber-700'
+                    }`}
+                  >
+                    {order.payment_status?.replace(/_/g, ' ') || 'Pending'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Store Help & Direct Support Card */}
+            <div className="bg-slate-900 text-white rounded-3xl p-6 space-y-3.5 shadow-md">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                  <Phone className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-900 text-lg">{tracking.partner_name || 'Ravi Kumar'}</h3>
-                  <p className="text-xs text-slate-500 font-medium">{tracking.vehicle_type || 'Electric Scooter (EV)'}</p>
-                  <p className="text-xs font-mono font-bold text-brand-700 mt-0.5">{tracking.vehicle_number || 'GJ-01-EV-4421'}</p>
+                  <h4 className="font-bold text-sm text-white">Have questions about your order?</h4>
+                  <p className="text-[11px] text-slate-400">Our local store team is here to assist you.</p>
                 </div>
               </div>
 
-              {/* Contact buttons */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <a
-                  href={`tel:${tracking.partner_phone || '+919812345678'}`}
-                  className="bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs py-3 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                  href="tel:+918106970384"
+                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
                 >
-                  <Phone className="w-3.5 h-3.5" /> Call Driver
+                  <Phone className="w-3.5 h-3.5" />
+                  <span>Call Store</span>
                 </a>
                 <a
-                  href={`https://wa.me/91${(tracking.partner_phone || '9812345678').replace(/[^0-9]/g, '')}`}
+                  href={`https://wa.me/918106970384?text=${encodeURIComponent(
+                    `Hello Fresh Vegetables, regarding my order #${order.order_number || id}...`
+                  )}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs py-3 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
                 >
-                  <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>WhatsApp</span>
                 </a>
               </div>
             </div>
-          ) : isCancelled ? (
-            /* CANCELLED COURIER CARD */
-            <div className="bg-white p-6 rounded-3xl border border-rose-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-wider text-rose-500">Dispatch Status</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                  Cancelled
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-rose-50/60 border border-rose-100">
-                <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl shrink-0">
-                  🛑
-                </div>
-                <div className="text-xs">
-                  <p className="font-bold text-rose-950">No Courier Dispatched</p>
-                  <p className="text-rose-700/80 text-[11px] mt-0.5">Order was cancelled prior to delivery fleet pickup</p>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-slate-400 leading-normal">
-                If you have questions about this cancellation, please contact our support desk directly at <strong>+91 8106970384</strong>.
-              </p>
-            </div>
-          ) : (
-            /* PENDING DRIVER CARD: Shown before Out for Delivery */
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-400">Courier Partner</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                  Assigning at Hub
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="w-12 h-12 rounded-xl bg-slate-200 text-slate-400 flex items-center justify-center text-xl shrink-0">
-                  🛵
-                </div>
-                <div className="text-xs">
-                  <p className="font-bold text-slate-800">Pending Dispatch</p>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Driver details will appear once parcel leaves sorting facility</p>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-slate-400 leading-normal">
-                Deliveries are handled by certified electric bike partners equipped with refrigerated transport boxes.
-              </p>
-            </div>
-          )}
-
-          {/* Destination & Order Details */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4 text-xs">
-            <h4 className="font-bold text-slate-900 border-b border-slate-100 pb-3 text-sm flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-brand-600" /> Delivery Address
-            </h4>
-            {(() => {
-              const addr = order.delivery_address || (order as any).address_snapshot || {};
-              const recipientName =
-                order.customer_name ||
-                addr.full_name ||
-                authUser?.name ||
-                'Customer';
-              const recipientPhone =
-                order.customer_mobile ||
-                addr.phone ||
-                authUser?.mobile ||
-                '';
-              const fullAddr =
-                addr.full_address ||
-                destination?.address ||
-                [
-                  addr.house_number
-                    ? (String(addr.house_number).toLowerCase().includes('flat') || String(addr.house_number).toLowerCase().includes('house')
-                        ? addr.house_number
-                        : `Flat/House ${addr.house_number}`)
-                    : '',
-                  addr.street,
-                  addr.area,
-                  addr.landmark ? `Near ${addr.landmark}` : '',
-                  addr.city || 'Hyderabad',
-                  addr.state || 'Telangana',
-                  addr.pincode ? `- ${addr.pincode}` : '',
-                ]
-                  .filter(Boolean)
-                  .join(', ') ||
-                'KPHB Colony, Hyderabad, Telangana - 500072';
-
-              return (
-                <div className="space-y-2.5 text-slate-600">
-                  <p>
-                    <strong className="text-slate-800 font-semibold">Recipient:</strong> {recipientName}
-                  </p>
-                  {recipientPhone && (
-                    <p>
-                      <strong className="text-slate-800 font-semibold">Phone:</strong> {recipientPhone}
-                    </p>
-                  )}
-                  <p>
-                    <strong className="text-slate-800 font-semibold">Payment:</strong>{' '}
-                    <span className="font-bold uppercase text-brand-700">{order.payment_method || 'COD'}</span>{' '}
-                    <span className="text-slate-500">({order.payment_status || 'pending'})</span>
-                  </p>
-                  <p className="text-slate-500 pt-1 leading-relaxed">
-                    <strong className="text-slate-800 font-semibold">Address:</strong> {fullAddr}
-                  </p>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* Need Help / Support Card */}
-          <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200/80 space-y-3 text-xs">
-            <div className="flex items-center gap-2 font-bold text-slate-800">
-              <AlertCircle className="w-4 h-4 text-slate-500" />
-              <span>Need help with this shipment?</span>
-            </div>
-            <p className="text-slate-500 leading-relaxed">
-              If you have special delivery instructions or wish to reschedule your delivery slot, our 24/7 support is ready to help.
-            </p>
-            <Link
-              to="/profile"
-              className="inline-flex items-center gap-1 font-bold text-brand-700 hover:text-brand-800 transition-colors"
-            >
-              Contact Support Team <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
           </div>
         </div>
       </div>

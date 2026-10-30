@@ -39,7 +39,7 @@ const DYNAMIC_PLACEHOLDERS = [
 
 export const Header: React.FC = () => {
   const { user, logout, showLogoutConfirm, showLogoutSuccess } = useAuth();
-  const { itemCount, setIsCartOpen } = useCart();
+  const { itemCount, setIsCartOpen, serviceability, isLocationModalOpen, setIsLocationModalOpen } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -80,7 +80,6 @@ export const Header: React.FC = () => {
   }, []);
 
   // Location & Delivery Zone selector state
-  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [currentZone, setCurrentZone] = useState<DeliveryZone | null>(() => {
     const saved = localStorage.getItem('fresh_delivery_zone');
     if (saved) {
@@ -214,7 +213,7 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/98 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300 w-full max-w-[100vw] overflow-x-hidden safe-area-pt">
+    <header className="sticky top-0 z-50 bg-white/98 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300 w-full safe-area-pt">
       {/* ─── Top Announcement Bar (Vibrant Quick-Commerce Green) ─── */}
       <div className="bg-[#0c831f] text-white text-[11px] font-medium h-7.5 sm:h-8.5 flex items-center overflow-hidden w-full">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full flex items-center justify-between gap-3 min-w-0">
@@ -259,10 +258,10 @@ export const Header: React.FC = () => {
           ═══════════════════════════════════════════════════════════════════════ */}
       <div className="md:hidden w-full px-3 pt-2 pb-2.5">
         {/* Row 1: Brand & Location (Left) + Notification & Quick Cart / Profile (Right) */}
-        <div className="flex items-center justify-between gap-2 h-11 w-full">
+        <div className="flex items-center justify-between gap-1.5 h-11 w-full">
           
-          {/* Left: Brand Icon + Delivery Time & Location Stack */}
-          <div className="flex items-center gap-2 min-w-0">
+          {/* Left: Brand Icon + Delivery Time & Location Stack + Choose Location Control */}
+          <div className="flex items-center gap-1.5 min-w-0">
             <Link to="/" className="shrink-0 flex items-center" aria-label="Fresh Vegetables Home">
               <img
                 src="/logo.png"
@@ -274,18 +273,53 @@ export const Header: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsLocationModalOpen(true)}
-              className="flex flex-col text-left justify-center cursor-pointer min-w-0 pr-1 group"
+              className="flex flex-col text-left justify-center cursor-pointer min-w-0 group"
               title="Change delivery location"
               aria-label={`Delivery location: ${displayLocationName}`}
             >
-              <span className="text-[10px] font-black uppercase text-[#0c831f] flex items-center gap-1 leading-none tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                <span>15 MINS DELIVERY</span>
-              </span>
-              <span className="text-xs font-black text-slate-900 truncate max-w-[140px] xs:max-w-[190px] flex items-center gap-0.5 mt-0.5 leading-tight group-hover:text-[#0c831f] transition-colors">
+              <div className="flex items-center gap-1 leading-none">
+                {serviceability.checked ? (
+                  serviceability.serviceable ? (
+                    <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
+                      <span>{serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} KM • 15 MINS` : '15 MINS DELIVERY'}</span>
+                    </span>
+                  ) : !serviceability.configured ? (
+                    <span className="text-[9.5px] font-black uppercase text-amber-600 flex items-center gap-1 tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      <span>CONFIGURING</span>
+                    </span>
+                  ) : (
+                    <span className="text-[9.5px] font-black uppercase text-rose-600 flex items-center gap-1 tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                      <span>OUTSIDE 5 KM ZONE</span>
+                    </span>
+                  )
+                ) : (
+                  <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
+                    <span>15 MINS DELIVERY</span>
+                  </span>
+                )}
+              </div>
+
+              <span className="text-xs font-black text-slate-900 truncate max-w-[110px] xs:max-w-[150px] flex items-center gap-0.5 mt-0.5 leading-tight group-hover:text-[#0c831f] transition-colors">
                 <span className="truncate">{displayLocationName}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 group-hover:translate-y-0.5 transition-transform" />
               </span>
+            </button>
+
+            {/* Prominent "Choose delivery location" button control beside locality */}
+            <button
+              type="button"
+              onClick={() => setIsLocationModalOpen(true)}
+              className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-300 text-[10px] font-extrabold text-[#0c831f] flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs"
+              title="Choose delivery location"
+              aria-label="Choose delivery location"
+            >
+              <MapPin className="w-3 h-3 text-[#0c831f]" />
+              <span className="hidden xs:inline">Choose location</span>
+              <span className="xs:hidden">Change</span>
             </button>
           </div>
 
@@ -469,21 +503,45 @@ export const Header: React.FC = () => {
           {/* Location & Express Zone Capsule */}
           <button
             onClick={() => setIsLocationModalOpen(true)}
-            className="flex items-center h-10 px-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-800 transition-all duration-200 cursor-pointer group text-left shrink-0"
+            className={`flex items-center h-10 px-3 rounded-xl border transition-all duration-200 cursor-pointer group text-left shrink-0 ${
+              serviceability.checked && !serviceability.serviceable
+                ? 'bg-rose-50/70 hover:bg-rose-100/70 border-rose-200 text-rose-950'
+                : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/80 text-slate-800'
+            }`}
             title="Click to switch delivery zone or address"
           >
-            <div className="w-6 h-6 rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center shrink-0 mr-2 text-[#0c831f] group-hover:scale-110 transition-transform">
+            <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mr-2 group-hover:scale-110 transition-transform ${
+              serviceability.checked && !serviceability.serviceable
+                ? 'bg-rose-100 border border-rose-200 text-rose-600'
+                : 'bg-emerald-100 border border-emerald-200 text-[#0c831f]'
+            }`}>
               <MapPin className="w-3.5 h-3.5" />
             </div>
             <div className="flex flex-col justify-center leading-tight">
               <div className="flex items-center gap-1.5">
                 <span className="text-[8.5px] font-black uppercase tracking-[0.14em] text-slate-500">DELIVERING TO</span>
-                <span className="text-[9.5px] bg-emerald-100 text-[#0c831f] font-black px-1.5 py-0.2 rounded-full border border-emerald-200">
-                  ₹{currentZone?.delivery_fee || 20}
-                </span>
+                {serviceability.checked ? (
+                  serviceability.serviceable ? (
+                    <span className="text-[9px] bg-emerald-100 text-[#0c831f] font-black px-1.5 py-0.2 rounded-full border border-emerald-200">
+                      {serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} km • Available` : 'Inside 5 km'}
+                    </span>
+                  ) : !serviceability.configured ? (
+                    <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.2 rounded-full border border-amber-200">
+                      Configuring
+                    </span>
+                  ) : (
+                    <span className="text-[9px] bg-rose-100 text-rose-700 font-black px-1.5 py-0.2 rounded-full border border-rose-200">
+                      Outside 5 km Zone
+                    </span>
+                  )
+                ) : (
+                  <span className="text-[9.5px] bg-emerald-100 text-[#0c831f] font-black px-1.5 py-0.2 rounded-full border border-emerald-200">
+                    5 km Zone
+                  </span>
+                )}
               </div>
               <div className="font-bold text-slate-900 group-hover:text-[#0c831f] transition-colors text-xs flex items-center gap-1.5 mt-0.5">
-                <span className="truncate max-w-[145px] font-extrabold" title={displayLocationName}>
+                <span className="truncate max-w-[135px] font-extrabold" title={displayLocationName}>
                   {displayLocationName}
                 </span>
                 <span className="text-slate-400">•</span>
@@ -549,7 +607,7 @@ export const Header: React.FC = () => {
               {/* Crisp White Notifications Dropdown */}
               {isNotifOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl z-[70] animate-fade-in shadow-2xl border border-slate-200 bg-white overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl z-[100] animate-fade-in shadow-2xl ring-1 ring-black/10 border border-slate-200 bg-white overflow-hidden"
                 >
                   <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -643,12 +701,12 @@ export const Header: React.FC = () => {
               {/* Crisp White User Dropdown Menu */}
               {user && isUserMenuOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-60 rounded-2xl z-[70] animate-fade-in shadow-2xl border border-slate-200 bg-white overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-64 rounded-2xl z-[100] animate-fade-in shadow-2xl ring-1 ring-black/10 border border-slate-200 bg-white overflow-hidden"
                 >
                   <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
                     <p className="text-[8.5px] text-slate-500 font-black uppercase tracking-wider">Signed in as</p>
                     <p className="text-sm font-extrabold text-slate-900 truncate">{user.name}</p>
-                    <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                    <p className="text-xs text-slate-500 truncate" title={user.email}>{user.email}</p>
                   </div>
                   <div className="py-1.5 space-y-0.5 bg-white">
                     <Link

@@ -1,0 +1,14 @@
+{
+  "id": "global_payment_settings",
+  "cod_enabled": true,
+  "cod_message": "Pay with cash or UPI QR upon delivery",
+  "cod_min_amount": 0,
+  "cod_max_amount": 5000,
+  "cod_fee": 0,
+  "online_enabled": true,
+  "online_gateway_name": "Razorpay / Cards & UPI",
+  "online_message": "Pay securely using UPI (GPay, PhonePe, Paytm), Credit/Debit Cards, or NetBanking",
+  "updated_by": "system",
+  "updated_at": "2026-10-30T09:00:00.000Z"
+}
+

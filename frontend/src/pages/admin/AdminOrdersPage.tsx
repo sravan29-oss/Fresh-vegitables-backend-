@@ -412,6 +412,33 @@ export const AdminOrdersPage: React.FC = () => {
     setIsDetailDrawerOpen(true);
   };
 
+  // Record COD collection handler
+  const handleRecordCodCollection = async (orderId: string) => {
+    try {
+      setIsUpdatingStatus(true);
+      await api.post('/payments/cod-collect', { order_id: orderId });
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? { ...o, payment_status: 'cod_collected' as any }
+            : o
+        )
+      );
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder((prev) => (prev ? { ...prev, payment_status: 'cod_collected' as any } : null));
+      }
+      fetchSummary();
+      notifyLiveUpdate('orders');
+      notifyLiveUpdate('payments');
+      showToast('success', 'Cash on Delivery successfully recorded as collected!');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to record COD collection';
+      showToast('error', msg);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   // Status visual badge styling
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -462,15 +489,20 @@ export const AdminOrdersPage: React.FC = () => {
   };
 
   const getPaymentStatusBadge = (paymentStatus: string) => {
-    switch (paymentStatus) {
+    switch (paymentStatus?.toLowerCase()) {
       case 'paid':
+      case 'cod_collected':
         return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
       case 'pending':
+      case 'awaiting_cod_collection':
         return 'bg-amber-500/10 border-amber-500/30 text-amber-400';
       case 'failed':
         return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
       case 'refunded':
+      case 'partially_refunded':
         return 'bg-purple-500/10 border-purple-500/30 text-purple-400';
+      case 'refund_pending':
+        return 'bg-orange-500/10 border-orange-500/30 text-orange-400';
       default:
         return 'bg-slate-800 border-slate-700 text-slate-300';
     }
@@ -938,8 +970,10 @@ export const AdminOrdersPage: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-900/40">
                   <th className="py-3.5 px-4">Order ID & Date</th>
@@ -1141,7 +1175,194 @@ export const AdminOrdersPage: React.FC = () => {
               </tbody>
             </table>
           </div>
-        )}
+
+          {/* Mobile / Tablet Touch-Friendly Order Cards View */}
+          <div className="lg:hidden divide-y divide-slate-800/80">
+            {orders.map((o) => {
+              const customerName = o.customer_name || o.address_snapshot?.full_name || 'Customer';
+              const mobile = o.customer_mobile || o.address_snapshot?.phone || '';
+              const cleanMobile = mobile.replace(/[^0-9]/g, '');
+              const statusInfo = getStatusBadge(o.order_status);
+              const addr = o.address_snapshot || o.delivery_address;
+              const localityText =
+                typeof addr === 'object' && addr
+                  ? [addr.area || addr.street, addr.city, addr.pincode].filter(Boolean).join(', ')
+                  : 'Doorstep Delivery';
+              const hasGps = Boolean(getCoordinates(o));
+              const mapsUrl = getGoogleMapsUrl(o);
+              const isCod = o.payment_method === 'cod';
+              const isAwaitingCod =
+                isCod && (o.payment_status === 'awaiting_cod_collection' || o.payment_status === 'pending');
+
+              return (
+                <div key={o.id} className="p-4 space-y-3 hover:bg-slate-900/30 transition-colors">
+                  {/* Top Row: Order ID, Status Badge & Time */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-black text-white text-sm">{o.order_number}</span>
+                      <button
+                        title="Copy Order Number"
+                        onClick={() => handleCopy(o.order_number, `ord-mob-${o.id}`, 'Order ID')}
+                        className="text-slate-500 hover:text-white p-1 rounded transition-colors"
+                      >
+                        {copiedField === `ord-mob-${o.id}` ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusInfo.bg}`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`} />
+                      {statusInfo.label}
+                    </span>
+                  </div>
+
+                  {/* Order Date & Total */}
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>
+                      {new Date(o.created_at).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                      })}{' '}
+                      •{' '}
+                      {new Date(o.created_at).toLocaleTimeString('en-IN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                    <div className="text-right">
+                      <span className="font-black text-brand-400 text-base">₹{o.total}</span>
+                      {o.delivery_charge > 0 ? (
+                        <span className="text-[10px] text-slate-500 ml-1.5">+₹{o.delivery_charge} delivery</span>
+                      ) : (
+                        <span className="text-[10px] text-emerald-400 font-bold ml-1.5">Free delivery</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Customer & Address Card */}
+                  <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800/80 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-white text-xs truncate">{customerName}</p>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5" title={localityText}>
+                        {localityText}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {cleanMobile && (
+                        <>
+                          <a
+                            href={`tel:${cleanMobile}`}
+                            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-slate-700 transition-colors"
+                            title="Call Customer"
+                          >
+                            <Phone className="w-3.5 h-3.5" />
+                          </a>
+                          <a
+                            href={`https://wa.me/91${cleanMobile.length === 10 ? cleanMobile : cleanMobile.slice(-10)}?text=${encodeURIComponent(
+                              `Hello ${customerName}, regarding your Fresh Vegetables Organic order #${o.order_number}...`
+                            )}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors"
+                            title="WhatsApp Customer"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </a>
+                        </>
+                      )}
+                      <a
+                        href={mapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 transition-colors"
+                        title={hasGps ? 'Open GPS Location' : 'Open Address in Maps'}
+                      >
+                        <Navigation className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Payment Mode & Status */}
+                  <div className="flex items-center justify-between text-xs px-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black uppercase text-[10px] text-slate-400">
+                        {o.payment_method}
+                      </span>
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${getPaymentStatusBadge(
+                          o.payment_status
+                        )}`}
+                      >
+                        {o.payment_status.replace(/_/g, ' ').toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions Row: Status selector, Collect COD & Details */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <select
+                      value={o.order_status}
+                      disabled={isUpdatingStatus}
+                      onChange={(e) => {
+                        const newSt = e.target.value;
+                        if (newSt === 'cancelled') {
+                          setOrderToCancel(o);
+                        } else {
+                          handleUpdateStatus(o.id, newSt);
+                        }
+                      }}
+                      className={`flex-1 text-[11px] font-bold px-3 py-2 rounded-xl border focus:outline-none cursor-pointer bg-slate-900 transition-colors ${statusInfo.bg}`}
+                    >
+                      <option value="pending" className="bg-slate-900 text-amber-400">
+                        New / Pending
+                      </option>
+                      <option value="confirmed" className="bg-slate-900 text-blue-400">
+                        Confirmed
+                      </option>
+                      <option value="preparing" className="bg-slate-900 text-purple-400">
+                        Preparing
+                      </option>
+                      <option value="out_for_delivery" className="bg-slate-900 text-sky-400">
+                        Out for Delivery
+                      </option>
+                      <option value="delivered" className="bg-slate-900 text-emerald-400">
+                        Delivered
+                      </option>
+                      <option value="cancelled" className="bg-slate-900 text-rose-400">
+                        Cancelled
+                      </option>
+                    </select>
+
+                    {isAwaitingCod && (
+                      <button
+                        onClick={() => handleRecordCodCollection(o.id)}
+                        disabled={isUpdatingStatus}
+                        className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs transition-colors flex items-center gap-1 shrink-0 shadow-sm"
+                        title="Mark COD Cash as Collected"
+                      >
+                        <DollarSign className="w-3.5 h-3.5" />
+                        <span>Collect COD</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => openOrderDetails(o)}
+                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shrink-0"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Details</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
       </div>
 
       {/* ===================== DEDICATED ORDER DETAILS MODAL / DRAWER ===================== */}
@@ -1698,17 +1919,34 @@ export const AdminOrdersPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Mark as paid button for COD if currently pending */}
-                {selectedOrder.payment_status !== 'paid' && selectedOrder.order_status !== 'cancelled' && (
-                  <button
-                    onClick={() => handleUpdateStatus(selectedOrder.id, selectedOrder.order_status, 'paid')}
-                    disabled={isUpdatingStatus}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Mark Payment as Received (Paid)</span>
-                  </button>
-                )}
+                {/* Collect COD button */}
+                {selectedOrder.payment_method === 'cod' &&
+                  selectedOrder.payment_status !== 'cod_collected' &&
+                  selectedOrder.payment_status !== 'paid' &&
+                  selectedOrder.order_status !== 'cancelled' && (
+                    <button
+                      onClick={() => handleRecordCodCollection(selectedOrder.id)}
+                      disabled={isUpdatingStatus}
+                      className="w-full py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                    >
+                      <DollarSign className="w-4 h-4" />
+                      <span>Record Cash Collection (COD Collected - ₹{selectedOrder.total})</span>
+                    </button>
+                  )}
+
+                {/* Mark as paid button for online or manual override */}
+                {selectedOrder.payment_status !== 'paid' &&
+                  selectedOrder.payment_status !== 'cod_collected' &&
+                  selectedOrder.order_status !== 'cancelled' && (
+                    <button
+                      onClick={() => handleUpdateStatus(selectedOrder.id, selectedOrder.order_status, 'paid')}
+                      disabled={isUpdatingStatus}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 border border-slate-700"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Manually Mark as Received (Paid)</span>
+                    </button>
+                  )}
               </div>
             </div>
 

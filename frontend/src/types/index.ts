@@ -84,6 +84,8 @@ export interface Address {
   city: string;
   state: string;
   pincode: string;
+  latitude?: number | null;
+  longitude?: number | null;
   address_type: 'home' | 'work' | 'other';
   is_default: boolean;
   created_at?: string;
@@ -122,7 +124,7 @@ export interface Order {
   discount: number;
   total: number;
   payment_method: 'cod' | 'online' | 'upi' | 'wallet';
-  payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
+  payment_status: 'pending' | 'paid' | 'failed' | 'awaiting_cod_collection' | 'cod_collected' | 'refund_pending' | 'refunded' | 'partially_refunded';
   order_status: 'pending' | 'confirmed' | 'preparing' | 'packed' | 'out_for_delivery' | 'delivered' | 'cancelled';
   delivery_address: any;
   address_snapshot?: any;
@@ -154,13 +156,70 @@ export interface User {
 
 export interface DashboardStats {
   total_orders: number;
+  new_orders?: number;
   today_orders: number;
   pending_orders: number;
+  confirmed_orders?: number;
+  processing_orders?: number;
+  out_for_delivery?: number;
   delivered_orders: number;
+  cancelled_orders?: number;
   total_customers: number;
   today_revenue: number;
   total_revenue: number;
+  pending_payments?: number;
+  paid_orders?: number;
   low_stock_products: number;
+}
+
+// ================= Admin-Controlled Payment Settings =================
+export interface StorePaymentSettings {
+  id: string;
+  cod_enabled: boolean;
+  cod_message: string;
+  cod_min_amount: number;
+  cod_max_amount: number;
+  cod_fee: number;
+  online_enabled: boolean;
+  online_gateway_name: string;
+  online_message: string;
+  updated_by?: string;
+  updated_at?: string;
+}
+
+export interface PaymentOverviewMetrics {
+  total_online_payments: { count: number; amount: number };
+  total_cod_orders: { count: number; amount: number };
+  cod_collected: { count: number; amount: number };
+  cod_pending_collection: { count: number; amount: number };
+  failed_online_payments: { count: number; amount: number };
+  refunds: { count: number; amount: number };
+  total_verified_revenue: number;
+  total_orders_in_window: number;
+}
+
+export interface PaymentTransactionLog {
+  id: string;
+  order_id: string;
+  payment_method: string;
+  amount: number;
+  previous_status?: string;
+  new_status: string;
+  action_by: string;
+  reference_id?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface AdminNotificationItem {
+  id: string;
+  type: 'NEW_ORDER' | 'ORDER_CANCELLED' | 'PAYMENT_SUCCESS' | 'PAYMENT_FAILED' | 'DELIVERY_COMPLETED';
+  title: string;
+  message: string;
+  order_id?: string;
+  is_read: boolean;
+  metadata?: any;
+  created_at: string;
 }
 
 // ================= Phase 7: Payments =================
@@ -563,7 +622,27 @@ export interface DeliverySettings {
   estimated_delivery_time: string;
   is_delivery_active: boolean;
   surge_charge: number;
+  hub_name?: string;
+  hub_address?: string;
+  hub_latitude?: number | null;
+  hub_longitude?: number | null;
+  delivery_radius_km?: number;
+  serviceability_enabled?: boolean;
+  is_hub_configured?: boolean;
   updated_at?: string;
+}
+
+export interface ServiceabilityState {
+  checked: boolean;
+  configured: boolean;
+  serviceable: boolean;
+  distanceKm?: number;
+  radiusKm: number;
+  message?: string;
+  hubName?: string;
+  hubAddress?: string;
+  checking: boolean;
+  coordinates?: { latitude: number; longitude: number } | null;
 }
 
 export interface Store {

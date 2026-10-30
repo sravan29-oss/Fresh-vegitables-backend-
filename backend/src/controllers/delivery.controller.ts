@@ -6,6 +6,7 @@ import { AppError, NotFoundError, ValidationError } from '../utils/appError';
 import { memoryStore } from '../config/mockDb';
 import { logAuditEvent } from '../services/audit.service';
 import { getPersistedDeliverySettings, savePersistedDeliverySettings } from '../services/deliverySettings.service';
+import { checkServiceability, isValidCoordinate } from '../services/serviceability.service';
 
 // ===================== ADMIN: DELIVERY PARTNERS =====================
 
@@ -371,19 +372,7 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         }
       }
 
-      trackingInfo = assignRows[0] || {
-        order_id: order.id,
-        status: isDelivered ? 'DELIVERED' : 'OUT_FOR_DELIVERY',
-        partner_name: 'Ravi Kumar',
-        partner_phone: '+91 98123 45678',
-        partner_rating: 4.88,
-        vehicle_type: 'Electric Bike (Eco-Harvest)',
-        vehicle_number: 'TS-09-EV-4421',
-        partner_lat: Number(addrSnapshot.latitude) || 17.4938,
-        partner_lng: Number(addrSnapshot.longitude) || 78.3995,
-        estimated_delivery_time: new Date(Date.now() + 15 * 60000).toISOString(),
-        show_driver: true,
-      };
+      trackingInfo = assignRows.length > 0 ? assignRows[0] : null;
     }
 
     // Build logistics timeline milestones
@@ -401,7 +390,7 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         id: 'act-1',
         status: 'pending',
         title: 'Order Placed & Verified',
-        description: `Order #${order.order_number} confirmed with ${order.payment_method?.toUpperCase() || 'COD'} payment mode.`,
+        description: `Order #${order.order_number} received and confirmed with ${order.payment_method?.toUpperCase() || 'COD'} payment mode.`,
         timestamp: `${orderDateStr}, ${orderTimeStr}`,
         location: 'Fresh Farm Online Portal',
         completed: true,
@@ -413,7 +402,7 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         id: 'act-cancelled',
         status: 'cancelled',
         title: 'Order Cancelled',
-        description: 'Order was cancelled by store operations. Items returned to farm inventory.',
+        description: 'Order was cancelled by store operations. Reserved produce restored to inventory.',
         timestamp: `${orderDateStr}, ${orderTimeStr}`,
         location: 'Store Operations Hub, Hyderabad',
         completed: true,
@@ -423,46 +412,46 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         {
           id: 'act-2',
           status: 'confirmed',
-          title: 'Order Confirmed by Fulfillment Center',
-          description: 'Order accepted by warehouse manager. Assigned to fresh farm procurement.',
+          title: 'Order Confirmed',
+          description: 'Order accepted by fulfillment team and scheduled for farm procurement.',
           timestamp: `${orderDateStr}, ${new Date(createdAt.getTime() + 8 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-          location: 'Central Farm Depot, Hyderabad Agro Hub',
+          location: 'Fresh Vegetables Hub',
           completed: isConfirmed,
         },
         {
           id: 'act-3',
           status: 'preparing',
           title: 'Harvested Fresh & Quality Graded',
-          description: 'Vegetables harvested from partner hydroponic and organic plots. 100% pesticide-free quality check passed.',
+          description: 'Vegetables harvested fresh from local organic plots. 100% pesticide-free quality check passed.',
           timestamp: isHarvested ? `${orderDateStr}, ${new Date(createdAt.getTime() + 20 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected today',
-          location: 'Agro Harvest Sorting Unit, Hyderabad',
+          location: 'Harvest & Sorting Hub, Hyderabad',
           completed: isHarvested,
         },
         {
           id: 'act-4',
           status: 'packed',
-          title: 'Packed in Temperature-Controlled Crate',
-          description: 'Packed with biodegradable liners and eco-chill packaging for cold-chain transit.',
+          title: 'Packed & Prepared for Delivery',
+          description: 'Produce sorted, weighed, and carefully packed for clean, hygienic transit.',
           timestamp: isPacked ? `${orderDateStr}, ${new Date(createdAt.getTime() + 35 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'In progress',
-          location: 'Sorting & Packaging Center Hub, Hyderabad',
+          location: 'Packaging Hub, Hyderabad',
           completed: isPacked,
         },
         {
           id: 'act-5',
           status: 'out_for_delivery',
-          title: isOutForDelivery ? 'Out for Delivery (Courier Dispatched)' : 'Out for Delivery (Upcoming)',
+          title: isOutForDelivery ? 'Out for Delivery' : 'Out for Delivery (Upcoming)',
           description: isOutForDelivery
-            ? `Package picked up by ${trackingInfo?.partner_name || 'Delivery Partner'} on ${trackingInfo?.vehicle_type || 'EV Bike'}. Heading toward your location.`
-            : 'Delivery partner details will be assigned and shown here once the package leaves the local hub.',
-          timestamp: isOutForDelivery ? `${orderDateStr}, ${new Date(createdAt.getTime() + 50 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected soon',
-          location: `Local Delivery Station, ${normalizedAddress.area || 'Hyderabad'}`,
+            ? 'Package dispatched from store hub and is on the way to your delivery address.'
+            : 'Package will be dispatched as soon as harvesting and packing are completed.',
+          timestamp: isOutForDelivery ? `${orderDateStr}, ${new Date(createdAt.getTime() + 50 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Scheduled upon packing',
+          location: `Local Delivery Zone, ${normalizedAddress.area || 'Hyderabad'}`,
           completed: isOutForDelivery,
         },
         {
           id: 'act-6',
           status: 'delivered',
           title: 'Delivered',
-          description: isDelivered ? 'Package safely delivered to your doorstep.' : 'Expected doorstep delivery within 25–35 mins.',
+          description: isDelivered ? 'Package safely delivered to your doorstep.' : 'Expected doorstep delivery shortly.',
           timestamp: isDelivered ? `${orderDateStr}, ${new Date(createdAt.getTime() + 65 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Estimated today',
           location: normalizedAddress.full_address || 'Customer Doorstep',
           completed: isDelivered,
@@ -476,13 +465,13 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
         items,
       },
       tracking: trackingInfo,
-      show_driver: isOutForDelivery,
-      carrier_name: 'FreshVeg Logistics Express',
+      show_driver: Boolean(trackingInfo?.partner_name),
+      carrier_name: 'Fresh Vegetables Direct Express',
       tracking_number: `TRK-${(order.order_number || id).replace(/[^A-Za-z0-9]/g, '').slice(-8)}`,
-      expected_delivery: isCancelled ? 'Order Cancelled' : isDelivered ? 'Delivered Today' : 'Today, within 25–35 mins',
+      expected_delivery: isCancelled ? 'Order Cancelled' : isDelivered ? 'Delivered Today' : 'Today, within estimated delivery slot',
       logistics_status: orderStatus,
-      fulfillment_center: 'Central Farm Depot, Hyderabad Agro Hub',
-      package_type: 'Eco-Insulated Cold Chain Crate',
+      fulfillment_center: 'Fresh Vegetables Store & Fulfillment Hub',
+      package_type: 'Fresh Farm Packaging',
       activities,
       store_location: { name: 'Fresh Vegetables Hub, KPHB Main Road', latitude: 17.4938, longitude: 78.3995 },
       destination: {
@@ -525,6 +514,12 @@ export async function getDeliverySettings(req: Request, res: Response, next: Nex
           estimated_delivery_time: String(row.estimated_delivery_time || '25–35 mins'),
           is_delivery_active: row.is_delivery_active !== false,
           surge_charge: Number(row.surge_charge || 0),
+          hub_name: row.hub_name || settings.hub_name || 'Fresh Vegetables Central Hub',
+          hub_address: row.hub_address !== undefined && row.hub_address !== null ? row.hub_address : (settings.hub_address || ''),
+          hub_latitude: row.hub_latitude !== null && row.hub_latitude !== undefined ? Number(row.hub_latitude) : settings.hub_latitude,
+          hub_longitude: row.hub_longitude !== null && row.hub_longitude !== undefined ? Number(row.hub_longitude) : settings.hub_longitude,
+          delivery_radius_km: row.delivery_radius_km ? Number(row.delivery_radius_km) : (settings.delivery_radius_km || 5.0),
+          serviceability_enabled: row.serviceability_enabled !== false && settings.serviceability_enabled !== false,
           updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
         };
         savePersistedDeliverySettings(settings);
@@ -532,7 +527,18 @@ export async function getDeliverySettings(req: Request, res: Response, next: Nex
     } catch {
       // Use persisted file settings
     }
-    sendSuccess(res, 'Delivery settings retrieved successfully', settings);
+
+    const isHubConfigured =
+      settings.hub_latitude !== null &&
+      settings.hub_latitude !== undefined &&
+      settings.hub_longitude !== null &&
+      settings.hub_longitude !== undefined &&
+      isValidCoordinate(settings.hub_latitude, settings.hub_longitude);
+
+    sendSuccess(res, 'Delivery settings retrieved successfully', {
+      ...settings,
+      is_hub_configured: isHubConfigured,
+    });
   } catch (error) {
     next(error);
   }
@@ -549,7 +555,35 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
       estimated_delivery_time,
       surge_charge,
       is_delivery_active,
+      hub_name,
+      hub_address,
+      hub_latitude,
+      hub_longitude,
+      delivery_radius_km,
+      serviceability_enabled,
     } = req.body;
+
+    // Validate coordinates if provided
+    if (hub_latitude !== undefined && hub_latitude !== null && hub_latitude !== '') {
+      const lat = Number(hub_latitude);
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        throw new ValidationError('Hub latitude must be a valid number between -90 and 90');
+      }
+    }
+
+    if (hub_longitude !== undefined && hub_longitude !== null && hub_longitude !== '') {
+      const lng = Number(hub_longitude);
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        throw new ValidationError('Hub longitude must be a valid number between -180 and 180');
+      }
+    }
+
+    if (delivery_radius_km !== undefined) {
+      const radius = Number(delivery_radius_km);
+      if (isNaN(radius) || radius <= 0 || radius > 100) {
+        throw new ValidationError('Delivery radius must be greater than 0 and within 100 km');
+      }
+    }
 
     const oldValues = getPersistedDeliverySettings();
 
@@ -563,6 +597,12 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
       estimated_delivery_time,
       surge_charge,
       is_delivery_active,
+      hub_name,
+      hub_address,
+      hub_latitude: hub_latitude !== undefined ? (hub_latitude === null || hub_latitude === '' ? null : Number(hub_latitude)) : undefined,
+      hub_longitude: hub_longitude !== undefined ? (hub_longitude === null || hub_longitude === '' ? null : Number(hub_longitude)) : undefined,
+      delivery_radius_km: delivery_radius_km !== undefined ? Number(delivery_radius_km) : undefined,
+      serviceability_enabled: serviceability_enabled !== undefined ? Boolean(serviceability_enabled) : undefined,
     });
 
     // Also persist to PostgreSQL with UPSERT
@@ -578,10 +618,16 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           estimated_delivery_time,
           surge_charge,
           is_delivery_active,
+          hub_name,
+          hub_address,
+          hub_latitude,
+          hub_longitude,
+          delivery_radius_km,
+          serviceability_enabled,
           updated_at
         ) VALUES (
           'global_delivery_settings',
-          $1, $2, $3, $4, $5, $6, $7, $8, NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           default_delivery_charge = EXCLUDED.default_delivery_charge,
@@ -592,6 +638,12 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           estimated_delivery_time = EXCLUDED.estimated_delivery_time,
           surge_charge = EXCLUDED.surge_charge,
           is_delivery_active = EXCLUDED.is_delivery_active,
+          hub_name = EXCLUDED.hub_name,
+          hub_address = EXCLUDED.hub_address,
+          hub_latitude = EXCLUDED.hub_latitude,
+          hub_longitude = EXCLUDED.hub_longitude,
+          delivery_radius_km = EXCLUDED.delivery_radius_km,
+          serviceability_enabled = EXCLUDED.serviceability_enabled,
           updated_at = NOW()
         RETURNING *`,
         [
@@ -603,6 +655,12 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           updatedSettings.estimated_delivery_time,
           updatedSettings.surge_charge,
           updatedSettings.is_delivery_active,
+          updatedSettings.hub_name || 'Fresh Vegetables Central Hub',
+          updatedSettings.hub_address || '',
+          updatedSettings.hub_latitude ?? null,
+          updatedSettings.hub_longitude ?? null,
+          updatedSettings.delivery_radius_km || 5.0,
+          updatedSettings.serviceability_enabled !== false,
         ]
       );
     } catch (dbErr) {
@@ -618,7 +676,61 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
       newValues: updatedSettings,
     });
 
-    sendSuccess(res, 'Delivery charges and settings updated successfully', updatedSettings);
+    const isHubConfigured =
+      updatedSettings.hub_latitude !== null &&
+      updatedSettings.hub_latitude !== undefined &&
+      updatedSettings.hub_longitude !== null &&
+      updatedSettings.hub_longitude !== undefined &&
+      isValidCoordinate(updatedSettings.hub_latitude, updatedSettings.hub_longitude);
+
+    sendSuccess(res, 'Delivery charges and settings updated successfully', {
+      ...updatedSettings,
+      is_hub_configured: isHubConfigured,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ===================== SERVICEABILITY CHECK (5 KM RADIUS) =====================
+
+export async function checkDeliveryServiceability(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { latitude, longitude } = req.body;
+
+    if (latitude === undefined || longitude === undefined || latitude === null || longitude === null) {
+      return res.status(400).json({
+        success: false,
+        configured: true,
+        serviceable: false,
+        message: 'Latitude and longitude are required to check delivery serviceability.',
+      });
+    }
+
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    if (isNaN(lat) || isNaN(lng) || !isValidCoordinate(lat, lng)) {
+      return res.status(400).json({
+        success: false,
+        configured: true,
+        serviceable: false,
+        message: 'Invalid coordinates: latitude must be between -90 and 90, longitude between -180 and 180.',
+      });
+    }
+
+    const result = checkServiceability(lat, lng);
+
+    return res.status(200).json({
+      success: true,
+      configured: result.configured,
+      serviceable: result.serviceable,
+      distanceKm: result.distanceKm,
+      radiusKm: result.radiusKm,
+      message: result.message,
+      hubName: result.hubName,
+      data: result,
+    });
   } catch (error) {
     next(error);
   }

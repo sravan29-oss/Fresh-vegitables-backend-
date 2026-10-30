@@ -15,7 +15,7 @@ export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addToCart, setIsCartOpen } = useCart();
+  const { addToCart, setIsCartOpen, serviceability, setIsLocationModalOpen } = useCart();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -317,13 +317,34 @@ export const ProductDetailPage: React.FC = () => {
               </div>
             )}
 
+            {/* Outside Zone Banner */}
+            {serviceability.checked && !serviceability.serviceable && (
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <h4 className="font-black text-sm">Sorry, we are currently unavailable in your area.</h4>
+                </div>
+                <p className="text-xs text-amber-900 leading-relaxed">
+                  Your selected location is outside our 5 km delivery zone. Choose a different location to check availability.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="mt-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                >
+                  Choose a Different Location
+                </button>
+              </div>
+            )}
+
             {/* Quantity Stepper & Add to Cart */}
-            <div className="pt-6 flex flex-wrap items-center gap-4">
+            <div className="pt-4 flex flex-wrap items-center gap-4">
               {!isOutOfStock && (
                 <div className="flex items-center bg-slate-100 rounded-2xl p-1 border border-slate-200">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-9 h-9 rounded-xl bg-white hover:bg-slate-200 flex items-center justify-center text-slate-700 shadow-xs transition-colors"
+                    disabled={serviceability.checked && !serviceability.serviceable}
+                    className="w-9 h-9 rounded-xl bg-white hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-slate-700 shadow-xs transition-colors"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
@@ -332,7 +353,7 @@ export const ProductDetailPage: React.FC = () => {
                   </span>
                   <button
                     onClick={() => setQuantity(quantity + 1)}
-                    disabled={quantity >= stock}
+                    disabled={quantity >= stock || (serviceability.checked && !serviceability.serviceable)}
                     title={quantity >= stock ? 'Cannot exceed available stock' : 'Add one more'}
                     className="w-9 h-9 rounded-xl bg-white hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-slate-700 shadow-xs transition-colors"
                   >
@@ -343,10 +364,15 @@ export const ProductDetailPage: React.FC = () => {
 
               <button
                 onClick={handleAddToCart}
-                disabled={isOutOfStock || isAdding}
+                disabled={isOutOfStock || isAdding || (serviceability.checked && !serviceability.serviceable)}
                 className="flex-1 min-w-[200px] bg-brand-600 hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-extrabold py-3.5 px-6 rounded-2xl shadow-lg shadow-brand-600/25 disabled:shadow-none flex items-center justify-center gap-2 transition-all active:scale-98"
               >
-                {isOutOfStock ? (
+                {serviceability.checked && !serviceability.serviceable ? (
+                  <>
+                    <Ban className="w-4 h-4 text-slate-400" />
+                    <span>Delivery unavailable at this location</span>
+                  </>
+                ) : isOutOfStock ? (
                   <>
                     <Ban className="w-4 h-4 text-slate-400" />
                     <span>Out of Stock</span>

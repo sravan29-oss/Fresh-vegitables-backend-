@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   MapPin,
@@ -37,6 +37,27 @@ export const CheckoutPage: React.FC = () => {
   const [orderNotes, setOrderNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // Payment Settings (Admin-Controlled COD & Online Gateway)
+  const [paymentSettings, setPaymentSettings] = useState<{
+    cod_enabled: boolean;
+    cod_message: string;
+    cod_min_amount: number;
+    cod_max_amount: number;
+    cod_fee: number;
+    online_enabled: boolean;
+    online_gateway_name: string;
+    online_message: string;
+  }>({
+    cod_enabled: true,
+    cod_message: 'Pay with cash or UPI QR upon delivery',
+    cod_min_amount: 0,
+    cod_max_amount: 5000,
+    cod_fee: 0,
+    online_enabled: true,
+    online_gateway_name: 'Razorpay / Cards & UPI',
+    online_message: 'Pay securely using UPI, Cards, or NetBanking',
+  });
 
   // Phase 10: Coupon States
   const [couponCode, setCouponCode] = useState('');
@@ -104,54 +125,60 @@ export const CheckoutPage: React.FC = () => {
   const [zoneServiceability, setZoneServiceability] = useState<{
     checked: boolean;
     serviceable: boolean;
+    configured?: boolean;
     zoneName?: string;
+    distanceKm?: number;
+    radiusKm?: number;
     deliveryFee?: number;
     estimatedDelivery?: string;
     message?: string;
-  }>({ checked: false, serviceable: true });
+  }>({ checked: false, serviceable: true, radiusKm: 5.0 });
 
-  const checkPincodeServiceability = async (pincodeToCheck: string) => {
-    const clean = pincodeToCheck.trim();
-    if (clean.length !== 6) {
-      setZoneServiceability({ checked: false, serviceable: true });
-      return;
-    }
-
-    try {
-      const res = await api.post('/zones/check-pincode', { pincode: clean });
-      const data = res.data?.data;
-      if (data?.serviceable && data?.zone) {
-        setZoneServiceability({
-          checked: true,
-          serviceable: true,
-          zoneName: data.zone.name,
-          deliveryFee: data.delivery_fee,
-          estimatedDelivery: data.estimated_delivery_time,
-          message: `Serviceable in ${data.zone.name}! Express delivery in ${data.estimated_delivery_time}.`,
+  const checkAddressCoordsServiceability = useCallback(async (addr: Address) => {
+    if (addr.latitude !== null && addr.latitude !== undefined && addr.longitude !== null && addr.longitude !== undefined) {
+      try {
+        const res = await api.post('/delivery/check-serviceability', {
+          latitude: Number(addr.latitude),
+          longitude: Number(addr.longitude),
         });
-      } else {
+        const data = res.data?.data || res.data;
         setZoneServiceability({
           checked: true,
+          configured: Boolean(data.configured),
+          serviceable: Boolean(data.serviceable),
+          distanceKm: data.distanceKm,
+          radiusKm: data.radiusKm || 5.0,
+          zoneName: data.hubName,
+          deliveryFee: 20,
+          estimatedDelivery: '25–35 mins',
+          message: data.message,
+        });
+      } catch (err: any) {
+        const resp = err.response?.data;
+        setZoneServiceability({
+          checked: true,
+          configured: resp?.configured !== undefined ? Boolean(resp.configured) : true,
           serviceable: false,
-          message: data?.message || `Currently unavailable for delivery to pincode ${clean}. We are expanding soon!`,
+          radiusKm: 5.0,
+          message: resp?.message || 'Selected address is outside our 5 km delivery zone.',
         });
       }
-    } catch {
-      const serviceableList = [
-        '500072', '500085', '500090', '500018',
-        '500081', '500032', '500084', '500046',
-        '500049', '500050', '500019',
-        '380009', '380015', '380006', '380054'
-      ];
-      const isServ = serviceableList.includes(clean);
+    } else {
       setZoneServiceability({
         checked: true,
-        serviceable: isServ,
-        zoneName: isServ ? 'Express Delivery Hub' : undefined,
-        message: isServ
-          ? 'Serviceable delivery zone! Express 30 mins delivery.'
-          : `Currently unavailable for delivery: Pincode ${clean} is outside our active delivery zones.`,
+        configured: true,
+        serviceable: false,
+        radiusKm: 5.0,
+        message: 'This delivery address does not have verified GPS coordinates. Please update address location on map.',
       });
+    }
+  }, []);
+
+  const checkPincodeServiceability = async (pincodeToCheck: string) => {
+    // If coords already exist, coordinate check takes authoritative precedence
+    if (newAddress.latitude && newAddress.longitude) {
+      await checkAddressCoordsServiceability(newAddress as Address);
+      return;
     }
   };
 
@@ -250,27 +277,33 @@ export const CheckoutPage: React.FC = () => {
           pincode: detectedPincode || prev.pincode,
         }));
 
+        const validLat = Number(latitude.toFixed(6));
+        const validLng = Number(longitude.toFixed(6));
         setIsDetectingLocation(false);
-
-        if (detectedPincode) {
-          checkPincodeServiceability(detectedPincode);
-        } else if (!isNearHyderabad && !isNearAhmedabad) {
-          setZoneServiceability({
-            checked: true,
-            serviceable: false,
-            message: 'Currently unavailable: Your detected GPS location is outside our fresh delivery zones.',
-          });
-        }
+        checkAddressCoordsServiceability({
+          ...newAddress,
+          latitude: validLat,
+          longitude: validLng,
+        } as Address);
       },
       (err) => {
         setIsDetectingLocation(false);
-        if (newAddress.pincode) {
-          checkPincodeServiceability(newAddress.pincode);
+        if (newAddress.latitude && newAddress.longitude) {
+          checkAddressCoordsServiceability(newAddress as Address);
         }
       },
       { timeout: 8000, enableHighAccuracy: true }
     );
   };
+
+  useEffect(() => {
+    if (selectedAddressId && addresses.length > 0) {
+      const selected = addresses.find((a) => a.id === selectedAddressId);
+      if (selected) {
+        checkAddressCoordsServiceability(selected);
+      }
+    }
+  }, [selectedAddressId, addresses, checkAddressCoordsServiceability]);
 
   useEffect(() => {
     if (isAddAddressModalOpen) {
@@ -306,7 +339,25 @@ export const CheckoutPage: React.FC = () => {
       }
     };
 
+    const loadPaymentSettings = async () => {
+      try {
+        const res = await api.get('/payments/settings');
+        if (res.data?.data) {
+          const s = res.data.data;
+          setPaymentSettings(s);
+          if (!s.cod_enabled && s.online_enabled) {
+            setPaymentMethod('online');
+          } else if (s.cod_enabled && !s.online_enabled) {
+            setPaymentMethod('cod');
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load payment settings:', err);
+      }
+    };
+
     loadAddresses();
+    loadPaymentSettings();
   }, [user, navigate]);
 
   const handleApplyCoupon = async (codeToApply?: string) => {
@@ -374,14 +425,60 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
+  const codFee = paymentMethod === 'cod' && paymentSettings.cod_fee > 0 ? paymentSettings.cod_fee : 0;
   const finalPayableTotal = Math.max(
     0,
-    (cart?.total || 0) - (appliedCoupon ? appliedCoupon.discount_amount : 0)
+    (cart?.total || 0) + codFee - (appliedCoupon ? appliedCoupon.discount_amount : 0)
   );
 
   const handleInitiateOrder = async () => {
+    // Payment availability validation
+    if (!paymentSettings.cod_enabled && !paymentSettings.online_enabled) {
+      setErrorMsg('Sorry, we are temporarily not accepting orders. Please check again later.');
+      return;
+    }
+
+    if (paymentMethod === 'cod') {
+      if (!paymentSettings.cod_enabled) {
+        setErrorMsg('Cash on Delivery is currently unavailable. Please select an online payment method.');
+        return;
+      }
+      if (paymentSettings.cod_min_amount > 0 && (cart?.subtotal || 0) < paymentSettings.cod_min_amount) {
+        setErrorMsg(`Minimum order amount for Cash on Delivery is ₹${paymentSettings.cod_min_amount}.`);
+        return;
+      }
+      if (paymentSettings.cod_max_amount > 0 && (cart?.subtotal || 0) > paymentSettings.cod_max_amount) {
+        setErrorMsg(`Maximum order amount for Cash on Delivery is ₹${paymentSettings.cod_max_amount}. Please pay online.`);
+        return;
+      }
+    } else {
+      if (!paymentSettings.online_enabled) {
+        setErrorMsg('Online payments are currently unavailable. Please select Cash on Delivery.');
+        return;
+      }
+    }
+
     if (!selectedAddressId) {
       setErrorMsg('Please select or add a delivery address.');
+      return;
+    }
+
+    const selectedAddr = addresses.find((a) => a.id === selectedAddressId);
+    if (!selectedAddr) {
+      setErrorMsg('Selected delivery address not found.');
+      return;
+    }
+
+    if (zoneServiceability.checked && !zoneServiceability.serviceable) {
+      setErrorMsg(
+        zoneServiceability.message ||
+        'Cannot place order: Selected address is outside our 5 km delivery service area.'
+      );
+      return;
+    }
+
+    if (!selectedAddr.latitude || !selectedAddr.longitude) {
+      setErrorMsg('Selected address does not have verified GPS coordinates. Please update address on map.');
       return;
     }
 
@@ -399,10 +496,12 @@ export const CheckoutPage: React.FC = () => {
       setIsSubmitting(true);
       setErrorMsg('');
 
-      // Create base order in backend
+      // Create base order in backend with verified coordinates
       const res = await api.post('/orders', {
         address_id: selectedAddressId,
         payment_method: paymentMethod,
+        latitude: Number(selectedAddr.latitude),
+        longitude: Number(selectedAddr.longitude),
         discount: (cart.discount || 0) + (appliedCoupon ? appliedCoupon.discount_amount : 0),
         notes: `Slot: ${deliverySlot}. ${orderNotes} ${appliedCoupon ? `[Coupon: ${appliedCoupon.coupon.code}]` : ''}`,
       });
@@ -553,9 +652,20 @@ export const CheckoutPage: React.FC = () => {
                     }`}
                   >
                     <div className="flex justify-between items-start mb-1">
-                      <span className="font-bold text-xs uppercase tracking-wider text-slate-900">
-                        {addr.address_type}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs uppercase tracking-wider text-slate-900">
+                          {addr.address_type}
+                        </span>
+                        {addr.latitude && addr.longitude ? (
+                          <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full border border-emerald-200">
+                            GPS Pin
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full border border-amber-200">
+                            Needs GPS
+                          </span>
+                        )}
+                      </div>
                       {selectedAddressId === addr.id && (
                         <CheckCircle className="w-4 h-4 text-brand-600" />
                       )}
@@ -566,6 +676,26 @@ export const CheckoutPage: React.FC = () => {
                         .filter(Boolean)
                         .join(', ')}
                     </p>
+                    {selectedAddressId === addr.id && zoneServiceability.checked && (
+                      <div className="mt-2 pt-2 border-t border-slate-200/60">
+                        {zoneServiceability.serviceable ? (
+                          <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                            <span>{zoneServiceability.distanceKm !== undefined ? `${zoneServiceability.distanceKm} km from hub • Serviceable` : 'Delivery available'}</span>
+                          </span>
+                        ) : !zoneServiceability.configured ? (
+                          <span className="text-[10px] font-bold text-amber-700 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            <span>Delivery availability configuring</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-rose-600 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            <span>{zoneServiceability.distanceKm !== undefined ? `${zoneServiceability.distanceKm} km • Outside 5 km zone` : 'Outside delivery zone'}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -614,74 +744,111 @@ export const CheckoutPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 3. Payment Method Card (Phase 7) */}
+          {/* 3. Payment Method Card (Admin-Controlled COD & Online Gateway) */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex items-center gap-2">
-              <Banknote className="w-5 h-5 text-brand-600" />
-              <h3 className="text-lg font-bold text-slate-900">3. Payment Mode</h3>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div
-                onClick={() => setPaymentMethod('cod')}
-                className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
-                  paymentMethod === 'cod'
-                    ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Banknote className="w-4 h-4 text-emerald-600" />
-                  <span className="font-bold">Cash on Delivery (COD)</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">Pay with cash upon home delivery</p>
-              </div>
-
-              <div
-                onClick={() => setPaymentMethod('upi')}
-                className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
-                  paymentMethod === 'upi'
-                    ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <QrCode className="w-4 h-4 text-purple-600" />
-                  <span className="font-bold">Instant UPI / QR</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">Google Pay, PhonePe, Paytm, BHIM</p>
-              </div>
-
-              <div
-                onClick={() => setPaymentMethod('online')}
-                className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
-                  paymentMethod === 'online'
-                    ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-sky-600" />
-                  <span className="font-bold">Cards & Net Banking</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">Visa, Mastercard, RuPay, Net Banking</p>
-              </div>
-
-              <div
-                onClick={() => setPaymentMethod('wallet')}
-                className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
-                  paymentMethod === 'wallet'
-                    ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-emerald-600" />
-                  <span className="font-bold">Fresh Wallet (₹250)</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">Instant 1-tap checkout balance</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="w-5 h-5 text-brand-600" />
+                <h3 className="text-lg font-bold text-slate-900">3. Payment Mode</h3>
               </div>
             </div>
+
+            {/* Scenario 4: If both methods are disabled by admin */}
+            {!paymentSettings.cod_enabled && !paymentSettings.online_enabled ? (
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <span>Sorry, we are temporarily not accepting orders. Please check again later.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* Cash on Delivery (COD) Option */}
+                {paymentSettings.cod_enabled && (
+                  <div
+                    onClick={() => {
+                      if (paymentSettings.cod_min_amount > 0 && (cart?.subtotal || 0) < paymentSettings.cod_min_amount) {
+                        alert(`Minimum order amount for Cash on Delivery is ₹${paymentSettings.cod_min_amount}`);
+                        return;
+                      }
+                      if (paymentSettings.cod_max_amount > 0 && (cart?.subtotal || 0) > paymentSettings.cod_max_amount) {
+                        alert(`Maximum order amount for Cash on Delivery is ₹${paymentSettings.cod_max_amount}. Please pay online.`);
+                        return;
+                      }
+                      setPaymentMethod('cod');
+                    }}
+                    className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all relative ${
+                      paymentMethod === 'cod'
+                        ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Banknote className="w-4 h-4 text-emerald-600" />
+                        <span className="font-bold">Cash on Delivery (COD)</span>
+                      </div>
+                      {paymentSettings.cod_fee > 0 && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                          +₹{paymentSettings.cod_fee} fee
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      {paymentSettings.cod_message || 'Pay with cash upon home delivery'}
+                    </p>
+                    <div className="mt-2 text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" />
+                      <span>Due upon delivery</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Instant UPI / QR Option */}
+                {paymentSettings.online_enabled && (
+                  <div
+                    onClick={() => setPaymentMethod('upi')}
+                    className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
+                      paymentMethod === 'upi'
+                        ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <QrCode className="w-4 h-4 text-purple-600" />
+                      <span className="font-bold">Instant UPI / QR</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5">Google Pay, PhonePe, Paytm, BHIM</p>
+                    <div className="mt-2 text-[10px] text-purple-700 font-bold flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      <span>Instant Verification</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cards & NetBanking Option */}
+                {paymentSettings.online_enabled && (
+                  <div
+                    onClick={() => setPaymentMethod('online')}
+                    className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
+                      paymentMethod === 'online'
+                        ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-sky-600" />
+                      <span className="font-bold">Cards &amp; Net Banking</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      {paymentSettings.online_message || 'Visa, Mastercard, RuPay, Net Banking'}
+                    </p>
+                    <div className="mt-2 text-[10px] text-sky-700 font-bold flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>{paymentSettings.online_gateway_name || 'Secure Gateway'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -804,19 +971,53 @@ export const CheckoutPage: React.FC = () => {
                   )}
                 </span>
               </div>
+              {paymentMethod === 'cod' && paymentSettings.cod_fee > 0 && (
+                <div className="flex justify-between text-amber-700 font-bold">
+                  <span>COD Handling Fee</span>
+                  <span>+₹{paymentSettings.cod_fee}</span>
+                </div>
+              )}
               <div className="flex justify-between font-extrabold text-base text-slate-900 border-t border-slate-200 pt-3">
                 <span>Total Amount</span>
                 <span className="text-brand-700">₹{finalPayableTotal}</span>
               </div>
             </div>
 
+            {/* Outside 5 km Service Area Checkout Guard */}
+            {zoneServiceability.checked && !zoneServiceability.serviceable && (
+              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                  <h4 className="font-black text-xs sm:text-sm">Sorry, we are currently unavailable in your area.</h4>
+                </div>
+                <p className="text-[11px] text-rose-800 leading-relaxed">
+                  Your selected address is outside our 5 km delivery zone. Choose a different location to check availability and place your order.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsAddAddressModalOpen(true)}
+                  className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  Choose a Different Location
+                </button>
+              </div>
+            )}
+
             <button
               onClick={handleInitiateOrder}
-              disabled={isSubmitting}
-              className="w-full bg-brand-600 hover:bg-brand-700 active:scale-98 disabled:bg-slate-300 text-white font-black py-4 px-6 rounded-2xl shadow-xl shadow-brand-600/25 flex items-center justify-center gap-2 transition-all"
+              disabled={
+                isSubmitting ||
+                (!paymentSettings.cod_enabled && !paymentSettings.online_enabled) ||
+                (zoneServiceability.checked && !zoneServiceability.serviceable)
+              }
+              className="w-full bg-brand-600 hover:bg-brand-700 active:scale-98 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-4 px-6 rounded-2xl shadow-xl shadow-brand-600/25 disabled:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               {isSubmitting ? (
                 <span>Placing Order...</span>
+              ) : !paymentSettings.cod_enabled && !paymentSettings.online_enabled ? (
+                <span>Orders Temporarily Unavailable</span>
+              ) : zoneServiceability.checked && !zoneServiceability.serviceable ? (
+                <span>Delivery Unavailable at Selected Address</span>
               ) : (
                 <>
                   <span>

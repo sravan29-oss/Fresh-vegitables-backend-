@@ -4,6 +4,8 @@ export const createOrderSchema = z.object({
   address_id: z.string().uuid('Invalid address ID'),
   payment_method: z.enum(['cod', 'online', 'upi', 'wallet']).optional().default('cod'),
   notes: z.string().max(500).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
 });
 
 export const updateOrderStatusSchema = z.object({

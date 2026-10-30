@@ -118,6 +118,18 @@ export const PermissionsPromptModal: React.FC<PermissionsPromptModalProps> = ({
             fullAddress = `${closest.colony}, Hyderabad - ${closest.pincode}`;
           }
 
+          // Check authoritative backend serviceability for 5 km delivery zone
+          let servData: any = null;
+          try {
+            const servRes = await api.post('/delivery/check-serviceability', {
+              latitude: roundedLat,
+              longitude: roundedLng,
+            });
+            servData = servRes.data?.data || servRes.data;
+          } catch (servErr) {
+            console.warn('Backend serviceability check note:', servErr);
+          }
+
           // Fetch active zones to match
           let matchedZone: DeliveryZone | null = null;
           try {
@@ -130,9 +142,9 @@ export const PermissionsPromptModal: React.FC<PermissionsPromptModalProps> = ({
           if (!matchedZone) {
             matchedZone = {
               id: 'zone-kphb',
-              name: 'Kukatpally & KPHB Zone',
+              name: colony || 'Kukatpally & KPHB Zone',
               pincodes: ['500072'],
-              delivery_radius_km: 8.5,
+              delivery_radius_km: servData?.radiusKm || 5.0,
               delivery_fee: 20,
               min_order_amount: 199,
               free_delivery_threshold: 499,
@@ -143,24 +155,33 @@ export const PermissionsPromptModal: React.FC<PermissionsPromptModalProps> = ({
             };
           }
 
-          // Persist user location
+          // Persist user location & coordinates
           localStorage.setItem('fresh_delivery_colony', colony);
           localStorage.setItem('fresh_delivery_address', fullAddress);
           localStorage.setItem('fresh_delivery_zone', JSON.stringify(matchedZone));
+          localStorage.setItem('fresh_delivery_coords', JSON.stringify({ latitude: roundedLat, longitude: roundedLng }));
           localStorage.setItem('fresh_permissions_prompted', 'true');
 
-          // Notify whole app (Header, Checkout, etc.)
+          // Notify whole app (Header, Checkout, Product Cards, etc.)
           window.dispatchEvent(
             new CustomEvent('fresh_delivery_location_changed', {
               detail: {
                 zone: matchedZone,
                 colony,
                 address: fullAddress,
+                latitude: roundedLat,
+                longitude: roundedLng,
+                serviceable: servData?.serviceable,
+                distanceKm: servData?.distanceKm,
               },
             })
           );
 
-          setStatusMessage(`Delivering to ${colony}!`);
+          if (servData?.serviceable === false) {
+            setStatusMessage(`Location detected (${servData.distanceKm} km). Outside 5 km delivery zone.`);
+          } else {
+            setStatusMessage(`Delivering to ${colony}!`);
+          }
           setTimeout(() => {
             setIsProcessing(false);
             setIsOpen(false);
