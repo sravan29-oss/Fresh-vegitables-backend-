@@ -1,7 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Layers } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  X,
+  Layers,
+  Upload,
+  Image as ImageIcon,
+  Sparkles,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 import api from '../../services/api';
 import { Category } from '../../types';
+import { getProductImageUrl } from '../../utils/imageUrl';
 
 export const AdminCategoriesPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -10,6 +22,13 @@ export const AdminCategoriesPage: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Image Upload State
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>('');
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -34,8 +53,88 @@ export const AdminCategoriesPage: React.FC = () => {
     loadCategories();
   }, []);
 
+  // Client-side image compression utility
+  const compressImageFile = async (file: File): Promise<File> => {
+    if (file.size <= 500 * 1024) return file;
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX_DIM = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > MAX_DIM) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else if (height > MAX_DIM) {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                resolve(file);
+                return;
+              }
+              const cleanName = file.name.replace(/\.[^.]+$/, '') + '.webp';
+              const compressedFile = new File([blob], cleanName, {
+                type: 'image/webp',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            },
+            'image/webp',
+            0.88
+          );
+        };
+        img.onerror = () => resolve(file);
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const preview = URL.createObjectURL(file);
+      setImagePreview(preview);
+      setImageUrl('');
+
+      try {
+        const optimized = await compressImageFile(file);
+        setImageFile(optimized);
+      } catch {
+        setImageFile(file);
+      }
+    }
+  };
+
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview('');
+    setImageUrl('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const openCreateModal = () => {
     setEditingCategory(null);
+    clearImage();
     setFormData({
       name: '',
       description: '',
@@ -47,6 +146,10 @@ export const AdminCategoriesPage: React.FC = () => {
 
   const openEditModal = (cat: Category) => {
     setEditingCategory(cat);
+    setImageFile(null);
+    setImagePreview(cat.image || '');
+    setImageUrl(cat.image || '');
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setFormData({
       name: cat.name,
       description: cat.description || '',
@@ -59,15 +162,48 @@ export const AdminCategoriesPage: React.FC = () => {
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingCategory) {
-        await api.put(`/categories/${editingCategory.id}`, formData);
+      setIsSaving(true);
+
+      if (imageFile) {
+        const data = new FormData();
+        data.append('name', formData.name.trim());
+        data.append('description', formData.description?.trim() || '');
+        data.append('status', formData.status);
+        data.append('display_order', String(formData.display_order || 0));
+        data.append('image', imageFile);
+
+        if (editingCategory) {
+          await api.put(`/categories/${editingCategory.id}`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } else {
+          await api.post('/categories', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        }
       } else {
-        await api.post('/categories', formData);
+        const payload: any = {
+          name: formData.name.trim(),
+          description: formData.description?.trim() || null,
+          status: formData.status,
+          display_order: Number(formData.display_order || 0),
+          image: imageUrl.trim() || null,
+        };
+
+        if (editingCategory) {
+          await api.put(`/categories/${editingCategory.id}`, payload);
+        } else {
+          await api.post('/categories', payload);
+        }
       }
+
       setIsModalOpen(false);
+      clearImage();
       loadCategories();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to save category');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -86,11 +222,13 @@ export const AdminCategoriesPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight">Produce Categories</h1>
-          <p className="text-xs text-slate-400 mt-1">Organize vegetables into customer-friendly marketplace aisles</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Organize vegetables into customer-friendly marketplace aisles with high-definition imagery
+          </p>
         </div>
         <button
           onClick={openCreateModal}
-          className="bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs px-5 py-3 rounded-xl shadow-md flex items-center gap-2 self-start transition-all"
+          className="bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs px-5 py-3 rounded-xl shadow-md flex items-center gap-2 self-start transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Category</span>
@@ -107,7 +245,7 @@ export const AdminCategoriesPage: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-900/40">
-                  <th className="py-3.5 px-4">Category Name</th>
+                  <th className="py-3.5 px-4">Category</th>
                   <th className="py-3.5 px-4">Slug</th>
                   <th className="py-3.5 px-4">Products Linked</th>
                   <th className="py-3.5 px-4">Display Order</th>
@@ -119,11 +257,28 @@ export const AdminCategoriesPage: React.FC = () => {
                 {categories.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-900/60 transition-colors">
                     <td className="py-3.5 px-4">
-                      <div>
-                        <p className="font-bold text-white text-sm">{c.name}</p>
-                        {c.description && (
-                          <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">{c.description}</p>
-                        )}
+                      <div className="flex items-center gap-3">
+                        {/* Category Image Thumbnail */}
+                        <div className="w-11 h-11 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                          {c.image ? (
+                            <img
+                              src={getProductImageUrl(c.image, c.name)}
+                              alt={c.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <Layers className="w-5 h-5 text-brand-400" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-white text-sm">{c.name}</p>
+                          {c.description && (
+                            <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1 max-w-xs">{c.description}</p>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px]">{c.slug}</td>
@@ -147,14 +302,18 @@ export const AdminCategoriesPage: React.FC = () => {
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          type="button"
                           onClick={() => openEditModal(c)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                          title="Edit Category"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleDeleteCategory(c.id)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                          title="Deactivate Category"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -168,32 +327,127 @@ export const AdminCategoriesPage: React.FC = () => {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Create / Edit Category Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full text-white shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-white shadow-2xl space-y-4">
             <div className="flex justify-between items-center pb-3 border-b border-slate-800">
-              <h3 className="font-extrabold text-base">
-                {editingCategory ? 'Edit Category' : 'Create Produce Category'}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <h3 className="font-extrabold text-base">
+                  {editingCategory ? 'Edit Produce Category' : 'Create Produce Category'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveCategory} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSaveCategory} className="space-y-4 text-xs">
+              {/* Category Name */}
               <div>
-                <label className="font-bold text-slate-300 block mb-1">Category Name</label>
+                <label className="font-bold text-slate-300 block mb-1">
+                  Category Name <span className="text-rose-400">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Leafy Greens & Herbs"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-brand-500"
                 />
               </div>
 
+              {/* Category Image Upload & Preview */}
+              <div>
+                <label className="font-bold text-slate-300 block mb-1.5">
+                  Category Image <span className="text-slate-500 font-normal">(Upload File or Paste Image URL)</span>
+                </label>
+
+                <div className="flex items-center gap-3">
+                  {/* Image Preview Box */}
+                  <div className="w-20 h-20 rounded-2xl bg-slate-950 border-2 border-dashed border-slate-800 flex items-center justify-center overflow-hidden shrink-0 relative group">
+                    {imagePreview ? (
+                      <>
+                        <img
+                          src={getProductImageUrl(imagePreview, formData.name)}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=300';
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={clearImage}
+                          className="absolute inset-0 bg-slate-950/80 text-rose-400 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-1 transition-opacity text-[10px] font-bold"
+                          title="Remove image"
+                        >
+                          <X className="w-3.5 h-3.5" /> Remove
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-center p-2 text-slate-600">
+                        <ImageIcon className="w-6 h-6 mx-auto mb-1 stroke-1" />
+                        <span className="text-[9px] block">No image</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions Column */}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept="image/png,image/jpeg,image/webp,image/jpg"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        id="category-image-upload"
+                      />
+                      <label
+                        htmlFor="category-image-upload"
+                        className="px-3.5 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload File</span>
+                      </label>
+
+                      {imagePreview && (
+                        <button
+                          type="button"
+                          onClick={clearImage}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Or URL input */}
+                    <input
+                      type="text"
+                      placeholder="Or enter direct image URL (https://...)"
+                      value={imageUrl}
+                      onChange={(e) => {
+                        setImageUrl(e.target.value);
+                        setImagePreview(e.target.value);
+                        setImageFile(null);
+                      }}
+                      className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 text-[11px] font-mono focus:outline-none focus:border-brand-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
               <div>
                 <label className="font-bold text-slate-300 block mb-1">Description</label>
                 <textarea
@@ -201,18 +455,20 @@ export const AdminCategoriesPage: React.FC = () => {
                   placeholder="Brief description for customer catalog"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-brand-500"
                 />
               </div>
 
+              {/* Display Order & Status */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold text-slate-300 block mb-1">Display Order</label>
                   <input
                     type="number"
+                    min="0"
                     value={formData.display_order}
                     onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
-                    className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-brand-500"
                   />
                 </div>
                 <div>
@@ -220,7 +476,7 @@ export const AdminCategoriesPage: React.FC = () => {
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                    className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-brand-500 cursor-pointer"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -228,19 +484,28 @@ export const AdminCategoriesPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                  disabled={isSaving}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black shadow-md"
+                  disabled={isSaving}
+                  className="px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  {editingCategory ? 'Save Changes' : 'Create Category'}
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>{editingCategory ? 'Save Changes' : 'Create Category'}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -250,3 +515,5 @@ export const AdminCategoriesPage: React.FC = () => {
     </div>
   );
 };
+
+export default AdminCategoriesPage;

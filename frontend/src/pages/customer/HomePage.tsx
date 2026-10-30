@@ -20,6 +20,7 @@ import { ProductGridSkeleton } from '../../components/product/ProductGridSkeleto
 import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { SEOHead } from '../../components/common/SEOHead';
 import { useCart } from '../../context/CartContext';
+import { getProductImageUrl } from '../../utils/imageUrl';
 
 import { useHomepageCMS } from '../../hooks/useHomepageCMS';
 import { useQuery } from '@tanstack/react-query';
@@ -240,18 +241,31 @@ export const HomePage: React.FC = () => {
                   to={`/products?category=${cat.slug}`}
                   className="shrink-0 w-24 sm:w-auto p-3 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer select-none"
                 >
-                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-2xl sm:text-3xl mb-2 sm:mb-3 transition-colors">
-                    {cat.slug.includes('leaf')
-                      ? '🥬'
-                      : cat.slug.includes('root')
-                      ? '🥕'
-                      : cat.slug.includes('exotic')
-                      ? '🥦'
-                      : cat.slug.includes('gourd')
-                      ? '🥒'
-                      : cat.slug.includes('herb')
-                      ? '🌿'
-                      : '🍅'}
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center overflow-hidden mb-2 sm:mb-3 transition-colors">
+                    {cat.image ? (
+                      <img
+                        src={getProductImageUrl(cat.image, cat.name)}
+                        alt={cat.name}
+                        className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <span className="text-2xl sm:text-3xl">
+                        {cat.slug.includes('leaf')
+                          ? '🥬'
+                          : cat.slug.includes('root')
+                          ? '🥕'
+                          : cat.slug.includes('exotic')
+                          ? '🥦'
+                          : cat.slug.includes('gourd')
+                          ? '🥒'
+                          : cat.slug.includes('herb')
+                          ? '🌿'
+                          : '🍅'}
+                      </span>
+                    )}
                   </div>
                   <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm group-hover:text-[#0c831f] transition-colors truncate max-w-full">
                     {cat.name}

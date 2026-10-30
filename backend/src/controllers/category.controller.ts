@@ -54,7 +54,10 @@ export async function createCategory(req: AuthRequest, res: Response, next: Next
     const { name, description, status, display_order } = req.body;
     const slug = generateSlug(name);
 
-    const image = req.file ? `/uploads/categories/${req.file.filename}` : null;
+    let image = req.file ? `/uploads/categories/${req.file.filename}` : null;
+    if (!image && (req.body.image || req.body.image_url)) {
+      image = req.body.image || req.body.image_url;
+    }
 
     const result = await db.query(
       `INSERT INTO categories (name, slug, description, image, status, display_order)
@@ -93,6 +96,12 @@ export async function updateCategory(req: AuthRequest, res: Response, next: Next
     if (req.file) {
       fields.push(`image = $${idx++}`);
       values.push(`/uploads/categories/${req.file.filename}`);
+    } else if (req.body.image !== undefined) {
+      fields.push(`image = $${idx++}`);
+      values.push(req.body.image || null);
+    } else if (req.body.image_url !== undefined) {
+      fields.push(`image = $${idx++}`);
+      values.push(req.body.image_url || null);
     }
 
     if (fields.length === 0) throw new AppError('No fields to update', 400);
