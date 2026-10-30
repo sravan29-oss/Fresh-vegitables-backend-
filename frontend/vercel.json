@@ -6,11 +6,25 @@
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Content-Type", "value": "application/manifest+json" }
       ]
+    },
+    {
+      "source": "/sitemap.xml",
+      "headers": [
+        { "key": "Content-Type", "value": "application/xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
+      ]
+    },
+    {
+      "source": "/robots.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
+      ]
     }
   ],
   "rewrites": [
     {
-      "source": "/((?!assets|uploads|videos|manifest\\.json|favicon\\.png|apple-touch-icon\\.png|logo\\.png|logo\\.jpg|icon-192\\.png|icon-512\\.png|sw\\.js).*)",
+      "source": "/((?!assets|uploads|videos|manifest\\.json|sitemap\\.xml|robots\\.txt|favicon\\.png|apple-touch-icon\\.png|logo\\.png|logo\\.jpg|icon-192\\.png|icon-512\\.png|sw\\.js).*)",
       "destination": "/index.html"
     }
   ]
