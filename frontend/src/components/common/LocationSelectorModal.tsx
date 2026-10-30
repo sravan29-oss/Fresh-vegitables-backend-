@@ -38,7 +38,32 @@ interface LocationModalProps {
   onZoneSelected?: (zone: DeliveryZone, colonyName?: string) => void;
 }
 
+function calculateHaversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((R * c).toFixed(2));
+}
+
 const DEFAULT_ZONES: DeliveryZone[] = [
+  {
+    id: 'zone-champapet',
+    name: 'Champapet & Saroornagar Zone',
+    pincodes: ['500059', '500079', '500035', '500060'],
+    delivery_radius_km: 5.0,
+    delivery_fee: 10.0,
+    min_order_amount: 10.0,
+    free_delivery_threshold: 99.0,
+    estimated_delivery_time: '25–35 mins',
+    status: 'ACTIVE',
+    latitude: 17.34457,
+    longitude: 78.516972,
+  },
   {
     id: 'zone-kphb',
     name: 'Kukatpally & KPHB Zone',
@@ -55,16 +80,18 @@ const DEFAULT_ZONES: DeliveryZone[] = [
 ];
 
 const POPULAR_QUICK_COLONIES = [
+  'Champapet Main Road',
+  'Raji Reddy Nagar Colony',
+  'Saroornagar Lake & HUDA Complex',
+  'Santosh Nagar & IS Sadan',
+  'Saidabad Colony',
+  'Karmanghat Hanuman Temple Area',
+  'Dilsukhnagar Metro Station',
+  'Kothapet & Chaitanyapuri',
   'KPHB Colony Phase 1',
-  'KPHB Colony Phase 3 & 4',
   'Hitech City (Cyber Towers)',
-  'Madhapur Main Road',
   'Gachibowli (DLF Cyber City)',
-  'Kondapur (Silpa Park & RTO)',
-  'Jubilee Hills Road No 36',
-  'Miyapur Metro Station & Allwyn',
-  'Banjara Hills Road No 12',
-  'Pragathi Nagar',
+  'Madhapur Main Road',
 ];
 
 export const LocationSelectorModal: React.FC<LocationModalProps> = ({
@@ -77,11 +104,11 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
 
   const [zones, setZones] = useState<DeliveryZone[]>(DEFAULT_ZONES);
   const [selectedZone, setSelectedZone] = useState<DeliveryZone | null>(null);
-  const [selectedColony, setSelectedColony] = useState<string>('KPHB Phase 1');
+  const [selectedColony, setSelectedColony] = useState<string>('Champapet');
   const [selectedAddress, setSelectedAddress] = useState<string>(
-    'Phase 1, KPHB Main Road, Hyderabad - 500072'
+    'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad - 500059'
   );
-  const [currentCoords, setCurrentCoords] = useState<[number, number]>([17.4938, 78.3995]);
+  const [currentCoords, setCurrentCoords] = useState<[number, number]>([17.34457, 78.516972]);
   const [pincodeInput, setPincodeInput] = useState('');
   const [isCheckingPincode, setIsCheckingPincode] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -89,8 +116,8 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
 
   // Manual Coordinates Input Tab & State
   const [showManualInputs, setShowManualInputs] = useState(false);
-  const [manualLatInput, setManualLatInput] = useState('17.4938');
-  const [manualLngInput, setManualLngInput] = useState('78.3995');
+  const [manualLatInput, setManualLatInput] = useState('17.34457');
+  const [manualLngInput, setManualLngInput] = useState('78.516972');
 
   // Customer Saved Addresses
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
@@ -131,18 +158,27 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
         radiusKm: data.radiusKm || 5.0,
         message: data.message,
       });
-    } catch (err: any) {
-      const resp = err.response?.data;
+    } catch {
+      // Resilient client-side Haversine verification
+      const hubLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
+      const hubLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
+      const radius = Number(deliverySettings?.delivery_radius_km) || 5.0;
+      const distance = calculateHaversineDistanceKm(hubLat, hubLng, Number(lat), Number(lng));
+      const inZone = distance <= radius + 0.001;
+
       setServiceCheck({
         loading: false,
         checked: true,
-        configured: resp?.configured !== undefined ? Boolean(resp.configured) : true,
-        serviceable: false,
-        radiusKm: 5.0,
-        message: resp?.message || 'Unable to check delivery availability.',
+        configured: true,
+        serviceable: inZone,
+        distanceKm: distance,
+        radiusKm: radius,
+        message: inZone
+          ? 'Delivery available at your location.'
+          : `Selected address is ${distance} km from our hub (service zone: ${radius} km).`,
       });
     }
-  }, []);
+  }, [deliverySettings]);
 
   useEffect(() => {
     if (isOpen) {
@@ -154,7 +190,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       const savedAddr = localStorage.getItem('fresh_delivery_address');
       const savedCoords = localStorage.getItem('fresh_delivery_coords');
 
-      let initCoords: [number, number] = [17.4938, 78.3995];
+      let initCoords: [number, number] = [17.34457, 78.516972];
 
       if (savedCoords) {
         try {

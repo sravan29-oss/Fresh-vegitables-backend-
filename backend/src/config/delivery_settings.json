@@ -1,18 +1,19 @@
+
 {
   "id": "global_delivery_settings",
   "default_delivery_charge": 10,
   "free_delivery_threshold": 99,
-  "min_order_amount": 49,
+  "min_order_amount": 10,
   "enable_free_delivery": true,
   "express_delivery_fee": 45,
   "estimated_delivery_time": "25–35 mins",
   "is_delivery_active": true,
   "surge_charge": 0,
-  "hub_name": "Fresh Vegetables Central Hub",
-  "hub_address": "",
-  "hub_latitude": null,
-  "hub_longitude": null,
+  "hub_name": "Fresh Vegetables Champapet Hub",
+  "hub_address": "Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059",
+  "hub_latitude": 17.34457,
+  "hub_longitude": 78.516972,
   "delivery_radius_km": 5,
   "serviceability_enabled": true,
-  "updated_at": "2026-10-30T00:00:00.000Z"
+  "updated_at": "2026-10-30T13:12:00.000Z"
 }

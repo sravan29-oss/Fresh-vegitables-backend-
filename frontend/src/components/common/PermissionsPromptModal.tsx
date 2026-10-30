@@ -127,7 +127,20 @@ export const PermissionsPromptModal: React.FC<PermissionsPromptModalProps> = ({
             });
             servData = servRes.data?.data || servRes.data;
           } catch (servErr) {
-            console.warn('Backend serviceability check note:', servErr);
+            // Client-side Haversine fallback if backend endpoint is unavailable
+            const toRad = (d: number) => (d * Math.PI) / 180;
+            const dLat = toRad(roundedLat - 17.34457);
+            const dLon = toRad(roundedLng - 78.516972);
+            const a =
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(toRad(17.34457)) * Math.cos(toRad(roundedLat)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const dist = Number((6371 * c).toFixed(2));
+            servData = {
+              serviceable: dist <= 5.001,
+              distanceKm: dist,
+              radiusKm: 5.0,
+            };
           }
 
           // Fetch active zones to match
@@ -141,13 +154,13 @@ export const PermissionsPromptModal: React.FC<PermissionsPromptModalProps> = ({
 
           if (!matchedZone) {
             matchedZone = {
-              id: 'zone-kphb',
-              name: colony || 'Kukatpally & KPHB Zone',
-              pincodes: ['500072'],
+              id: 'zone-champapet',
+              name: colony || 'Champapet & Hyderabad Zone',
+              pincodes: ['500059'],
               delivery_radius_km: servData?.radiusKm || 5.0,
-              delivery_fee: 20,
-              min_order_amount: 199,
-              free_delivery_threshold: 499,
+              delivery_fee: 10,
+              min_order_amount: 10,
+              free_delivery_threshold: 99,
               estimated_delivery_time: '25–35 mins',
               status: 'ACTIVE',
               latitude: roundedLat,

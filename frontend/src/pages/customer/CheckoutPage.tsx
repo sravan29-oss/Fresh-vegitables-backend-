@@ -155,13 +155,32 @@ export const CheckoutPage: React.FC = () => {
           message: data.message,
         });
       } catch (err: any) {
-        const resp = err.response?.data;
+        // Resilient client-side Haversine verification
+        const toRad = (d: number) => (d * Math.PI) / 180;
+        const hubLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
+        const hubLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
+        const radius = Number(deliverySettings?.delivery_radius_km) || 5.0;
+        const dLat = toRad(Number(addr.latitude) - hubLat);
+        const dLon = toRad(Number(addr.longitude) - hubLng);
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(toRad(hubLat)) * Math.cos(toRad(Number(addr.latitude))) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const dist = Number((6371 * c).toFixed(2));
+        const inZone = dist <= radius + 0.001;
+
         setZoneServiceability({
           checked: true,
-          configured: resp?.configured !== undefined ? Boolean(resp.configured) : true,
-          serviceable: false,
-          radiusKm: 5.0,
-          message: resp?.message || 'Selected address is outside our 5 km delivery zone.',
+          configured: true,
+          serviceable: inZone,
+          distanceKm: dist,
+          radiusKm: radius,
+          zoneName: deliverySettings?.hub_name || 'Fresh Vegetables Champapet Hub',
+          deliveryFee: 10,
+          estimatedDelivery: '25–35 mins',
+          message: inZone
+            ? 'Delivery available at your location.'
+            : `Selected address is ${dist} km from our hub (service zone: ${radius} km).`,
         });
       }
     } else {

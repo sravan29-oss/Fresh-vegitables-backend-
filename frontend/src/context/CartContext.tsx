@@ -45,6 +45,18 @@ const GUEST_CART_KEY = 'fresh_veg_guest_cart';
 
 const STORAGE_DELIVERY_KEY = 'fresh_veg_delivery_settings';
 
+function calculateHaversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 6371; // Earth's mean radius in kilometres
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((R * c).toFixed(2));
+}
+
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [cart, setCart] = useState<Cart | null>(null);
@@ -74,16 +86,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cached) return JSON.parse(cached);
     } catch {}
     return {
-      default_delivery_charge: 30,
-      free_delivery_threshold: 499,
-      min_order_amount: 199,
+      default_delivery_charge: 10,
+      free_delivery_threshold: 99,
+      min_order_amount: 10,
       enable_free_delivery: true,
       express_delivery_fee: 45,
       estimated_delivery_time: '25–35 mins',
       is_delivery_active: true,
       surge_charge: 0,
+      hub_name: 'Fresh Vegetables Champapet Hub',
+      hub_address: 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
+      hub_latitude: 17.34457,
+      hub_longitude: 78.516972,
       delivery_radius_km: 5,
       serviceability_enabled: true,
+      is_hub_configured: true,
     };
   });
 
@@ -117,16 +134,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return result;
     } catch (err: any) {
-      const respData = err.response?.data;
-      const isConfigured = respData?.configured !== undefined ? Boolean(respData.configured) : true;
-      const msg = respData?.message || 'Unable to verify delivery serviceability at this location.';
+      // Resilient client-side fallback (e.g. if backend route is deploying or offline)
+      const hubLat = deliverySettings.hub_latitude !== null && deliverySettings.hub_latitude !== undefined
+        ? Number(deliverySettings.hub_latitude)
+        : 17.34457;
+      const hubLng = deliverySettings.hub_longitude !== null && deliverySettings.hub_longitude !== undefined
+        ? Number(deliverySettings.hub_longitude)
+        : 78.516972;
+      const radiusKm = Number(deliverySettings.delivery_radius_km) || 5.0;
+
+      const distanceKm = calculateHaversineDistanceKm(hubLat, hubLng, Number(lat), Number(lng));
+      const isWithinRadius = distanceKm <= radiusKm + 0.001;
 
       const result: ServiceabilityState = {
         checked: true,
-        configured: isConfigured,
-        serviceable: false,
-        radiusKm: 5,
-        message: msg,
+        configured: true,
+        serviceable: isWithinRadius,
+        distanceKm,
+        radiusKm,
+        message: isWithinRadius
+          ? 'Delivery available at your location.'
+          : `Sorry, we are currently unavailable in your area (${distanceKm} km away, max ${radiusKm} km).`,
+        hubName: deliverySettings.hub_name || 'Fresh Vegetables Champapet Hub',
+        hubAddress: deliverySettings.hub_address || 'Champapet, Hyderabad - 500059',
         checking: false,
         coordinates: { latitude: Number(lat), longitude: Number(lng) },
       };
@@ -134,11 +164,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setServiceability(result);
       try {
         localStorage.setItem('fresh_delivery_serviceability', JSON.stringify(result));
+        localStorage.setItem('fresh_delivery_coords', JSON.stringify({ latitude: Number(lat), longitude: Number(lng) }));
       } catch {}
 
       return result;
     }
-  }, []);
+  }, [deliverySettings]);
 
   const recheckServiceability = useCallback(async () => {
     let lat: number | null = null;

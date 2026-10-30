@@ -37,6 +37,7 @@ import {
 } from '../../components/common/InteractiveLocationMap';
 
 const HYDERABAD_ZONE_PRESETS = [
+  { label: 'Champapet Central Hub', name: 'Champapet & Saroornagar Zone', colony: 'Champapet (Raji Reddy Nagar)', pincode: '500059', lat: 17.34457, lng: 78.516972, radius: 5.0 },
   { label: 'KPHB Phase 1–4', name: 'KPHB Colony & Kukatpally Zone', colony: 'KPHB Colony', pincode: '500072', lat: 17.4938, lng: 78.3995, radius: 8.5 },
   { label: 'Madhapur & Hitech', name: 'Madhapur & Cyber Towers Zone', colony: 'Madhapur', pincode: '500081', lat: 17.4474, lng: 78.3762, radius: 10.0 },
   { label: 'Gachibowli DLF', name: 'Gachibowli & Financial District Zone', colony: 'Gachibowli', pincode: '500032', lat: 17.4401, lng: 78.3489, radius: 10.0 },

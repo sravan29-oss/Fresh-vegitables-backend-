@@ -2,7 +2,18 @@ import fs from 'fs';
 import path from 'path';
 import { memoryStore } from '../config/mockDb';
 
-const SETTINGS_FILE = path.join(__dirname, '..', 'config', 'delivery_settings.json');
+function getSettingsFilePath(): string {
+  const candidates = [
+    path.join(__dirname, '..', 'config', 'delivery_settings.json'),
+    path.join(__dirname, '../../src/config', 'delivery_settings.json'),
+    path.resolve(process.cwd(), 'src/config/delivery_settings.json'),
+    path.resolve(process.cwd(), 'backend/src/config/delivery_settings.json'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0];
+}
 
 export interface StoreDeliverySettings {
   id: string;
@@ -27,8 +38,9 @@ export interface StoreDeliverySettings {
 
 export function readSettingsFromFile(): StoreDeliverySettings | null {
   try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
+    const filePath = getSettingsFilePath();
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf8');
       const parsed = JSON.parse(data);
       if (parsed && typeof parsed.default_delivery_charge === 'number') {
         return parsed;
@@ -42,7 +54,12 @@ export function readSettingsFromFile(): StoreDeliverySettings | null {
 
 export function writeSettingsToFile(settings: StoreDeliverySettings): void {
   try {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
+    const filePath = getSettingsFilePath();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf8');
   } catch (err) {
     console.error('Failed writing delivery_settings.json:', err);
   }
@@ -101,21 +118,21 @@ export function getPersistedDeliverySettings(): StoreDeliverySettings {
 
   const fallback: StoreDeliverySettings = {
     id: 'global_delivery_settings',
-    default_delivery_charge: 30,
-    free_delivery_threshold: 499,
-    min_order_amount: 199,
+    default_delivery_charge: 10,
+    free_delivery_threshold: 99,
+    min_order_amount: 10,
     enable_free_delivery: true,
     express_delivery_fee: 45,
     estimated_delivery_time: '25–35 mins',
     is_delivery_active: true,
     surge_charge: 0,
     updated_at: new Date().toISOString(),
-    // Delivery hub starts unconfigured unless env vars are explicitly provided
-    hub_name: envHub.name || 'Fresh Vegetables Central Hub',
-    hub_address: '',
-    hub_latitude: envHub.lat,
-    hub_longitude: envHub.lng,
-    delivery_radius_km: envHub.radius,
+    // Delivery hub defaults to Champapet, Hyderabad central store
+    hub_name: envHub.name || 'Fresh Vegetables Champapet Hub',
+    hub_address: 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
+    hub_latitude: envHub.lat !== null ? envHub.lat : 17.344570,
+    hub_longitude: envHub.lng !== null ? envHub.lng : 78.516972,
+    delivery_radius_km: envHub.radius > 0 ? envHub.radius : 5.0,
     serviceability_enabled: true,
   };
 
