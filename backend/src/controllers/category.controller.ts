@@ -106,6 +106,7 @@ export async function updateCategory(req: AuthRequest, res: Response, next: Next
 
     if (fields.length === 0) throw new AppError('No fields to update', 400);
 
+    fields.push('updated_at = NOW()');
     values.push(id);
     const result = await db.query(
       `UPDATE categories SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,

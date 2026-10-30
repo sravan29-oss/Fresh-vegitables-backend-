@@ -220,13 +220,9 @@ export const AdminProductsPage: React.FC = () => {
         }
 
         if (editingProduct) {
-          await api.put(`/products/${editingProduct.id}`, data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          await api.put(`/products/${editingProduct.id}`, data);
         } else {
-          await api.post('/products', data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          await api.post('/products', data);
         }
       } else {
         const payload: any = { ...formData };

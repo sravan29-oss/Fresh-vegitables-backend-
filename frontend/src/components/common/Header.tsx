@@ -726,9 +726,6 @@ export const Header: React.FC = () => {
                         <Wallet className="w-4 h-4 text-amber-600" />
                         <span>Wallet &amp; Credits</span>
                       </div>
-                      <span className="text-[10px] bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
-                        ₹250
-                      </span>
                     </Link>
                     <Link
                       to="/profile"
@@ -932,7 +929,7 @@ export const Header: React.FC = () => {
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl text-amber-800 border border-slate-200 flex items-center gap-2"
                     >
-                      <Wallet className="w-4 h-4 text-amber-600" /> Wallet (₹250)
+                      <Wallet className="w-4 h-4 text-amber-600" /> Wallet &amp; Credits
                     </Link>
                     <button
                       onClick={() => {

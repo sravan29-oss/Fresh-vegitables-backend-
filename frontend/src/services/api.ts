@@ -43,6 +43,13 @@ api.interceptors.request.use((config) => {
     }
   }
 
+  // Ensure multipart FormData requests let Axios & browser calculate boundary automatically
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    if (config.headers) {
+      delete config.headers['Content-Type'];
+    }
+  }
+
   return config;
 });
 

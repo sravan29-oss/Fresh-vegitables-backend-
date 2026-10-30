@@ -10,11 +10,12 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     });
   }
 
-  // Multer errors
+  // Multer & multipart errors
   if (
     err.message === 'File too large' ||
     (err as any).code === 'LIMIT_FILE_SIZE' ||
-    (err as any).name === 'MulterError'
+    (err as any).name === 'MulterError' ||
+    err.message?.includes('Boundary not found')
   ) {
     const isSize = err.message === 'File too large' || (err as any).code === 'LIMIT_FILE_SIZE';
     return res.status(400).json({

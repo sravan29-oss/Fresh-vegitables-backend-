@@ -173,13 +173,9 @@ export const AdminCategoriesPage: React.FC = () => {
         data.append('image', imageFile);
 
         if (editingCategory) {
-          await api.put(`/categories/${editingCategory.id}`, data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          await api.put(`/categories/${editingCategory.id}`, data);
         } else {
-          await api.post('/categories', data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          await api.post('/categories', data);
         }
       } else {
         const payload: any = {
@@ -434,7 +430,7 @@ export const AdminCategoriesPage: React.FC = () => {
                     {/* Or URL input */}
                     <input
                       type="text"
-                      placeholder="Or enter direct image URL (https://...)"
+                      placeholder="Or enter direct image URL (e.g. https://.../image.jpg)"
                       value={imageUrl}
                       onChange={(e) => {
                         setImageUrl(e.target.value);
@@ -443,6 +439,9 @@ export const AdminCategoriesPage: React.FC = () => {
                       }}
                       className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 text-[11px] font-mono focus:outline-none focus:border-brand-500"
                     />
+                    <p className="text-[10px] text-slate-400">
+                      Use direct image files (.jpg, .png, .webp) or upload an image above.
+                    </p>
                   </div>
                 </div>
               </div>
