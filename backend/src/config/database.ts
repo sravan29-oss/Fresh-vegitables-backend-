@@ -292,13 +292,19 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
       return { rows: u ? [u] : [] };
     }
     return {
-      rows: memoryStore.users.map((u) => ({
-        ...u,
-        order_count: memoryStore.orders.filter((o) => o.user_id === u.id).length,
-        total_spent: memoryStore.orders
-          .filter((o) => o.user_id === u.id)
-          .reduce((sum, o) => sum + o.total, 0),
-      })),
+      rows: memoryStore.users.map((u) => {
+        const wallet = (memoryStore as any).wallets?.find((w: any) => w.user_id === u.id);
+        const loyalty = (memoryStore as any).loyalty_accounts?.find((a: any) => a.user_id === u.id);
+        return {
+          ...u,
+          order_count: memoryStore.orders.filter((o) => o.user_id === u.id).length,
+          total_spent: memoryStore.orders
+            .filter((o) => o.user_id === u.id)
+            .reduce((sum, o) => sum + o.total, 0),
+          wallet_balance: wallet ? Number(wallet.balance) : 0.0,
+          points_balance: loyalty ? Number(loyalty.points_balance) : 0,
+        };
+      }),
     };
   }
 
@@ -824,6 +830,55 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
   }
 
   // 13. LOYALTY, WALLET & REFERRALS (Phase 15)
+  if (lower.startsWith('insert into wallets')) {
+    const id = params[0] || uuidv4();
+    const userId = params[1];
+    const balance = Number(params[2] || 0);
+    let w = (memoryStore as any).wallets.find((item: any) => item.user_id === userId);
+    if (w) {
+      w.balance = Number((w.balance + balance).toFixed(2));
+      w.updated_at = new Date().toISOString();
+    } else {
+      w = {
+        id,
+        user_id: userId,
+        balance,
+        currency: 'INR',
+        is_locked: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      (memoryStore as any).wallets.push(w);
+    }
+    return { rows: [w] };
+  }
+
+  if (lower.startsWith('update wallets')) {
+    const w = (memoryStore as any).wallets.find((item: any) => item.user_id === params[1] || item.id === params[1]);
+    if (w) {
+      w.balance = Number(params[0]);
+      w.updated_at = new Date().toISOString();
+    }
+    return { rows: w ? [w] : [] };
+  }
+
+  if (lower.startsWith('insert into wallet_transactions')) {
+    const newTx = {
+      id: params[0] || uuidv4(),
+      wallet_id: params[1],
+      amount: Number(params[2]),
+      transaction_type: params[3],
+      balance_after: Number(params[4]),
+      reference_type: params[5],
+      reference_id: params[6],
+      description: params[7],
+      status: 'SUCCESS',
+      created_at: new Date().toISOString(),
+    };
+    (memoryStore as any).wallet_transactions.unshift(newTx);
+    return { rows: [newTx] };
+  }
+
   if (lower.includes('from wallets')) {
     if (params[0]) {
       const w = (memoryStore as any).wallets.find((item: any) => item.user_id === params[0] || item.id === params[0]);

@@ -107,7 +107,7 @@ export const WalletPage: React.FC = () => {
           <div className="my-6">
             <span className="text-xs text-slate-400">Available Balance</span>
             <div className="text-4xl font-black tracking-tight text-white mt-1">
-              ₹{wallet?.balance ? wallet.balance.toFixed(2) : '250.00'}
+              ₹{typeof wallet?.balance === 'number' ? Number(wallet.balance).toFixed(2) : '0.00'}
             </div>
             <p className="text-[11px] text-emerald-300 mt-1 flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5" /> 100% Secure Backend Ledger
@@ -134,7 +134,7 @@ export const WalletPage: React.FC = () => {
               <button
                 onClick={handleTopup}
                 disabled={isProcessing}
-                className="ml-auto bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs px-3 py-1.5 rounded-lg flex items-center gap-1"
+                className="ml-auto bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
                 <span>Add</span>
@@ -155,12 +155,12 @@ export const WalletPage: React.FC = () => {
           <div className="my-6">
             <span className="text-xs text-slate-500">Points Balance</span>
             <div className="text-4xl font-black tracking-tight text-slate-900 mt-1 flex items-baseline gap-2">
-              <span>{loyalty?.points_balance || 340}</span>
+              <span>{typeof loyalty?.points_balance === 'number' ? loyalty.points_balance : 0}</span>
               <span className="text-xs font-bold text-slate-400">Pts</span>
             </div>
             <div className="inline-flex items-center gap-1.5 mt-2 bg-amber-500/10 text-amber-700 border border-amber-500/20 px-3 py-1 rounded-full text-xs font-black">
               <Sparkles className="w-3 h-3 text-amber-500" />
-              <span>{loyalty?.tier || 'SILVER'} MEMBER TIER</span>
+              <span>{(loyalty?.tier || 'BRONZE').toUpperCase()} MEMBER TIER</span>
             </div>
           </div>
 
@@ -182,11 +182,11 @@ export const WalletPage: React.FC = () => {
             <span className="text-xs text-slate-500">Your Unique Referral Code</span>
             <div className="flex items-center gap-2">
               <div className="bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-2xl font-mono text-base font-black text-brand-700 tracking-wider flex-1 text-center">
-                {referral?.referral_code || 'PRIYA50'}
+                {referral?.referral_code || 'ORGANIC50'}
               </div>
               <button
                 onClick={handleCopyCode}
-                className="bg-brand-500 hover:bg-brand-400 text-slate-950 p-2.5 rounded-2xl transition-all shadow-md"
+                className="bg-brand-500 hover:bg-brand-400 text-slate-950 p-2.5 rounded-2xl transition-all shadow-md cursor-pointer"
                 title="Copy Code"
               >
                 {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
@@ -196,12 +196,12 @@ export const WalletPage: React.FC = () => {
 
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
             <div>
-              <p className="font-bold text-slate-900">{referral?.total_invited || 3} Friends Invited</p>
-              <p className="text-[11px] text-emerald-600 font-bold">₹{referral?.total_earned || 150} Earned</p>
+              <p className="font-bold text-slate-900">{referral?.total_invited ?? 0} Friends Invited</p>
+              <p className="text-[11px] text-emerald-600 font-bold">₹{referral?.total_earned ?? 0} Earned</p>
             </div>
             <a
               href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                `Hey! Get ₹50 off on organic farm-fresh vegetables using my code ${referral?.referral_code || 'PRIYA50'}: ${typeof window !== 'undefined' ? window.location.origin : 'https://freshvegetables.com'}`
+                `Hey! Get ₹50 off on organic farm-fresh vegetables using my code ${referral?.referral_code || 'ORGANIC50'}: ${typeof window !== 'undefined' ? window.location.origin : 'https://fresh-vegetables-organic.vercel.app'}`
               )}`}
               target="_blank"
               rel="noreferrer"

@@ -22,6 +22,19 @@ export interface DeliveryZoneItem {
 
 const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
   {
+    id: 'zone-champapet',
+    name: 'Champapet & Saroornagar Zone',
+    pincodes: ['500059', '500079', '500035', '500060'],
+    delivery_radius_km: 5.0,
+    delivery_fee: 10.0,
+    min_order_amount: 10.0,
+    free_delivery_threshold: 99.0,
+    estimated_delivery_time: '25–35 mins',
+    status: 'ACTIVE',
+    latitude: 17.34457,
+    longitude: 78.516972,
+  },
+  {
     id: 'zone-kphb',
     name: 'Kukatpally & KPHB Zone',
     pincodes: ['500072', '500085', '500090', '500018', '500038'],

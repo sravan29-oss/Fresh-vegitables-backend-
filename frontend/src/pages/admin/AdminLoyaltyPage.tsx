@@ -59,12 +59,12 @@ export const AdminLoyaltyPage: React.FC = () => {
   };
 
   const metrics = data?.metrics || {
-    total_wallets: 2,
-    total_wallet_liabilities: 300,
-    total_loyalty_accounts: 2,
-    total_points_outstanding: 460,
-    total_referrals: 1,
-    successful_referrals: 1,
+    total_wallets: 0,
+    total_wallet_liabilities: 0,
+    total_loyalty_accounts: 0,
+    total_points_outstanding: 0,
+    total_referrals: 0,
+    successful_referrals: 0,
   };
 
   return (
@@ -141,6 +141,7 @@ export const AdminLoyaltyPage: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-800 text-slate-400">
+                <th className="py-2.5 px-3">Customer</th>
                 <th className="py-2.5 px-3">User ID</th>
                 <th className="py-2.5 px-3">Balance</th>
                 <th className="py-2.5 px-3">Status</th>
@@ -151,8 +152,12 @@ export const AdminLoyaltyPage: React.FC = () => {
             <tbody className="divide-y divide-slate-800/60 text-slate-300">
               {(data?.wallets || []).map((w: any) => (
                 <tr key={w.id} className="hover:bg-slate-900/50">
-                  <td className="py-3 px-3 font-mono text-[11px] text-brand-300">{w.user_id}</td>
-                  <td className="py-3 px-3 font-black text-white">₹{Number(w.balance).toFixed(2)}</td>
+                  <td className="py-3 px-3">
+                    <p className="font-bold text-white text-xs">{w.user_name || 'Customer'}</p>
+                    <p className="text-[10px] text-slate-400">{w.user_mobile || w.user_email || '—'}</p>
+                  </td>
+                  <td className="py-3 px-3 font-mono text-[10px] text-slate-400">{w.user_id}</td>
+                  <td className="py-3 px-3 font-black text-white">₹{Number(w.balance || 0).toFixed(2)}</td>
                   <td className="py-3 px-3">
                     <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold">
                       ACTIVE
@@ -167,7 +172,7 @@ export const AdminLoyaltyPage: React.FC = () => {
                         setSelectedUser(w.user_id);
                         setIsModalOpen(true);
                       }}
-                      className="text-brand-400 hover:underline font-bold text-xs"
+                      className="text-brand-400 hover:underline font-bold text-xs cursor-pointer"
                     >
                       Adjust
                     </button>

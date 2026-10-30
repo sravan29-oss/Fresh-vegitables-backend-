@@ -1,5 +1,25 @@
 [
   {
+    "id": "zone-champapet",
+    "name": "Champapet & Saroornagar Zone",
+    "pincodes": [
+      "500059",
+      "500079",
+      "500035",
+      "500060"
+    ],
+    "delivery_radius_km": 5.0,
+    "delivery_fee": 10,
+    "min_order_amount": 10,
+    "free_delivery_threshold": 99,
+    "estimated_delivery_time": "25–35 mins",
+    "status": "ACTIVE",
+    "latitude": 17.34457,
+    "longitude": 78.516972,
+    "created_at": "2024-01-01T00:00:00.000Z",
+    "updated_at": "2026-10-30T12:00:00.000Z"
+  },
+  {
     "id": "zone-kphb",
     "name": "Kukatpally & KPHB Zone",
     "pincodes": [

@@ -758,7 +758,7 @@ export const memoryStore = {
     {
       id: 'wallet-usr01',
       user_id: '11111111-1111-1111-1111-111111111111',
-      balance: 250.0,
+      balance: 0.0,
       currency: 'INR',
       is_locked: false,
       created_at: new Date('2024-01-15').toISOString(),
@@ -767,7 +767,7 @@ export const memoryStore = {
     {
       id: 'wallet-usr02',
       user_id: '11111111-1111-1111-1111-111111111112',
-      balance: 50.0,
+      balance: 0.0,
       currency: 'INR',
       is_locked: false,
       created_at: new Date('2024-02-10').toISOString(),
@@ -775,32 +775,7 @@ export const memoryStore = {
     },
   ],
 
-  wallet_transactions: [
-    {
-      id: 'wtx01',
-      wallet_id: 'wallet-usr01',
-      amount: 200.0,
-      transaction_type: 'CREDIT',
-      balance_after: 200.0,
-      reference_type: 'topup',
-      reference_id: 'top_sim_01',
-      description: 'Wallet top-up via UPI',
-      status: 'SUCCESS',
-      created_at: new Date(Date.now() - 172800000).toISOString(),
-    },
-    {
-      id: 'wtx02',
-      wallet_id: 'wallet-usr01',
-      amount: 50.0,
-      transaction_type: 'REFERRAL_BONUS',
-      balance_after: 250.0,
-      reference_type: 'referral',
-      reference_id: 'ref01',
-      description: 'Referral reward credit for inviting Amit Patel',
-      status: 'SUCCESS',
-      created_at: new Date(Date.now() - 86400000).toISOString(),
-    },
-  ],
+  wallet_transactions: [],
 
   referral_codes: [
     {

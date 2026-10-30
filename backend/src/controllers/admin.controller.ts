@@ -235,7 +235,9 @@ export async function getCustomers(req: AuthRequest, res: Response, next: NextFu
     const result = await db.query(
       `SELECT id, name, email, mobile, status, created_at,
        (SELECT COUNT(*)::int FROM orders WHERE user_id = users.id) as order_count,
-       (SELECT COALESCE(SUM(total), 0) FROM orders WHERE user_id = users.id AND order_status != 'cancelled') as total_spent
+       (SELECT COALESCE(SUM(total), 0) FROM orders WHERE user_id = users.id AND order_status != 'cancelled') as total_spent,
+       COALESCE((SELECT balance FROM wallets WHERE user_id = users.id), 0.00) as wallet_balance,
+       COALESCE((SELECT points_balance FROM loyalty_accounts WHERE user_id = users.id), 0) as points_balance
        FROM users ${whereClause}
        ORDER BY created_at DESC
        LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
