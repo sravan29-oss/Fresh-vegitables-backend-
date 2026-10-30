@@ -9,8 +9,8 @@ export const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { adminLogin, showLoginSuccess } = useAuth();
 
-  const [email, setEmail] = useState('naredlasravankumar29@gmail.com');
-  const [password, setPassword] = useState('Sravan29');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -69,6 +69,7 @@ export const AdminLoginPage: React.FC = () => {
               <input
                 type="email"
                 required
+                placeholder="admin@freshveggies.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 text-white rounded-xl focus:outline-none focus:border-brand-500"
@@ -83,6 +84,7 @@ export const AdminLoginPage: React.FC = () => {
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-11 py-3 bg-slate-800 border border-slate-700 text-white rounded-xl focus:outline-none focus:border-brand-500"
@@ -108,23 +110,6 @@ export const AdminLoginPage: React.FC = () => {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        <div
-          onClick={() => {
-            setEmail('naredlasravankumar29@gmail.com');
-            setPassword('Sravan29');
-            setErrorMsg('');
-          }}
-          className="p-3 bg-slate-800/60 hover:bg-slate-800 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1 cursor-pointer transition-colors"
-          title="Click to fill credentials"
-        >
-          <div className="flex items-center justify-between">
-            <p className="font-bold text-slate-300">Super Admin Credentials:</p>
-            <span className="text-[10px] bg-brand-500/20 text-brand-300 px-2 py-0.5 rounded font-bold">1-Click Auto Fill</span>
-          </div>
-          <p>Email: <code className="text-brand-400 font-bold">naredlasravankumar29@gmail.com</code></p>
-          <p>Password: <code className="text-brand-400 font-bold">Sravan29</code></p>
-        </div>
       </div>
     </div>
   );

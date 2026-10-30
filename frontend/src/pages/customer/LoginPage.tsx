@@ -111,13 +111,6 @@ export const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        {/* Demo credentials hint */}
-        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px] text-slate-500 space-y-1">
-          <p className="font-bold text-slate-700">Demo Customer Credentials:</p>
-          <p>Email: <code className="text-brand-700 font-bold">customer@freshveggies.com</code></p>
-          <p>Password: <code className="text-brand-700 font-bold">customer123</code></p>
-        </div>
-
         <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
           Don't have an account?{' '}
           <Link
