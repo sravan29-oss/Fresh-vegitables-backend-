@@ -462,7 +462,7 @@ export const AdminCMSPage: React.FC = () => {
                       alt={banner.title}
                       className="w-full h-full object-cover"
                       onError={(e: any) => {
-                        e.target.src = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600';
+                        e.currentTarget.style.opacity = '0.3';
                       }}
                     />
                     <span className="absolute top-3 left-3 bg-brand-500 text-slate-950 font-black text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider">

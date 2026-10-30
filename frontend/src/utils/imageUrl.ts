@@ -20,9 +20,24 @@ const PRODUCT_FALLBACKS: Record<string, string> = {
 };
 
 /**
- * Resolves product image URLs:
- * 1. Handles full URLs (http, https, data).
- * 2. Handles relative /uploads/... paths ensuring they resolve correctly on both local dev and production.
+ * Extracts backend origin (e.g. https://fresh-vegitables-backend.onrender.com)
+ */
+function getBackendOrigin(): string {
+  if (API_BASE_URL && (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://'))) {
+    try {
+      const parsed = new URL(API_BASE_URL);
+      return parsed.origin;
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+/**
+ * Resolves product and category image URLs:
+ * 1. Handles full URLs (http, https, data, blob).
+ * 2. Handles relative /uploads/... paths ensuring they resolve to the backend server.
  */
 export function getProductImageUrl(imagePath?: string, productName?: string): string {
   if (!imagePath || typeof imagePath !== 'string' || !imagePath.trim()) {
@@ -31,13 +46,27 @@ export function getProductImageUrl(imagePath?: string, productName?: string): st
 
   const trimmed = imagePath.trim();
 
-  // If already absolute URL or base64 data
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+  // If already absolute URL, base64 data, or browser blob object URL
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:')
+  ) {
     return trimmed;
   }
 
   // Ensure leading slash for relative paths
   const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+
+  // If path is a backend upload (/uploads/...), route to the backend origin
+  if (cleanPath.startsWith('/uploads')) {
+    const origin = getBackendOrigin();
+    if (origin) {
+      return `${origin}${cleanPath}`;
+    }
+  }
+
   return cleanPath;
 }
 

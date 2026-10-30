@@ -164,33 +164,34 @@ export const AdminCategoriesPage: React.FC = () => {
     try {
       setIsSaving(true);
 
+      let finalImageValue = imageUrl.trim() || null;
+
       if (imageFile) {
-        const data = new FormData();
-        data.append('name', formData.name.trim());
-        data.append('description', formData.description?.trim() || '');
-        data.append('status', formData.status);
-        data.append('display_order', String(formData.display_order || 0));
-        data.append('image', imageFile);
+        // Convert to high-definition WebP data URL for permanent Supabase persistence
+        const reader = new FileReader();
+        const base64Data = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(imageFile);
+        });
 
-        if (editingCategory) {
-          await api.put(`/categories/${editingCategory.id}`, data);
-        } else {
-          await api.post('/categories', data);
+        if (base64Data) {
+          finalImageValue = base64Data;
         }
+      }
+
+      const payload: any = {
+        name: formData.name.trim(),
+        description: formData.description?.trim() || null,
+        status: formData.status,
+        display_order: Number(formData.display_order || 0),
+        image: finalImageValue,
+      };
+
+      if (editingCategory) {
+        await api.put(`/categories/${editingCategory.id}`, payload);
       } else {
-        const payload: any = {
-          name: formData.name.trim(),
-          description: formData.description?.trim() || null,
-          status: formData.status,
-          display_order: Number(formData.display_order || 0),
-          image: imageUrl.trim() || null,
-        };
-
-        if (editingCategory) {
-          await api.put(`/categories/${editingCategory.id}`, payload);
-        } else {
-          await api.post('/categories', payload);
-        }
+        await api.post('/categories', payload);
       }
 
       setIsModalOpen(false);
@@ -373,11 +374,15 @@ export const AdminCategoriesPage: React.FC = () => {
                     {imagePreview ? (
                       <>
                         <img
-                          src={getProductImageUrl(imagePreview, formData.name)}
+                          src={
+                            imagePreview.startsWith('blob:') || imagePreview.startsWith('data:')
+                              ? imagePreview
+                              : getProductImageUrl(imagePreview, formData.name)
+                          }
                           alt="Preview"
                           className="w-full h-full object-cover"
                           onError={(e) => {
-                            e.currentTarget.src = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=300';
+                            e.currentTarget.style.opacity = '0.3';
                           }}
                         />
                         <button
