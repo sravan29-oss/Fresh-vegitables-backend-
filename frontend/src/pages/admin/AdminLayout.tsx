@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { AdminOrderAlertProvider, useAdminOrderAlerts } from '../../context/AdminOrderAlertContext';
 import { AdminOrderNotificationBar } from '../../components/admin/AdminOrderNotificationBar';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const AdminLayoutContent: React.FC = () => {
   const { adminUser, adminLogout, showLogoutConfirm, showLogoutSuccess } = useAuth();
@@ -92,6 +93,7 @@ export const AdminLayoutContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col lg:flex-row overflow-x-hidden">
+      <SEOHead title="Admin Operations | Fresh Vegetables Organic" noindex={true} />
       {/* ─── Mobile Drawer Backdrop ─── */}
       {isMobileDrawerOpen && (
         <div

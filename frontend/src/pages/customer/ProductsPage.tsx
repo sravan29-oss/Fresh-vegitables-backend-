@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowUpDown,
   CheckCircle2,
@@ -13,6 +13,46 @@ import { ProductGridSkeleton } from '../../components/product/ProductGridSkeleto
 import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { subscribeLiveUpdates } from '../../services/liveSync';
 import { useCart } from '../../context/CartContext';
+import { SEOHead } from '../../components/common/SEOHead';
+
+const CATEGORY_SEO_DATA: Record<string, { title: string; description: string; h1: string; intro: string }> = {
+  fresh: {
+    title: 'Farm-Fresh Vegetables Online | Fresh Vegetables Organic',
+    description: 'Shop daily harvest fresh vegetables online from Fresh Vegetables Organic. Local delivery within our 5 km service zone in Hyderabad.',
+    h1: 'Farm-Fresh Daily Vegetables',
+    intro: 'Explore daily harvested farm vegetables picked fresh and delivered to your doorstep. Carefully graded for quality and freshness.',
+  },
+  'leafy-greens': {
+    title: 'Fresh Leafy Greens Online | Fresh Vegetables Organic',
+    description: 'Buy crisp, fresh leafy greens like spinach, coriander, and palak online. Farm-fresh produce delivered within our 5 km service zone in Hyderabad.',
+    h1: 'Crisp & Nutritious Leafy Greens',
+    intro: 'From tender spinach and fresh coriander to crisp salad greens, our leafy greens are harvested daily for maximum vitality and freshness.',
+  },
+  'root-vegetables': {
+    title: 'Fresh Root Vegetables Online | Fresh Vegetables Organic',
+    description: 'Order farm-fresh potatoes, onions, carrots, and root vegetables online with doorstep delivery within our 5 km service zone in Hyderabad.',
+    h1: 'Farm-Direct Root Vegetables',
+    intro: 'Discover hearty root vegetables including farm potatoes, sweet carrots, and crisp onions grown with care and delivered from local farms.',
+  },
+  'exotic-vegetables': {
+    title: 'Fresh Exotic Vegetables Online | Fresh Vegetables Organic',
+    description: 'Shop premium exotic vegetables online including broccoli, zucchini, and bell peppers with doorstep delivery within our 5 km service zone in Hyderabad.',
+    h1: 'Premium Exotic Vegetables',
+    intro: 'Elevate your home cooking with our premium selection of fresh exotic vegetables, carefully inspected for maximum freshness and flavor.',
+  },
+  'herbs-seasonings': {
+    title: 'Fresh Herbs & Seasonings Online | Fresh Vegetables Organic',
+    description: 'Buy fresh culinary herbs and aromatic seasonings online. Handpicked coriander, mint, ginger, and garlic delivered within our 5 km service zone.',
+    h1: 'Aromatic Fresh Herbs & Seasonings',
+    intro: 'Enhance your daily dishes with fragrant culinary herbs and seasonings, harvested fresh every morning to preserve natural aroma.',
+  },
+  'organic-vegetables': {
+    title: 'Organically Grown Vegetables Online | Fresh Vegetables Organic',
+    description: 'Shop fresh organically grown vegetables delivered to your doorstep within our 5 km service zone in Hyderabad.',
+    h1: 'Organically Grown Vegetables',
+    intro: 'Discover select organically grown vegetables cultivated with care by trusted regional farm partners.',
+  },
+};
 
 export const ProductsPage: React.FC = () => {
   const { serviceability, setIsLocationModalOpen } = useCart();
@@ -116,6 +156,72 @@ export const ProductsPage: React.FC = () => {
   const totalPages = Math.ceil(totalProducts / pageSize);
   const hasActiveFilters = Boolean(currentCategory || currentSearch || currentInStock || currentSort !== 'popular');
 
+  // Derive category SEO values
+  const activeCategoryObj = categories.find((c) => c.slug === currentCategory);
+  const matchedSEO = currentCategory ? CATEGORY_SEO_DATA[currentCategory] : null;
+
+  const pageTitle = matchedSEO
+    ? matchedSEO.title
+    : currentCategory && activeCategoryObj
+    ? `Fresh ${activeCategoryObj.name} Online | Fresh Vegetables Organic`
+    : currentSearch
+    ? `Search: "${currentSearch}" | Fresh Vegetables Organic`
+    : 'All Fresh Vegetables Online | Fresh Vegetables Organic';
+
+  const pageDescription = matchedSEO
+    ? matchedSEO.description
+    : currentCategory && activeCategoryObj
+    ? `Shop fresh ${activeCategoryObj.name.toLowerCase()} online from Fresh Vegetables Organic. Local delivery within our 5 km service zone in Hyderabad.`
+    : 'Explore our complete selection of fresh, daily harvested vegetables. Local doorstep delivery within our 5 km service zone in Hyderabad.';
+
+  const pageH1 = matchedSEO
+    ? matchedSEO.h1
+    : currentCategory && activeCategoryObj
+    ? `Fresh ${activeCategoryObj.name}`
+    : currentSearch
+    ? `Search Results for "${currentSearch}"`
+    : 'All Fresh Vegetables & Greens';
+
+  const pageIntro = matchedSEO
+    ? matchedSEO.intro
+    : currentCategory && activeCategoryObj
+    ? `Browse fresh, locally harvested ${activeCategoryObj.name.toLowerCase()} delivered directly to your doorstep within our 5 km service zone in Hyderabad.`
+    : 'Daily morning harvest • Delivered fresh to your doorstep within our 5 km service zone in Hyderabad.';
+
+  const canonicalUrl = currentCategory
+    ? `https://fresh-vegetables-organic.vercel.app/products?category=${currentCategory}`
+    : 'https://fresh-vegetables-organic.vercel.app/products';
+
+  const breadcrumbsList = [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: 'Home',
+      item: 'https://fresh-vegetables-organic.vercel.app/',
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: 'All Vegetables',
+      item: 'https://fresh-vegetables-organic.vercel.app/products',
+    },
+  ];
+
+  if (currentCategory && activeCategoryObj) {
+    breadcrumbsList.push({
+      '@type': 'ListItem',
+      position: 3,
+      name: activeCategoryObj.name,
+      item: `https://fresh-vegetables-organic.vercel.app/products?category=${currentCategory}`,
+    });
+  }
+
+  const breadcrumbSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: breadcrumbsList,
+  };
+
   if (serverError) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-slide-up">
@@ -129,6 +235,31 @@ export const ProductsPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 pb-24 md:pb-12 animate-slide-up space-y-4">
+      {/* Dynamic SEO Meta & Structured Data */}
+      <SEOHead
+        title={pageTitle}
+        description={pageDescription}
+        canonicalUrl={canonicalUrl}
+        schema={breadcrumbSchema}
+      />
+
+      {/* Semantic Breadcrumbs */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-semibold text-slate-500 pt-1">
+        <Link to="/" className="hover:text-[#0c831f] transition-colors">Home</Link>
+        <span>/</span>
+        {currentCategory ? (
+          <>
+            <Link to="/products" className="hover:text-[#0c831f] transition-colors">All Vegetables</Link>
+            <span>/</span>
+            <span className="text-slate-800 font-bold">
+              {activeCategoryObj?.name || currentCategory}
+            </span>
+          </>
+        ) : (
+          <span className="text-slate-800 font-bold">All Vegetables</span>
+        )}
+      </nav>
+
       {/* Outside 5 km Service Area Prominent Banner */}
       {serviceability.checked && !serviceability.serviceable && (
         <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
@@ -161,19 +292,15 @@ export const ProductsPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-xl font-extrabold text-slate-900 tracking-tight">
-                {currentCategory
-                  ? categories.find((c) => c.slug === currentCategory)?.name || 'Vegetables'
-                  : currentSearch
-                  ? `Results for "${currentSearch}"`
-                  : 'All Fresh Vegetables'}
+                {pageH1}
               </h1>
               <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                 <span>{totalProducts} {totalProducts === 1 ? 'Produce' : 'Items'}</span>
               </span>
             </div>
-            <p className="text-[10.5px] sm:text-[11px] text-slate-500 mt-0.5">
-              Daily morning harvest • Delivered fresh in 15–25 mins
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+              {pageIntro}
             </p>
           </div>
 
@@ -201,8 +328,8 @@ export const ProductsPage: React.FC = () => {
         {/* Compact Quick Filter Pill Chips Bar - Smooth Horizontal Glide on Mobile */}
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 mt-2">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-nowrap w-full">
-            <button
-              onClick={() => updateParam('category', null)}
+            <Link
+              to="/products"
               className={`h-7 px-3 rounded-full text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer shrink-0 ${
                 !currentCategory
                   ? 'bg-[#0c831f] text-white shadow-xs'
@@ -215,20 +342,20 @@ export const ProductsPage: React.FC = () => {
               }`}>
                 {totalProducts}
               </span>
-            </button>
+            </Link>
 
             {categories.map((c) => (
-              <button
+              <Link
                 key={c.id}
-                onClick={() => updateParam('category', c.slug)}
-                className={`h-7 px-3 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                to={`/products?category=${c.slug}`}
+                className={`h-7 px-3 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 flex items-center ${
                   currentCategory === c.slug
                     ? 'bg-[#0c831f] text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80'
                 }`}
               >
                 {c.name}
-              </button>
+              </Link>
             ))}
 
             {/* Quick in-stock filter chip */}

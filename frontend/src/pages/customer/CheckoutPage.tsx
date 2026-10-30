@@ -24,6 +24,7 @@ import api from '../../services/api';
 import { Address, CouponValidationResult } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const CheckoutPage: React.FC = () => {
   const { cart, fetchCart, deliverySettings } = useCart();
@@ -585,6 +586,7 @@ export const CheckoutPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 pb-28 md:pb-12">
+      <SEOHead title="Secure Checkout | Fresh Vegetables Organic" noindex={true} />
       <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-5 sm:mb-8">
         Secure Checkout & Payment
       </h1>

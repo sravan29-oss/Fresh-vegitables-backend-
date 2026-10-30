@@ -4,6 +4,7 @@ import { User, MapPin, Plus, Trash2, CheckCircle2, Phone, Mail, Navigation, Aler
 import api from '../../services/api';
 import { Address } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const ProfilePage: React.FC = () => {
   const { user, updateUser, isLoading: authLoading } = useAuth();
@@ -343,6 +344,7 @@ export const ProfilePage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
+      <SEOHead title="Account & Addresses | Fresh Vegetables Organic" noindex={true} />
       <div>
         <h1 className="text-3xl font-black text-slate-900 tracking-tight">Account & Addresses</h1>
         <p className="text-xs text-slate-500 mt-1">Manage your personal information and delivery destinations</p>

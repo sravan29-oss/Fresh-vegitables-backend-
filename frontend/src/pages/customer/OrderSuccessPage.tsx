@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { CheckCircle2, Package, Truck, ArrowRight, ShieldCheck, Home } from 'lucide-react';
 import api from '../../services/api';
 import { Order } from '../../types';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const OrderSuccessPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +23,7 @@ export const OrderSuccessPage: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-8">
+      <SEOHead title="Order Confirmed | Fresh Vegetables Organic" noindex={true} />
       {/* Celebration Icon */}
       <div className="relative inline-block">
         <div className="w-24 h-24 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-xl shadow-emerald-500/10">

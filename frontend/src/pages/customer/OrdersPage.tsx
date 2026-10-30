@@ -5,6 +5,7 @@ import api from '../../services/api';
 import { Order } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeLiveUpdates } from '../../services/liveSync';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const OrdersPage: React.FC = () => {
   const { user, isLoading: authLoading } = useAuth();
@@ -99,6 +100,7 @@ export const OrdersPage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+      <SEOHead title="My Orders | Fresh Vegetables Organic" noindex={true} />
       <div>
         <h1 className="text-3xl font-black text-slate-900 tracking-tight">My Vegetable Orders</h1>
         <p className="text-xs text-slate-500 mt-1">Track delivery status and view past receipts</p>

@@ -132,7 +132,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {product.images && product.images.length > 0 ? (
             <img
               src={getProductImageUrl(product.images[0], product.name)}
-              alt={product.name}
+              alt={`Fresh ${product.name} - Organic Produce`}
               className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain rounded-lg filter drop-shadow-xs group-hover:scale-105 transition-transform duration-300 ease-out select-none ${
                 isOutOfStock ? 'opacity-50 grayscale' : ''
               }`}
@@ -196,7 +196,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               className="text-slate-900 font-bold text-[12px] sm:text-[13.5px] leading-snug line-clamp-2 group-hover:text-emerald-700 transition-colors text-left"
               title={product.name}
             >
-              {product.name}
+              <Link to={`/products/${product.slug}`} className="hover:underline text-inherit">
+                {product.name}
+              </Link>
             </h3>
           </div>
 

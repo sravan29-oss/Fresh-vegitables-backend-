@@ -23,6 +23,7 @@ import api from '../../services/api';
 import { DeliveryTrackingResponse, DeliveryTimelineEvent, Order, OrderItem } from '../../types';
 import { subscribeLiveUpdates } from '../../services/liveSync';
 import { useAuth } from '../../context/AuthContext';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const TrackingPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -390,6 +391,7 @@ export const TrackingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50/60 pb-16">
+      <SEOHead title="Live Order Tracking | Fresh Vegetables Organic" noindex={true} />
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
         {/* Navigation Breadcrumb & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

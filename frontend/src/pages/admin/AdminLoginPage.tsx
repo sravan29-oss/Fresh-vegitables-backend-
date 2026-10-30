@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Lock, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -37,6 +38,7 @@ export const AdminLoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4 py-12">
+      <SEOHead title="Admin Login | Fresh Vegetables Organic" noindex={true} />
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6 text-white">
         <div className="text-center space-y-3">
           <img

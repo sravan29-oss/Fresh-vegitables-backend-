@@ -31,15 +31,15 @@ interface HeroSectionProps {
 const HeroSection: React.FC<HeroSectionProps> = ({ section }) => {
   const stats = section?.configuration?.stats || [
     { value: '4:00 AM', label: 'Daily Harvest' },
-    { value: '0%', label: 'Pesticides' },
+    { value: '100%', label: 'Farm Quality' },
     { value: '50k+', label: 'Happy Families' },
   ];
 
-  const title = section?.title || 'Freshness from Nature to Your Table';
-  const subtitle = section?.subtitle || '100% Certified Organic • Chemical Free Harvest';
+  const title = section?.title || 'Fresh Vegetables Delivered Fresh to Your Doorstep';
+  const subtitle = section?.subtitle || 'Daily Harvest • Quality Graded Produce';
   const description =
     section?.description ||
-    'Discover fresh vegetables and bring the goodness of nature into your everyday meals.';
+    'Shop daily fresh vegetables online from Fresh Vegetables Organic. Local doorstep delivery within our 5 km service zone in Hyderabad.';
   const buttonText = section?.button_text || 'Explore Fresh Vegetables';
   const buttonLink = section?.button_link || '/products';
 
@@ -382,17 +382,17 @@ export const HomePage: React.FC = () => {
 
       case 'why_choose_us': {
         const pillars = section.configuration?.pillars || [
-          { title: 'Harvested at 4 AM', desc: 'Directly sourced from trusted regional partner farmers.' },
-          { title: 'Ozone Washed & Safe', desc: 'Gentle sanitization eliminating dust and bacteria without heat.' },
-          { title: 'Eco Biodegradable Bags', desc: '100% plastic-free compostable kraft packaging.' },
-          { title: '15-Minute Speed Dispatch', desc: 'Temperature controlled EV delivery straight to your doorstep.' },
+          { title: 'Harvested Daily', desc: 'Directly sourced from trusted regional partner farmers.' },
+          { title: 'Carefully Sorted & Cleaned', desc: 'Thoroughly sorted and cleaned before hygienic packaging.' },
+          { title: 'Eco-Friendly Packaging', desc: 'Hygienic, food-safe packaging designed to preserve freshness.' },
+          { title: 'Local Delivery Service', desc: 'Fast delivery within our configured 5 km delivery radius.' },
         ];
         return (
           <section key={section.id} className="bg-white border border-slate-200/90 mx-4 sm:mx-6 lg:mx-8 py-14 animate-slide-up rounded-3xl shadow-xs">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center max-w-2xl mx-auto mb-12">
                 <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
-                  {section.subtitle || 'The Pure Farm Promise'}
+                  {section.subtitle || 'The Fresh Vegetables Promise'}
                 </span>
                 <h2 className="text-3xl font-black text-slate-900 tracking-tight mt-1">
                   {section.title}
@@ -500,8 +500,9 @@ export const HomePage: React.FC = () => {
     <div className="space-y-8 sm:space-y-12 pb-24 md:pb-12">
       {/* Dynamic SEO Meta & Structured Data */}
       <SEOHead
-        title="Fresh Vegetables — Farm-Fresh Organic Greens in 30 Mins"
-        description="Daily morning harvested certified organic vegetables, crisp leafy greens and roots delivered in 30 minutes from local farms."
+        title="Fresh Vegetables Organic | Farm-Fresh Vegetables Online"
+        description="Shop daily fresh vegetables online from Fresh Vegetables Organic. Local doorstep delivery within our 5 km service zone in Hyderabad."
+        canonicalUrl="https://fresh-vegetables-organic.vercel.app/"
       />
 
       {/* Outside 5 km Service Area Prominent Banner */}

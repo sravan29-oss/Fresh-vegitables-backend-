@@ -21,3 +21,4 @@ Disallow: /register
 
 # Canonical XML Sitemap
 Sitemap: https://fresh-vegetables-organic.vercel.app/sitemap.xml
+

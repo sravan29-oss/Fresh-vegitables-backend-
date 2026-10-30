@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -39,6 +40,7 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+      <SEOHead title="Customer Sign In | Fresh Vegetables Organic" noindex={true} />
       <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200/80 shadow-xl p-8 sm:p-10 space-y-6">
         <div className="text-center space-y-2">
           <img

@@ -28,12 +28,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://fresh-vegetables-organic.vercel.app/products?category=fresh-vegetables</loc>
-    <lastmod>2026-10-30</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://fresh-vegetables-organic.vercel.app/products?category=leafy-greens</loc>
     <lastmod>2026-10-30</lastmod>
     <changefreq>daily</changefreq>
@@ -103,3 +97,4 @@
   </url>
 
 </urlset>
+

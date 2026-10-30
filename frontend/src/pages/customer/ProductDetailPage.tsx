@@ -10,6 +10,7 @@ import { ProductCard } from '../../components/product/ProductCard';
 import { ProductDetailSkeleton } from '../../components/product/ProductDetailSkeleton';
 import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { subscribeLiveUpdates } from '../../services/liveSync';
+import { SEOHead } from '../../components/common/SEOHead';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -145,19 +146,94 @@ export const ProductDetailPage: React.FC = () => {
     }
   };
 
+  const ogImageUrl = product?.images?.[0]
+    ? getProductImageUrl(product.images[0], product.name)
+    : getFallbackImageUrl(product?.name);
+
+  const productSchema = product ? {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    image: ogImageUrl,
+    description: product.description || `Order fresh ${product.name.toLowerCase()} online from Fresh Vegetables Organic. Local delivery within our 5 km service zone in Hyderabad.`,
+    sku: (product as any).sku || product.slug,
+    offers: {
+      '@type': 'Offer',
+      url: `https://fresh-vegetables-organic.vercel.app/products/${product.slug}`,
+      priceCurrency: 'INR',
+      price: String(price),
+      availability: isOutOfStock ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock',
+      itemCondition: 'https://schema.org/NewCondition',
+      seller: {
+        '@type': 'Organization',
+        name: 'Fresh Vegetables Organic',
+      },
+    },
+  } : undefined;
+
+  const breadcrumbSchema = product ? {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Home',
+        item: 'https://fresh-vegetables-organic.vercel.app/',
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'All Vegetables',
+        item: 'https://fresh-vegetables-organic.vercel.app/products',
+      },
+      ...(product.category_slug ? [{
+        '@type': 'ListItem',
+        position: 3,
+        name: product.category_name || 'Category',
+        item: `https://fresh-vegetables-organic.vercel.app/products?category=${product.category_slug}`,
+      }] : []),
+      {
+        '@type': 'ListItem',
+        position: product.category_slug ? 4 : 3,
+        name: product.name,
+        item: `https://fresh-vegetables-organic.vercel.app/products/${product.slug}`,
+      },
+    ],
+  } : undefined;
+
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-8 sm:space-y-12 pb-24 md:pb-12">
+      {/* Dynamic SEO Meta & Structured Data */}
+      <SEOHead
+        title={`Fresh ${product.name} Online | Fresh Vegetables Organic`}
+        description={`Order fresh ${product.name.toLowerCase()} online from Fresh Vegetables Organic. Check current availability and doorstep delivery within our 5 km local service zone.`}
+        canonicalUrl={`https://fresh-vegetables-organic.vercel.app/products/${product.slug}`}
+        ogType="product"
+        ogImage={ogImageUrl}
+        schema={[productSchema, breadcrumbSchema].filter(Boolean)}
+      />
+
       {/* Back button & Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-semibold text-slate-500">
         <Link to="/products" className="hover:text-brand-600 flex items-center gap-1">
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>All Vegetables</span>
         </Link>
         <span>/</span>
-        <span className="text-slate-400">{product.category_name || 'Greens'}</span>
+        {product.category_slug ? (
+          <Link
+            to={`/products?category=${product.category_slug}`}
+            className="text-slate-500 hover:text-brand-600 transition-colors"
+          >
+            {product.category_name || 'Produce'}
+          </Link>
+        ) : (
+          <span className="text-slate-400">{product.category_name || 'Greens'}</span>
+        )}
         <span>/</span>
         <span className="text-slate-800 font-bold truncate max-w-[140px] sm:max-w-none">{product.name}</span>
-      </div>
+      </nav>
 
       {/* Main Product Showcase */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 bg-white p-4 sm:p-10 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm">
@@ -167,7 +243,7 @@ export const ProductDetailPage: React.FC = () => {
             {activeImage ? (
               <img
                 src={getProductImageUrl(activeImage, product.name)}
-                alt={product.name}
+                alt={`Fresh ${product.name} - Organic Produce`}
                 className="w-full h-full object-contain"
                 onError={(e) => {
                   e.currentTarget.src = getFallbackImageUrl(product.name);
@@ -206,7 +282,7 @@ export const ProductDetailPage: React.FC = () => {
                 >
                   <img
                     src={getProductImageUrl(img, product.name)}
-                    alt=""
+                    alt={`${product.name} thumbnail ${i + 1}`}
                     className="w-full h-full object-contain p-1"
                     onError={(e) => {
                       e.currentTarget.src = getFallbackImageUrl(product.name);

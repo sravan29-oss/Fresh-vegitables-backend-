@@ -5,64 +5,114 @@ interface SEOProps {
   description?: string;
   keywords?: string;
   canonicalUrl?: string;
+  ogType?: 'website' | 'product' | 'article';
   ogImage?: string;
-  schema?: Record<string, any>;
+  schema?: Record<string, any> | Array<Record<string, any>>;
+  noindex?: boolean;
+}
+
+const BASE_URL = 'https://fresh-vegetables-organic.vercel.app';
+const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=1200&auto=format&fit=crop';
+const DEFAULT_TITLE = 'Fresh Vegetables Organic | Farm-Fresh Vegetables Online';
+const DEFAULT_DESCRIPTION = 'Shop fresh daily vegetables online with Fresh Vegetables Organic. Local doorstep delivery within our 5 km service zone in Hyderabad.';
+const DEFAULT_KEYWORDS = 'Fresh Vegetables Organic, fresh vegetables online, buy vegetables online, fresh vegetable delivery, online vegetable shopping';
+
+function setMetaTag(attributeName: 'name' | 'property', attributeValue: string, content: string) {
+  let element = document.querySelector(`meta[${attributeName}="${attributeValue}"]`) as HTMLMetaElement | null;
+  if (!element) {
+    element = document.createElement('meta');
+    element.setAttribute(attributeName, attributeValue);
+    document.head.appendChild(element);
+  }
+  element.setAttribute('content', content);
+}
+
+function setCanonicalLink(href: string) {
+  let link = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+  if (!link) {
+    link = document.createElement('link');
+    link.setAttribute('rel', 'canonical');
+    document.head.appendChild(link);
+  }
+  link.setAttribute('href', href);
 }
 
 export const SEOHead: React.FC<SEOProps> = ({
-  title = 'Fresh Vegetables — 100% Farm-Fresh Organic Greens in 30 Mins',
-  description = 'Shop daily harvested organic vegetables, leafy greens, and native root vegetables directly from farmers with 30-minute doorstep delivery.',
-  keywords = 'fresh vegetables, organic produce, online vegetable delivery, leafy greens, daily essentials, farm direct',
+  title = DEFAULT_TITLE,
+  description = DEFAULT_DESCRIPTION,
+  keywords = DEFAULT_KEYWORDS,
   canonicalUrl,
-  ogImage = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=1200&auto=format&fit=crop',
+  ogType = 'website',
+  ogImage = DEFAULT_IMAGE,
   schema,
+  noindex = false,
 }) => {
   useEffect(() => {
-    // 1. Dynamic Title
+    // Determine canonical URL
+    const canonical = canonicalUrl || (typeof window !== 'undefined' ? `${BASE_URL}${window.location.pathname}` : BASE_URL);
+
+    // 1. Dynamic document title
     document.title = title;
 
-    // 2. Meta description
-    let metaDesc = document.querySelector('meta[name="description"]');
-    if (!metaDesc) {
-      metaDesc = document.createElement('meta');
-      metaDesc.setAttribute('name', 'description');
-      document.head.appendChild(metaDesc);
+    // 2. Robots Indexing Control
+    if (noindex) {
+      setMetaTag('name', 'robots', 'noindex, nofollow');
+    } else {
+      setMetaTag('name', 'robots', 'index, follow');
     }
-    metaDesc.setAttribute('content', description);
 
-    // 3. Open Graph Title & Description
-    const ogTitle = document.querySelector('meta[property="og:title"]') || document.createElement('meta');
-    ogTitle.setAttribute('property', 'og:title');
-    ogTitle.setAttribute('content', title);
-    document.head.appendChild(ogTitle);
+    // 3. Standard Search Meta Tags
+    setMetaTag('name', 'description', description);
+    setMetaTag('name', 'keywords', keywords);
 
-    const ogDesc = document.querySelector('meta[property="og:description"]') || document.createElement('meta');
-    ogDesc.setAttribute('property', 'og:description');
-    ogDesc.setAttribute('content', description);
-    document.head.appendChild(ogDesc);
+    // 4. Canonical Link
+    setCanonicalLink(canonical);
 
-    const ogImg = document.querySelector('meta[property="og:image"]') || document.createElement('meta');
-    ogImg.setAttribute('property', 'og:image');
-    ogImg.setAttribute('content', ogImage);
-    document.head.appendChild(ogImg);
+    // 4. Open Graph Tags
+    setMetaTag('property', 'og:title', title);
+    setMetaTag('property', 'og:description', description);
+    setMetaTag('property', 'og:url', canonical);
+    setMetaTag('property', 'og:image', ogImage);
+    setMetaTag('property', 'og:type', ogType);
+    setMetaTag('property', 'og:site_name', 'Fresh Vegetables Organic');
 
-    // 4. Schema.org JSON-LD Structured Data
-    const defaultSchema = {
-      '@context': 'https://schema.org',
-      '@type': 'GroceryStore',
-      name: 'Fresh Vegetables Platform',
-      image: ogImage,
-      description,
-      telephone: '+91-9876543210',
-      address: {
-        '@type': 'PostalAddress',
-        streetAddress: 'Madhapur Express Hub',
-        addressLocality: 'Hyderabad',
-        postalCode: '500081',
-        addressCountry: 'IN',
+    // 5. Twitter Card Tags
+    setMetaTag('name', 'twitter:card', 'summary_large_image');
+    setMetaTag('name', 'twitter:title', title);
+    setMetaTag('name', 'twitter:description', description);
+    setMetaTag('name', 'twitter:image', ogImage);
+
+    // 6. Schema.org JSON-LD Structured Data
+    const defaultSchema = [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'Fresh Vegetables Organic',
+        url: BASE_URL,
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: {
+            '@type': 'EntryPoint',
+            urlTemplate: `${BASE_URL}/products?search={search_term_string}`,
+          },
+          'query-input': 'required name=search_term_string',
+        },
       },
-      priceRange: '₹₹',
-    };
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: 'Fresh Vegetables Organic',
+        url: BASE_URL,
+        logo: `${BASE_URL}/favicon.png`,
+        contactPoint: {
+          '@type': 'ContactPoint',
+          telephone: '+91 8106970384',
+          email: 'freshvegitables29@gmail.com',
+          contactType: 'Customer Support',
+          areaServed: 'IN',
+        },
+      },
+    ];
 
     const finalSchema = schema || defaultSchema;
     let scriptTag = document.getElementById('json-ld-schema') as HTMLScriptElement | null;
@@ -73,7 +123,11 @@ export const SEOHead: React.FC<SEOProps> = ({
       document.head.appendChild(scriptTag);
     }
     scriptTag.textContent = JSON.stringify(finalSchema);
-  }, [title, description, keywords, canonicalUrl, ogImage, schema]);
+
+    return () => {
+      // Cleanup is handled on the next page update
+    };
+  }, [title, description, keywords, canonicalUrl, ogType, ogImage, schema]);
 
   return null;
 };

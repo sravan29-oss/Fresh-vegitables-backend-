@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { memoryStore } from '../config/mockDb';
+import { db } from '../config/database';
 import { env } from '../config/env';
 
 // Helper to sanitize XML text
@@ -65,10 +66,22 @@ export async function getGoogleShoppingFeed(req: Request, res: Response, next: N
 
 export async function getSitemapXml(req: Request, res: Response, next: NextFunction) {
   try {
-    const products = memoryStore.products;
-    const categories = memoryStore.categories;
-    const baseUrl = env.FRONTEND_URL || 'http://localhost:5173';
+    const baseUrl = env.FRONTEND_URL || 'https://fresh-vegetables-organic.vercel.app';
     const now = new Date().toISOString().slice(0, 10);
+
+    let productsList: any[] = [];
+    let categoriesList: any[] = [];
+    try {
+      const [prodsRes, catsRes] = await Promise.all([
+        db.query("SELECT slug, updated_at, created_at, status FROM products WHERE status = 'active' ORDER BY name ASC"),
+        db.query("SELECT slug, updated_at, created_at, status FROM categories WHERE status = 'active' AND slug != 'fresh-vegetables' ORDER BY display_order ASC"),
+      ]);
+      productsList = prodsRes.rows || [];
+      categoriesList = catsRes.rows || [];
+    } catch {
+      productsList = (memoryStore.products || []).filter((p: any) => p.status === 'active');
+      categoriesList = (memoryStore.categories || []).filter((c: any) => c.status === 'active' && c.slug !== 'fresh-vegetables');
+    }
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -82,35 +95,31 @@ export async function getSitemapXml(req: Request, res: Response, next: NextFunct
   <url>
     <loc>${baseUrl}/products</loc>
     <lastmod>${now}</lastmod>
-    <changefreq>hourly</changefreq>
+    <changefreq>daily</changefreq>
     <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/subscriptions</loc>
-    <lastmod>${now}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
   </url>
 `;
 
-    // Dynamic Category URLs
-    for (const cat of categories) {
+    // Dynamic Category URLs (Filtered & Validated)
+    for (const cat of categoriesList) {
       if (cat.status !== 'active') continue;
+      const catDate = cat.updated_at || cat.created_at ? new Date(cat.updated_at || cat.created_at).toISOString().slice(0, 10) : now;
       xml += `  <url>
     <loc>${baseUrl}/products?category=${escapeXml(cat.slug)}</loc>
-    <lastmod>${now}</lastmod>
+    <lastmod>${catDate}</lastmod>
     <changefreq>daily</changefreq>
-    <priority>0.85</priority>
+    <priority>0.8</priority>
   </url>
 `;
     }
 
-    // Dynamic Product URLs
-    for (const p of products) {
+    // Dynamic Active Product URLs
+    for (const p of productsList) {
       if (p.status !== 'active') continue;
+      const prodDate = p.updated_at || p.created_at ? new Date(p.updated_at || p.created_at).toISOString().slice(0, 10) : now;
       xml += `  <url>
     <loc>${baseUrl}/products/${escapeXml(p.slug)}</loc>
-    <lastmod>${now}</lastmod>
+    <lastmod>${prodDate}</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
@@ -127,16 +136,29 @@ export async function getSitemapXml(req: Request, res: Response, next: NextFunct
 }
 
 export async function getRobotsTxt(req: Request, res: Response) {
-  const baseUrl = env.FRONTEND_URL || 'http://localhost:5173';
-  const robots = `User-agent: *
+  const baseUrl = env.FRONTEND_URL || 'https://fresh-vegetables-organic.vercel.app';
+  const robots = `# Robots.txt for Fresh Vegetables Organic
+# Canonical Domain: ${baseUrl}
+
+User-agent: *
 Allow: /
 Allow: /products
 Allow: /products/*
-Disallow: /admin
-Disallow: /checkout
-Disallow: /profile
-Disallow: /orders
 
+# Disallow Private & Administrative Sections
+Disallow: /admin/
+Disallow: /admin
+Disallow: /api/
+Disallow: /checkout
+Disallow: /orders
+Disallow: /orders/
+Disallow: /order-success/
+Disallow: /profile
+Disallow: /wallet
+Disallow: /login
+Disallow: /register
+
+# Canonical XML Sitemap
 Sitemap: ${baseUrl}/sitemap.xml
 `;
   res.set('Content-Type', 'text/plain; charset=utf-8');
