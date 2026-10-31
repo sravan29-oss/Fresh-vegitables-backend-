@@ -14,7 +14,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import api from '../../services/api';
-import { Product, Category, HomepageSection } from '../../types';
+import { Product, Category, HomepageSection, HomepageBanner } from '../../types';
 import { ProductCard } from '../../components/product/ProductCard';
 import { ProductGridSkeleton } from '../../components/product/ProductGridSkeleton';
 import { ServerMaintenance } from '../../components/common/ServerMaintenance';
@@ -25,134 +25,97 @@ import { getProductImageUrl } from '../../utils/imageUrl';
 import { useHomepageCMS } from '../../hooks/useHomepageCMS';
 import { useQuery } from '@tanstack/react-query';
 
-interface HeroSectionProps {
-  section?: Partial<HomepageSection>;
+interface BannerSliderProps {
+  banners: HomepageBanner[];
 }
 
-const HeroSection: React.FC<HeroSectionProps> = ({ section }) => {
-  const stats = section?.configuration?.stats || [
-    { value: '4:00 AM', label: 'Daily Harvest' },
-    { value: '100%', label: 'Farm Quality' },
-    { value: '50k+', label: 'Happy Families' },
-  ];
-
-  const title = section?.title || 'Fresh Vegetables Delivered Fresh to Your Doorstep';
-  const subtitle = section?.subtitle || 'Daily Harvest • Quality Graded Produce';
-  const description =
-    section?.description ||
-    'Shop daily fresh vegetables online from Fresh Vegetables Organic. Local doorstep delivery within our 5 km service zone in Hyderabad.';
-  const buttonText = section?.button_text || 'Explore Fresh Vegetables';
-  const buttonLink = section?.button_link || '/products';
-
-  const [hasReducedMotion, setHasReducedMotion] = useState(false);
-  const [videoError, setVideoError] = useState(false);
+const BannerSlider: React.FC<BannerSliderProps> = ({ banners }) => {
+  const [currentIdx, setCurrentIdx] = useState(0);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.matchMedia) {
-      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-      setHasReducedMotion(mediaQuery.matches);
-      const listener = (e: MediaQueryListEvent) => setHasReducedMotion(e.matches);
-      mediaQuery.addEventListener('change', listener);
-      return () => mediaQuery.removeEventListener('change', listener);
-    }
-  }, []);
+    if (banners.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % banners.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [banners.length]);
+
+  if (!banners || banners.length === 0) return null;
+
+  const currentBanner = banners[currentIdx] || banners[0];
+  const bannerImg = getProductImageUrl(currentBanner.image, currentBanner.title);
 
   return (
-    <section
-      key={section?.id || 'hero-main'}
-      className="relative overflow-hidden bg-gradient-to-r from-[#0c831f] via-[#0f9426] to-[#086317] text-white rounded-2xl sm:rounded-3xl mx-3 sm:mx-6 lg:mx-8 mt-3 sm:mt-5 shadow-lg border border-emerald-600/40 animate-slide-up"
-    >
-      {/* Decorative ambient patterns */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
-        <div className="absolute -right-20 -top-20 w-96 h-96 rounded-full bg-emerald-400/20 blur-3xl" />
-        <div className="absolute right-1/3 -bottom-20 w-80 h-80 rounded-full bg-teal-400/15 blur-2xl" />
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:24px_24px]" />
+    <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl mx-3 sm:mx-6 lg:mx-8 mt-3 sm:mt-5 shadow-lg border border-slate-200/80 bg-slate-900 group h-[220px] sm:h-[340px] md:h-[400px]">
+      <img
+        src={bannerImg}
+        alt={currentBanner.title}
+        className="w-full h-full object-cover transition-all duration-700 brightness-[0.85] group-hover:scale-102"
+        onError={(e) => {
+          e.currentTarget.src =
+            'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=1200&auto=format&fit=crop';
+        }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/50 to-transparent" />
+
+      <div className="absolute inset-0 z-10 flex flex-col justify-center px-6 sm:px-12 md:px-16 max-w-2xl text-white space-y-2 sm:space-y-4">
+        {currentBanner.badge && (
+          <span className="self-start text-[10px] sm:text-xs font-black uppercase tracking-wider bg-brand-500 text-slate-950 px-2.5 sm:px-3 py-1 rounded-full shadow-md">
+            {currentBanner.badge}
+          </span>
+        )}
+        <h2 className="text-xl sm:text-3xl md:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
+          {currentBanner.title}
+        </h2>
+        {currentBanner.subtitle && (
+          <p className="text-xs sm:text-sm md:text-base text-slate-200 line-clamp-2 max-w-xl font-medium drop-shadow">
+            {currentBanner.subtitle}
+          </p>
+        )}
+        {currentBanner.link && (
+          <div className="pt-1 sm:pt-2">
+            <Link
+              to={currentBanner.link}
+              className="inline-flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition-transform hover:-translate-y-0.5 active:scale-95"
+            >
+              <span>Shop Now</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
       </div>
 
-      {/* Hero Foreground Content Layer */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-10 py-7 sm:py-16 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 items-center">
-        <div className="lg:col-span-7 space-y-4 sm:space-y-5">
-          <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-black text-white shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-[#ffc72c] animate-pulse"></span>
-            <Sparkles className="w-3.5 h-3.5 text-[#ffc72c]" />
-            <span>{subtitle}</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.15] text-white">
-            {title}
-          </h1>
-
-          <p className="text-emerald-50 text-xs sm:text-base max-w-xl font-medium leading-relaxed">
-            {description}
-          </p>
-
-          <div className="flex flex-wrap gap-2.5 sm:gap-3.5 pt-1 sm:pt-2">
-            <Link
-              to={buttonLink}
-              className="bg-[#ffc72c] hover:bg-[#f5b81a] active:scale-95 text-slate-950 font-black px-5 py-2.5 sm:px-7 sm:py-3.5 rounded-xl shadow-md flex items-center gap-2 transition-all transform hover:-translate-y-0.5 text-xs sm:text-sm"
-            >
-              <span>{buttonText}</span>
-              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-            </Link>
-            <Link
-              to={section?.configuration?.secondary_button_link || '/products?best_seller=true'}
-              className="bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold px-4 py-2.5 sm:px-6 sm:py-3.5 rounded-xl transition-all shadow-xs active:scale-95 text-xs sm:text-sm"
-            >
-              {section?.configuration?.secondary_button_text || "Today's Deals 🔥"}
-            </Link>
-          </div>
-
-          {/* Proof points */}
-          <div className="pt-4 sm:pt-6 border-t border-emerald-500/40 grid grid-cols-3 gap-2 sm:gap-4 text-xs">
-            {stats.map((st: any, idx: number) => (
-              <div key={idx} className="space-y-0.5">
-                <p className="font-extrabold text-lg sm:text-2xl text-white tracking-tight">{st.value}</p>
-                <p className="text-emerald-100 text-[10px] sm:text-xs font-medium">{st.label}</p>
-              </div>
+      {banners.length > 1 && (
+        <>
+          <button
+            onClick={() => setCurrentIdx((prev) => (prev === 0 ? banners.length - 1 : prev - 1))}
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-opacity opacity-0 group-hover:opacity-100 cursor-pointer text-lg font-bold"
+            aria-label="Previous Banner"
+          >
+            ‹
+          </button>
+          <button
+            onClick={() => setCurrentIdx((prev) => (prev + 1) % banners.length)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-opacity opacity-0 group-hover:opacity-100 cursor-pointer text-lg font-bold"
+            aria-label="Next Banner"
+          >
+            ›
+          </button>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+            {banners.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentIdx(idx)}
+                className={`h-2 rounded-full transition-all cursor-pointer ${
+                  idx === currentIdx ? 'w-6 bg-brand-400' : 'w-2 bg-white/50 hover:bg-white/80'
+                }`}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
             ))}
           </div>
-        </div>
-
-        {/* Visual illustration / Solid White Feature Card */}
-        <div className="lg:col-span-5 relative flex justify-center hidden sm:flex">
-          <div className="w-full max-w-sm bg-white text-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-100 flex flex-col justify-between">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#0c831f] animate-ping"></span>
-                <span className="bg-emerald-100 text-[#0c831f] font-black text-xs px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Live Harvest
-                </span>
-              </div>
-              <span className="text-xs text-slate-700 flex items-center gap-1 font-extrabold bg-slate-100 px-2.5 py-1 rounded-lg">
-                <Truck className="w-3.5 h-3.5 text-[#0c831f]" /> 15-Min Dispatch
-              </span>
-            </div>
-
-            <div className="text-center space-y-3 py-6">
-              <img
-                src="/logo.png"
-                alt="Organic Produce Basket"
-                className="w-24 h-24 mx-auto rounded-2xl object-cover ring-2 ring-emerald-500/30 shadow-md"
-              />
-              <h3 className="text-lg font-black text-slate-900">Daily Fresh Harvest</h3>
-              <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
-                Directly from regional organic farm clusters across Telangana &amp; Andhra Pradesh.
-              </p>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between text-xs">
-              <div>
-                <span className="text-slate-900 font-bold block">Purity Guarantee</span>
-                <span className="text-[11px] text-slate-500">Zero Synthetic Pesticides</span>
-              </div>
-              <span className="bg-[#0c831f] text-white font-extrabold px-3 py-1 rounded-lg text-xs shadow-xs">
-                100% Pure
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+        </>
+      )}
+    </div>
   );
 };
 
@@ -160,6 +123,7 @@ export const HomePage: React.FC = () => {
   const { serviceability, setIsLocationModalOpen } = useCart();
   const { data: cmsData, isLoading: isCmsLoading, error, refetch } = useHomepageCMS();
   const sections = cmsData?.sections || [];
+  const banners = cmsData?.banners || [];
 
   const { data: fallbackProducts = [], isLoading: isProdsLoading } = useQuery<Product[]>({
     queryKey: ['home-fallback-products'],
@@ -193,7 +157,7 @@ export const HomePage: React.FC = () => {
   if (isCmsLoading && fallbackProducts.length === 0 && fallbackCategories.length === 0) {
     return (
       <div className="space-y-12 pb-24">
-        <HeroSection />
+        {banners.length > 0 && <BannerSlider banners={banners} />}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 pt-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {[...Array(6)].map((_, i) => (
@@ -210,7 +174,7 @@ export const HomePage: React.FC = () => {
   const renderSection = (section: HomepageSection) => {
     switch (section.type) {
       case 'hero_banner':
-        return <HeroSection key={section.id} section={section} />;
+        return null; // Default banner removed from customer website
 
       case 'categories': {
         const catList: Category[] = (section.categories && section.categories.length > 0) ? section.categories : fallbackCategories;
@@ -547,13 +511,14 @@ export const HomePage: React.FC = () => {
         </div>
       )}
 
+      {/* Dynamic Banner Slider for admin-uploaded banners (if any) */}
+      {banners.length > 0 && <BannerSlider banners={banners} />}
+
       {/* Render CMS sections if loaded, otherwise fallback */}
       {sections.length > 0 ? (
         sections.map((section) => renderSection(section))
       ) : (
         <>
-          <HeroSection />
-
           {/* Harvest Categories Rail */}
           {fallbackCategories.length > 0 && (
             <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">

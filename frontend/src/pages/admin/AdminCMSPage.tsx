@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Layers,
   Plus,
@@ -20,16 +20,21 @@ import {
   Phone,
   Mail,
   MapPin,
+  Upload,
 } from 'lucide-react';
 import api from '../../services/api';
 import { HomepageSection, HomepageBanner } from '../../types';
 import { queryClient } from '../../services/queryClient';
 import { useQuery } from '@tanstack/react-query';
+import { getProductImageUrl } from '../../utils/imageUrl';
 
 export const AdminCMSPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'sections' | 'banners' | 'store_contact'>('sections');
   const [editingSection, setEditingSection] = useState<HomepageSection | null>(null);
   const [editingBanner, setEditingBanner] = useState<HomepageBanner | null>(null);
+  const [bannerImageFile, setBannerImageFile] = useState<File | null>(null);
+  const [bannerImagePreview, setBannerImagePreview] = useState<string | null>(null);
+  const bannerFileInputRef = useRef<HTMLInputElement>(null);
   const [isSectionModalOpen, setIsSectionModalOpen] = useState(false);
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -207,22 +212,60 @@ export const AdminCMSPage: React.FC = () => {
   };
 
   // Banner Actions
+  const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setBannerImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const previewUrl = reader.result as string;
+        setBannerImagePreview(previewUrl);
+        if (editingBanner) {
+          setEditingBanner({ ...editingBanner, image: previewUrl });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSaveBannerModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBanner) return;
 
     try {
-      if (editingBanner.id.startsWith('new-')) {
-        await api.post('/cms/banners', editingBanner);
-        showToast('New banner slide published');
+      if (bannerImageFile) {
+        const data = new FormData();
+        data.append('title', editingBanner.title);
+        data.append('subtitle', editingBanner.subtitle || '');
+        data.append('badge', editingBanner.badge || '');
+        data.append('link', editingBanner.link || '');
+        data.append('display_order', String(editingBanner.display_order || 1));
+        data.append('status', editingBanner.status || 'active');
+        if (editingBanner.section_id) data.append('section_id', editingBanner.section_id);
+        data.append('image', bannerImageFile);
+
+        if (editingBanner.id.startsWith('new-')) {
+          await api.post('/cms/banners', data);
+          showToast('New banner slide published');
+        } else {
+          await api.put(`/cms/banners/${editingBanner.id}`, data);
+          showToast('Banner slide updated');
+        }
       } else {
-        await api.put(`/cms/banners/${editingBanner.id}`, editingBanner);
-        showToast('Banner slide updated');
+        if (editingBanner.id.startsWith('new-')) {
+          await api.post('/cms/banners', editingBanner);
+          showToast('New banner slide published');
+        } else {
+          await api.put(`/cms/banners/${editingBanner.id}`, editingBanner);
+          showToast('Banner slide updated');
+        }
       }
       refetchBanners();
       queryClient.invalidateQueries({ queryKey: ['homepage-cms'] });
       setIsBannerModalOpen(false);
       setEditingBanner(null);
+      setBannerImageFile(null);
+      setBannerImagePreview(null);
     } catch (err) {
       alert('Failed to save banner');
     }
@@ -241,6 +284,8 @@ export const AdminCMSPage: React.FC = () => {
   };
 
   const startCreateBanner = () => {
+    setBannerImageFile(null);
+    setBannerImagePreview(null);
     setEditingBanner({
       id: `new-${Date.now()}`,
       section_id: 'sec-hero-01',
@@ -458,7 +503,7 @@ export const AdminCMSPage: React.FC = () => {
                 >
                   <div className="relative h-44 bg-slate-900 overflow-hidden">
                     <img
-                      src={banner.image}
+                      src={getProductImageUrl(banner.image, banner.title)}
                       alt={banner.title}
                       className="w-full h-full object-cover"
                       onError={(e: any) => {
@@ -482,9 +527,11 @@ export const AdminCMSPage: React.FC = () => {
                       <button
                         onClick={() => {
                           setEditingBanner(banner);
+                          setBannerImageFile(null);
+                          setBannerImagePreview(banner.image);
                           setIsBannerModalOpen(true);
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                         <span>Edit</span>
@@ -813,15 +860,74 @@ export const AdminCMSPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-400 font-bold mb-1">Image URL</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="https://images.unsplash.com/..."
-                  value={editingBanner.image}
-                  onChange={(e) => setEditingBanner({ ...editingBanner, image: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
-                />
+                <label className="block text-slate-300 font-bold mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5 text-brand-400" />
+                    <span>Upload Image</span>
+                  </span>
+                  {(bannerImagePreview || editingBanner.image) && (
+                    <span className="text-[10px] text-brand-400 font-bold">Image Ready</span>
+                  )}
+                </label>
+
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                  {/* Image Preview Thumbnail */}
+                  {(bannerImagePreview || editingBanner.image) && (
+                    <div className="relative h-36 rounded-xl overflow-hidden border border-slate-700 bg-slate-900 group">
+                      <img
+                        src={bannerImagePreview || getProductImageUrl(editingBanner.image, editingBanner.title)}
+                        alt="Banner Preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src =
+                            'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=1200&auto=format&fit=crop';
+                        }}
+                      />
+                      <div className="absolute top-2 right-2 bg-slate-950/80 backdrop-blur-xs px-2.5 py-1 rounded-md text-[10px] font-bold text-white shadow">
+                        Live Preview
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Upload Image Button */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input
+                      type="file"
+                      ref={bannerFileInputRef}
+                      accept="image/png,image/jpeg,image/webp,image/jpg"
+                      onChange={handleBannerFileChange}
+                      className="hidden"
+                      id="banner-image-file-input"
+                    />
+                    <label
+                      htmlFor="banner-image-file-input"
+                      className="px-4 py-2.5 bg-brand-500 hover:bg-brand-400 text-slate-950 rounded-xl font-black text-xs cursor-pointer inline-flex items-center gap-2 shadow-md transition-all active:scale-95"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Upload Image</span>
+                    </label>
+                    <span className="text-[11px] text-slate-400">
+                      PNG, JPG, or WebP from your device (up to 25MB)
+                    </span>
+                  </div>
+
+                  {/* Optional direct URL or path */}
+                  <div className="pt-2 border-t border-slate-800/80">
+                    <p className="text-[10px] text-slate-400 mb-1">Or paste image URL / upload path:</p>
+                    <input
+                      type="text"
+                      placeholder="https://... or /uploads/banners/..."
+                      value={editingBanner.image || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingBanner({ ...editingBanner, image: val });
+                        setBannerImagePreview(val);
+                        setBannerImageFile(null);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-white text-xs placeholder-slate-500"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>

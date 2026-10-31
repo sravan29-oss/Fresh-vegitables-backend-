@@ -6,7 +6,7 @@ import fs from 'fs';
 
 // Ensure upload directories exist
 const uploadBase = path.resolve(__dirname, '../../', env.UPLOAD_DIR);
-const dirs = ['products', 'categories', 'avatars'];
+const dirs = ['products', 'categories', 'avatars', 'banners'];
 dirs.forEach((dir) => {
   const dirPath = path.join(uploadBase, dir);
   if (!fs.existsSync(dirPath)) {

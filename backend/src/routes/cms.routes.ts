@@ -16,6 +16,7 @@ import {
   updateStoreSettings,
 } from '../controllers/cms.controller';
 import { authenticateAdmin } from '../middleware/auth';
+import { upload, setUploadType } from '../middleware/upload';
 
 const router = Router();
 
@@ -39,8 +40,8 @@ router.delete('/sections/:id', authenticateAdmin, deleteSection);
 
 // Admin routes for Hero & Promotional Banners
 router.get('/banners', authenticateAdmin, getBannersAdmin);
-router.post('/banners', authenticateAdmin, createBannerAdmin);
-router.put('/banners/:id', authenticateAdmin, updateBannerAdmin);
+router.post('/banners', authenticateAdmin, setUploadType('banners'), upload.single('image'), createBannerAdmin);
+router.put('/banners/:id', authenticateAdmin, setUploadType('banners'), upload.single('image'), updateBannerAdmin);
 router.delete('/banners/:id', authenticateAdmin, deleteBannerAdmin);
 
 export default router;

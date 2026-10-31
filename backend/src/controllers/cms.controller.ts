@@ -22,20 +22,20 @@ export async function getHomepageData(req: Request, res: Response, next: NextFun
 
     const now = new Date();
     const rawActive = (sectionsRes.rows || []).filter((sec: any) => {
+      if (sec.type === 'hero_banner') return false; // Default banner removed
       if (sec.start_date && new Date(sec.start_date) > now) return false;
       if (sec.end_date && new Date(sec.end_date) < now) return false;
       return true;
     });
 
     const activeSections = rawActive.length > 0 ? rawActive : [
-      { id: 'sec-hero', type: 'hero_banner', title: 'Freshness from Nature to Your Table', subtitle: '100% Certified Organic • Chemical Free Harvest', description: 'Discover fresh vegetables and bring the goodness of nature into your everyday meals.', button_text: 'Explore Fresh Vegetables', button_link: '/products', display_order: 1 },
-      { id: 'sec-cats', type: 'categories', title: 'Shop by Harvest Category', subtitle: 'Farm Categories', display_order: 2 },
-      { id: 'sec-feat', type: 'featured_products', title: 'Handpicked Fresh Today', subtitle: 'Harvest Highlights', display_order: 3 },
-      { id: 'sec-best', type: 'best_sellers', title: 'Top Community Favorites', subtitle: 'Most Ordered Produce', display_order: 4 },
-      { id: 'sec-promo', type: 'promotional_banner', title: 'Super Saver Farm Offer', subtitle: 'Flat 20% OFF with code FRESH20', description: 'Enjoy handpicked crispy leafy greens and root vegetables at unbeatable farm-gate prices.', button_text: 'Claim Offer Now', button_link: '/products', display_order: 5, configuration: { coupon_code: 'FRESH20' } },
-      { id: 'sec-why', type: 'why_choose_us', title: 'Why Choose Fresh Vegetables?', subtitle: 'The Pure Farm Promise', display_order: 6 },
-      { id: 'sec-testi', type: 'testimonials', title: 'Trusted by Over 50,000+ Homes', subtitle: 'Real Customer Stories', display_order: 7 },
-      { id: 'sec-app', type: 'app_promotion', title: 'Freshness on the Go', subtitle: 'Progressive Mobile App', display_order: 8 }
+      { id: 'sec-cats', type: 'categories', title: 'Shop by Harvest Category', subtitle: 'Farm Categories', display_order: 1 },
+      { id: 'sec-feat', type: 'featured_products', title: 'Handpicked Fresh Today', subtitle: 'Harvest Highlights', display_order: 2 },
+      { id: 'sec-best', type: 'best_sellers', title: 'Top Community Favorites', subtitle: 'Most Ordered Produce', display_order: 3 },
+      { id: 'sec-promo', type: 'promotional_banner', title: 'Super Saver Farm Offer', subtitle: 'Flat 20% OFF with code FRESH20', description: 'Enjoy handpicked crispy leafy greens and root vegetables at unbeatable farm-gate prices.', button_text: 'Claim Offer Now', button_link: '/products', display_order: 4, configuration: { coupon_code: 'FRESH20' } },
+      { id: 'sec-why', type: 'why_choose_us', title: 'Why Choose Fresh Vegetables?', subtitle: 'The Pure Farm Promise', display_order: 5 },
+      { id: 'sec-testi', type: 'testimonials', title: 'Trusted by Over 50,000+ Homes', subtitle: 'Real Customer Stories', display_order: 6 },
+      { id: 'sec-app', type: 'app_promotion', title: 'Freshness on the Go', subtitle: 'Progressive Mobile App', display_order: 7 }
     ];
 
     const banners = bannersRes.rows || [];
@@ -353,11 +353,14 @@ export async function getBannersAdmin(req: Request, res: Response, next: NextFun
 
 export async function createBannerAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const { title, subtitle, image, link, badge, display_order, status, section_id } = req.body;
+    const { title, subtitle, link, badge, display_order, status, section_id } = req.body;
+    let image = req.body.image || '';
+    if (req.file) {
+      image = `/uploads/banners/${req.file.filename}`;
+    }
     let secId = section_id;
     if (!secId || secId === 'sec-hero-01') {
-      const heroSec = await db.query("SELECT id FROM homepage_sections WHERE type = 'hero_banner' LIMIT 1");
-      secId = heroSec.rows[0]?.id || null;
+      secId = null;
     }
     const newId = uuidv4();
     const result = await db.query(
@@ -387,11 +390,18 @@ export async function createBannerAdmin(req: Request, res: Response, next: NextF
 export async function updateBannerAdmin(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { title, subtitle, image, link, badge, status } = req.body;
+    const { title, subtitle, link, badge, status } = req.body;
+    let image = req.body.image;
+    if (req.file) {
+      image = `/uploads/banners/${req.file.filename}`;
+    }
+
+    const currentBnr = await db.query('SELECT image FROM homepage_banners WHERE id = $1', [id]);
+    const finalImage = image !== undefined ? image : (currentBnr.rows[0]?.image || '');
 
     const memBnr = (memoryStore as any).homepage_banners?.find((b: any) => b.id === id);
     if (memBnr) {
-      Object.assign(memBnr, req.body);
+      Object.assign(memBnr, { ...req.body, image: finalImage });
     }
 
     const result = await db.query(
@@ -399,7 +409,7 @@ export async function updateBannerAdmin(req: Request, res: Response, next: NextF
        SET title = $1, subtitle = $2, image = $3, link = $4, badge = $5, status = $6
        WHERE id = $7
        RETURNING *`,
-      [title, subtitle, image, link, badge, status, id]
+      [title, subtitle, finalImage, link, badge, status, id]
     );
 
     cache.invalidate('cms:homepage');
