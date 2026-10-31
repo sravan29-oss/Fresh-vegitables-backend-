@@ -798,24 +798,38 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
 
     // Update payment status if order delivered and COD
     if (order_status === 'delivered' && prevOrder.payment_method === 'cod') {
-      await db.query(
-        "UPDATE payments SET status = 'PAID' WHERE order_id = $1",
-        [id]
-      );
-      await db.query(
-        "UPDATE orders SET payment_status = 'cod_collected' WHERE id = $1",
-        [id]
-      );
-      await logPaymentTransaction(
-        id,
-        'cod',
-        Number(prevOrder.total),
-        prevOrder.payment_status,
-        'cod_collected',
-        req.user?.name || req.user?.email || 'DELIVERY_PARTNER',
-        `COD-DEL-${Date.now()}`,
-        'COD payment collected upon final doorstep delivery'
-      );
+      try {
+        await db.query(
+          "UPDATE payments SET status = 'paid', updated_at = NOW() WHERE order_id = $1",
+          [id]
+        );
+      } catch (payErr: any) {
+        console.warn('[OrderController] Could not update payment status:', payErr?.message);
+      }
+
+      try {
+        await db.query(
+          "UPDATE orders SET payment_status = 'cod_collected', updated_at = NOW() WHERE id = $1",
+          [id]
+        );
+      } catch (ordPayErr: any) {
+        console.warn('[OrderController] Could not update order payment status:', ordPayErr?.message);
+      }
+
+      try {
+        await logPaymentTransaction(
+          id,
+          'cod',
+          Number(prevOrder.total),
+          prevOrder.payment_status,
+          'cod_collected',
+          req.user?.name || req.user?.email || 'DELIVERY_PARTNER',
+          `COD-DEL-${Date.now()}`,
+          'COD payment collected upon final doorstep delivery'
+        );
+      } catch (logErr: any) {
+        console.warn('[OrderController] Could not log payment transaction:', logErr?.message);
+      }
     }
 
     // Trigger automated email and admin notifications ONLY when genuinely transitioning

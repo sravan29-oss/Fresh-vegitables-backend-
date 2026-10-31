@@ -408,7 +408,7 @@ export async function recordCodCollection(req: AuthRequest, res: Response, next:
     // 5. Update payments table if record exists
     try {
       await db.query(
-        "UPDATE payments SET status = 'PAID', updated_at = NOW() WHERE order_id = $1",
+        "UPDATE payments SET status = 'paid', updated_at = NOW() WHERE order_id = $1",
         [order.id]
       );
     } catch {}

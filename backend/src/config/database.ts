@@ -37,7 +37,7 @@ async function ensureSchemaAlignment() {
       ALTER TABLE payments ALTER COLUMN status TYPE VARCHAR(50);
       ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
       ALTER TABLE payments ADD CONSTRAINT payments_status_check 
-        CHECK (status IN ('pending', 'success', 'failed', 'refunded', 'awaiting_cod_collection', 'cod_collected', 'paid'));
+        CHECK (LOWER(status) IN ('pending', 'success', 'failed', 'refunded', 'awaiting_cod_collection', 'cod_collected', 'paid'));
       UPDATE addresses 
       SET latitude = 17.347145, longitude = 78.512947 
       WHERE (latitude IS NULL OR longitude IS NULL) 
