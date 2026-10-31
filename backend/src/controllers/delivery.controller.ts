@@ -342,11 +342,67 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
     order.delivery_address = normalizedAddress;
     order.address_snapshot = addrSnapshot;
 
-    // Fetch items for package contents display
+    // Fetch items with product images for package contents display
     let items: any[] = [];
     try {
-      const itemsRes = await db.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
-      items = itemsRes.rows || [];
+      const itemsRes = await db.query(
+        `SELECT oi.*,
+                COALESCE(oi.product_name_snapshot, p.name, 'Organic Vegetable') as product_name,
+                COALESCE(oi.unit_snapshot, p.unit, '1 unit') as unit,
+                COALESCE(oi.price_snapshot, p.selling_price, 0) as price,
+                COALESCE(oi.total, oi.price_snapshot * oi.quantity, 0) as subtotal,
+                p.images as product_images
+         FROM order_items oi
+         LEFT JOIN products p ON oi.product_id = p.id
+         WHERE oi.order_id = $1`,
+        [order.id]
+      );
+
+      items = (itemsRes.rows || []).map((item: any) => {
+        let images: string[] = [];
+        if (Array.isArray(item.product_images)) {
+          images = item.product_images;
+        } else if (typeof item.product_images === 'string') {
+          if (item.product_images.startsWith('{')) {
+            images = item.product_images.replace(/^\{|\}$/g, '').split(',').map((s: string) => s.replace(/^"|"$/g, ''));
+          } else {
+            images = [item.product_images];
+          }
+        }
+
+        const nameLower = (item.product_name || item.product_name_snapshot || '').toLowerCase();
+        let matchedImg = images[0];
+        if (!matchedImg) {
+          if (nameLower.includes('potato') && !nameLower.includes('sweet')) matchedImg = 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('onion')) matchedImg = 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('tomato') || nameLower.includes('tamato')) matchedImg = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('spinach') || nameLower.includes('palak')) matchedImg = 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('carrot') || nameLower.includes('gajar')) matchedImg = 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('capsicum') || nameLower.includes('bell pepper')) matchedImg = 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('chilli') || nameLower.includes('chili')) matchedImg = 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('cauliflower') || nameLower.includes('gobhi')) matchedImg = 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('cabbage')) matchedImg = 'https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('brinjal') || nameLower.includes('eggplant')) matchedImg = 'https://images.unsplash.com/photo-1659261200832-6bb50e181f72?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('cucumber')) matchedImg = 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('lady finger') || nameLower.includes('bhindi') || nameLower.includes('okra')) matchedImg = 'https://images.unsplash.com/photo-1525607551316-4a8e16d1f9ba?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('coriander') || nameLower.includes('kothimeera')) matchedImg = 'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('broccoli')) matchedImg = 'https://images.unsplash.com/photo-1459411621453-7b03977f4bfc?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('ginger')) matchedImg = 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=500&auto=format&fit=crop';
+          else if (nameLower.includes('garlic')) matchedImg = 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=500&auto=format&fit=crop';
+          else matchedImg = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&auto=format&fit=crop';
+        }
+
+        return {
+          ...item,
+          product_name: item.product_name || item.product_name_snapshot || 'Fresh Organic Produce',
+          unit: item.unit || item.unit_snapshot || '1 unit',
+          price: Number(item.price || item.price_snapshot || 0),
+          subtotal: Number(item.subtotal || item.total || ((item.price || item.price_snapshot || 0) * (item.quantity || 1))),
+          image_url: matchedImg,
+          product_images: images.length > 0 ? images : [matchedImg],
+          images: images.length > 0 ? images : [matchedImg],
+        };
+      });
     } catch {
       items = [];
     }

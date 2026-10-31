@@ -104,6 +104,8 @@ export interface OrderItem {
   subtotal: number;
   image_url?: string;
   product_images?: string[];
+  images?: string[];
+  image?: string;
   product_name_snapshot?: string;
   unit_snapshot?: string;
   price_snapshot?: number;

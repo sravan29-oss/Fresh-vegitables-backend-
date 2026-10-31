@@ -24,6 +24,7 @@ import { DeliveryTrackingResponse, DeliveryTimelineEvent, Order, OrderItem } fro
 import { subscribeLiveUpdates } from '../../services/liveSync';
 import { useAuth } from '../../context/AuthContext';
 import { SEOHead } from '../../components/common/SEOHead';
+import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
 
 export const TrackingPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -623,25 +624,29 @@ export const TrackingPage: React.FC = () => {
                     const qty = Number(item.quantity || 1);
                     const lineTotal = Number(item.total || item.subtotal || price * qty);
                     const unitStr = item.unit || item.unit_snapshot || 'Standard';
-                    const imgUrl = item.image_url || (item.product_images && item.product_images[0]) || '';
+                    const productName = item.product_name || item.product_name_snapshot || 'Farm Fresh Produce';
+                    const rawImg =
+                      item.image_url ||
+                      (Array.isArray(item.product_images) && item.product_images[0]) ||
+                      (Array.isArray(item.images) && item.images[0]) ||
+                      (item as any).image ||
+                      '';
+                    const resolvedImg = getProductImageUrl(rawImg, productName);
 
                     return (
                       <div key={item.id || idx} className="py-3 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          {imgUrl ? (
-                            <img
-                              src={imgUrl}
-                              alt={item.product_name || 'Produce'}
-                              className="w-12 h-12 rounded-xl object-cover border border-slate-100 shrink-0"
-                            />
-                          ) : (
-                            <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-lg shrink-0">
-                              🥬
-                            </div>
-                          )}
+                          <img
+                            src={resolvedImg}
+                            alt={productName}
+                            className="w-12 h-12 rounded-xl object-cover border border-slate-100 shrink-0 bg-slate-50"
+                            onError={(e) => {
+                              e.currentTarget.src = getFallbackImageUrl(productName);
+                            }}
+                          />
                           <div className="min-w-0">
                             <p className="font-bold text-slate-900 text-xs truncate">
-                              {item.product_name || 'Farm Fresh Produce'}
+                              {productName}
                             </p>
                             <p className="text-[11px] text-slate-500 mt-0.5">
                               {unitStr} × {qty} {price > 0 && `(@ ₹${price})`}
