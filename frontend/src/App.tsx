@@ -122,6 +122,8 @@ export const App: React.FC = () => {
                     <Route path="orders" element={<AdminOrdersPage />} />
                     <Route path="orders/:id" element={<AdminOrdersPage />} />
                     <Route path="deliveries" element={<AdminDeliveriesPage />} />
+                    <Route path="delivery-slots" element={<AdminZonesPage initialTab="slots" />} />
+                    <Route path="delivery-timings" element={<AdminZonesPage initialTab="slots" />} />
 
                     <Route path="settings" element={<AdminZonesPage initialTab="service_area" />} />
                     <Route path="delivery-service-area" element={<AdminZonesPage initialTab="service_area" />} />

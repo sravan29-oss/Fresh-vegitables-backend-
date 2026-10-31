@@ -25,6 +25,7 @@ import {
   X,
   Settings,
   Sliders,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { AdminOrderAlertProvider, useAdminOrderAlerts } from '../../context/AdminOrderAlertContext';
@@ -64,6 +65,7 @@ export const AdminLayoutContent: React.FC = () => {
   const navItems = [
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
     { name: 'Orders & Deliveries', path: '/admin/orders', icon: ShoppingBag },
+    { name: 'Delivery Slots & Timings', path: '/admin/delivery-slots', icon: Clock },
     { name: 'Payment Management', path: '/admin/payment-settings', icon: Sliders },
     { name: 'Payments Ledger', path: '/admin/payments', icon: CreditCard },
     { name: 'Delivery Service Area (5 KM)', path: '/admin/settings', icon: Crosshair },
