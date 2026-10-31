@@ -98,14 +98,10 @@ export const AdminAnalyticsPage: React.FC = () => {
       clv_estimate: '₹3,450',
     },
     delivery_analytics: {
-      total_deliveries: 127,
-      avg_delivery_time_min: 19.4,
-      active_drivers: 3,
-      drivers: [
-        { id: 'dp01', name: 'Ravi Kumar', deliveries: 48, rating: 4.8, status: 'AVAILABLE', vehicle_type: 'Electric Bike', avg_time_minutes: 18 },
-        { id: 'dp02', name: 'Suresh Patel', deliveries: 42, rating: 4.7, status: 'ON_DELIVERY', vehicle_type: 'Electric Bike', avg_time_minutes: 19 },
-        { id: 'dp03', name: 'Vikram Singh', deliveries: 37, rating: 4.6, status: 'AVAILABLE', vehicle_type: 'Scooter', avg_time_minutes: 22 },
-      ],
+      total_deliveries: 0,
+      avg_delivery_time_min: 0,
+      active_drivers: 0,
+      drivers: [],
     },
     payment_analytics: {
       successful: 122,

@@ -658,7 +658,7 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
       phone: params[1],
       email: params[2],
       vehicle_type: params[3] || 'Bike',
-      vehicle_number: params[4] || 'GJ-01-XX-0000',
+      vehicle_number: params[4] || 'TS-09-EV-0000',
       status: 'AVAILABLE',
       availability: true,
       rating: 4.8,

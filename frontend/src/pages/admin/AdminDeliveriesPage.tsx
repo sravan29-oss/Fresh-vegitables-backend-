@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Send,
   UserCheck,
+  Trash2,
 } from 'lucide-react';
 import api from '../../services/api';
 import { DeliveryPartner, Order } from '../../types';
@@ -35,12 +36,6 @@ export const AdminDeliveriesPage: React.FC = () => {
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
   const [assigning, setAssigning] = useState(false);
 
-  const defaultPartners: DeliveryPartner[] = [
-    { id: 'dp01', name: 'Ravi Kumar', phone: '+91 98123 45678', vehicle_type: 'Electric Bike', vehicle_number: 'GJ-01-EV-4421', status: 'ON_DELIVERY', latitude: 23.0295, longitude: 72.5684, rating: 4.88, total_deliveries: 48 },
-    { id: 'dp02', name: 'Suresh Patel', phone: '+91 98234 56789', vehicle_type: 'Electric Bike', vehicle_number: 'GJ-01-EV-8812', status: 'AVAILABLE', latitude: 23.0225, longitude: 72.5714, rating: 4.75, total_deliveries: 42 },
-    { id: 'dp03', name: 'Vikram Singh', phone: '+91 98345 67890', vehicle_type: 'Eco Scooter', vehicle_number: 'GJ-01-SC-3310', status: 'AVAILABLE', latitude: 23.0250, longitude: 72.5700, rating: 4.65, total_deliveries: 37 },
-  ];
-
   const fetchDeliveryData = async () => {
     try {
       setLoading(true);
@@ -49,26 +44,21 @@ export const AdminDeliveriesPage: React.FC = () => {
         api.get('/delivery/dashboard'),
       ]);
 
-      if (partnersRes.data?.data && partnersRes.data.data.length > 0) {
+      if (partnersRes.data?.data && Array.isArray(partnersRes.data.data)) {
         setPartners(partnersRes.data.data);
       } else {
-        setPartners(defaultPartners);
+        setPartners([]);
       }
 
-      if (dashboardRes.data?.data?.activeOrders && dashboardRes.data.data.activeOrders.length > 0) {
+      if (dashboardRes.data?.data?.activeOrders && Array.isArray(dashboardRes.data.data.activeOrders)) {
         setActiveOrders(dashboardRes.data.data.activeOrders);
       } else {
-        setActiveOrders([
-          { id: '11111111-2222-3333-4444-555555555551', order_number: 'ORD-20261011-8492', user_id: 'u1', address_id: 'a1', subtotal: 112, delivery_charge: 0, discount: 0, total: 112, payment_method: 'cod', payment_status: 'pending', order_status: 'out_for_delivery', delivery_address: { area: 'Satellite, Sector 14' }, created_at: new Date().toISOString() },
-          { id: '11111111-2222-3333-4444-555555555552', order_number: 'ORD-20261011-7714', user_id: 'u2', address_id: 'a2', subtotal: 450, delivery_charge: 0, discount: 50, total: 400, payment_method: 'upi', payment_status: 'paid', order_status: 'preparing', delivery_address: { area: 'Bodakdev, Green Avenue' }, created_at: new Date().toISOString() },
-        ]);
+        setActiveOrders([]);
       }
     } catch (err) {
-      setPartners(defaultPartners);
-      setActiveOrders([
-        { id: '11111111-2222-3333-4444-555555555551', order_number: 'ORD-20261011-8492', user_id: 'u1', address_id: 'a1', subtotal: 112, delivery_charge: 0, discount: 0, total: 112, payment_method: 'cod', payment_status: 'pending', order_status: 'out_for_delivery', delivery_address: { area: 'Satellite, Sector 14' }, created_at: new Date().toISOString() },
-        { id: '11111111-2222-3333-4444-555555555552', order_number: 'ORD-20261011-7714', user_id: 'u2', address_id: 'a2', subtotal: 450, delivery_charge: 0, discount: 50, total: 400, payment_method: 'upi', payment_status: 'paid', order_status: 'preparing', delivery_address: { area: 'Bodakdev, Green Avenue' }, created_at: new Date().toISOString() },
-      ]);
+      console.warn('Failed to fetch delivery data:', err);
+      setPartners([]);
+      setActiveOrders([]);
     } finally {
       setLoading(false);
     }
@@ -98,6 +88,16 @@ export const AdminDeliveriesPage: React.FC = () => {
       fetchDeliveryData();
     } catch (err: any) {
       alert('Failed to update status');
+    }
+  };
+
+  const handleDeletePartner = async (partnerId: string, partnerName: string) => {
+    if (!window.confirm(`Are you sure you want to remove delivery partner "${partnerName}"?`)) return;
+    try {
+      await api.delete(`/delivery/partners/${partnerId}`);
+      fetchDeliveryData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to remove delivery partner');
     }
   };
 
@@ -134,13 +134,16 @@ export const AdminDeliveriesPage: React.FC = () => {
   const onDeliveryDrivers = partners.filter((p) => p.status === 'ON_DELIVERY');
   const unassignedOrders = activeOrders.filter((o) => o.order_status !== 'out_for_delivery' && o.order_status !== 'delivered');
   const activeDeliveries = activeOrders.filter((o) => o.order_status === 'out_for_delivery');
+  const avgFleetRating = partners.length > 0
+    ? (partners.reduce((sum, p) => sum + (Number(p.rating) || 5), 0) / partners.length).toFixed(1)
+    : '0.0';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight">Delivery Fleet & Dispatch Operations</h1>
+          <h1 className="text-2xl font-black text-white tracking-tight">Delivery Fleet &amp; Dispatch Operations</h1>
           <p className="text-xs text-slate-400 mt-1">
             Manage field drivers, vehicle assignments, and real-time order delivery fulfillment
           </p>
@@ -154,13 +157,13 @@ export const AdminDeliveriesPage: React.FC = () => {
           </Link>
           <button
             onClick={() => setIsNewPartnerModalOpen(true)}
-            className="bg-brand-500 hover:bg-brand-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-lg shadow-brand-500/20 transition-all"
+            className="bg-brand-500 hover:bg-brand-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-lg shadow-brand-500/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Add Delivery Partner
           </button>
           <button
             onClick={fetchDeliveryData}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition-all"
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition-all cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
@@ -195,8 +198,10 @@ export const AdminDeliveriesPage: React.FC = () => {
 
         <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-1">
           <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Fleet Rating</span>
-          <p className="text-2xl font-black text-white">4.85 ⭐</p>
-          <span className="text-[11px] text-emerald-400 font-bold">Cold chain guaranteed</span>
+          <p className="text-2xl font-black text-white">{partners.length > 0 ? `${avgFleetRating} ⭐` : '0.0 ⭐'}</p>
+          <span className="text-[11px] text-slate-400">
+            {partners.length > 0 ? 'Cold chain guaranteed' : 'No drivers registered'}
+          </span>
         </div>
       </div>
 
@@ -210,46 +215,74 @@ export const AdminDeliveriesPage: React.FC = () => {
             <span className="text-xs text-slate-400 font-semibold">{partners.length} Drivers Registered</span>
           </div>
 
-          <div className="space-y-3">
-            {partners.map((partner) => (
-              <div
-                key={partner.id}
-                className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-4 hover:border-slate-700 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 text-white font-black text-sm flex items-center justify-center">
-                    {partner.name.charAt(0)}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-white text-xs">{partner.name}</h4>
-                    <p className="text-[11px] text-slate-400">{partner.phone} • {partner.vehicle_type}</p>
-                    <p className="text-[10px] font-mono text-brand-400 font-bold">{partner.vehicle_number}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      partner.status === 'AVAILABLE'
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : partner.status === 'ON_DELIVERY'
-                        ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {partner.status}
-                  </span>
-
-                  <button
-                    onClick={() => handleTogglePartnerStatus(partner)}
-                    className="text-[10px] font-bold text-slate-400 hover:text-white px-2.5 py-1 rounded-lg border border-slate-800 hover:bg-slate-800 transition-colors"
-                  >
-                    Toggle
-                  </button>
-                </div>
+          {partners.length === 0 ? (
+            <div className="text-center py-12 px-4 rounded-xl border border-dashed border-slate-800 bg-slate-900/30 space-y-3">
+              <Users className="w-10 h-10 text-slate-600 mx-auto" />
+              <div>
+                <h4 className="text-white font-bold text-sm">No Delivery Fleet Partners</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  All mock drivers have been removed. Click &ldquo;+ Add Delivery Partner&rdquo; to register real delivery partners with their phone and vehicle details.
+                </p>
               </div>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={() => setIsNewPartnerModalOpen(true)}
+                className="bg-brand-500 hover:bg-brand-400 text-slate-950 text-xs font-black px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-lg shadow-brand-500/20 transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Add Delivery Partner
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {partners.map((partner) => (
+                <div
+                  key={partner.id}
+                  className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-4 hover:border-slate-700 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 text-white font-black text-sm flex items-center justify-center">
+                      {partner.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white text-xs">{partner.name}</h4>
+                      <p className="text-[11px] text-slate-400">{partner.phone} • {partner.vehicle_type}</p>
+                      <p className="text-[10px] font-mono text-brand-400 font-bold">{partner.vehicle_number}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        partner.status === 'AVAILABLE'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : partner.status === 'ON_DELIVERY'
+                          ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {partner.status}
+                    </span>
+
+                    <button
+                      onClick={() => handleTogglePartnerStatus(partner)}
+                      className="text-[10px] font-bold text-slate-400 hover:text-white px-2.5 py-1 rounded-lg border border-slate-800 hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Toggle
+                    </button>
+
+                    <button
+                      onClick={() => handleDeletePartner(partner.id, partner.name)}
+                      className="text-[10px] font-bold text-rose-400 hover:text-white px-2 py-1 rounded-lg border border-rose-500/20 hover:bg-rose-500/20 transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Remove Partner"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Right Column: Dispatch & Active Deliveries Pipeline (5 cols) */}
@@ -444,7 +477,7 @@ export const AdminDeliveriesPage: React.FC = () => {
                     required
                     value={newPartner.vehicle_number}
                     onChange={(e) => setNewPartner({ ...newPartner, vehicle_number: e.target.value })}
-                    placeholder="GJ-01-AB-1234"
+                    placeholder="TS-09-EV-1234"
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white uppercase font-mono"
                   />
                 </div>

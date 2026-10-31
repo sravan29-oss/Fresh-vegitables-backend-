@@ -58,6 +58,11 @@ export async function updateDeliveryPartner(req: AuthRequest, res: Response, nex
 export async function deleteDeliveryPartner(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
+    try {
+      await db.query('DELETE FROM delivery_assignments WHERE delivery_partner_id = $1', [id]);
+    } catch {
+      // ignore if table doesn't have it or already empty
+    }
     await db.query('DELETE FROM delivery_partners WHERE id = $1', [id]);
     sendSuccess(res, 'Delivery partner removed');
   } catch (error) {
