@@ -230,10 +230,17 @@ export async function adminGetProducts(req: AuthRequest, res: Response, next: Ne
       dataParams
     );
 
+    let allVariants: any[] = [];
+    try {
+      const vRes = await db.query('SELECT * FROM product_variants ORDER BY selling_price ASC');
+      allVariants = vRes.rows || [];
+    } catch (_) {}
+
     const products = result.rows.map((p) => ({
       ...p,
       discount: calculateDiscount(parseFloat(p.mrp), parseFloat(p.selling_price)),
       stock_status: getStockStatus(p.stock_quantity, p.minimum_stock),
+      variants: allVariants.filter((v: any) => v.product_id === p.id),
     }));
 
     sendPaginated(res, 'Products fetched', products, { page, limit, total: countResult.rows[0].total });
@@ -325,10 +332,11 @@ export async function createProduct(req: AuthRequest, res: Response, next: NextF
         const parsedVariants = typeof req.body.variants === 'string' ? JSON.parse(req.body.variants) : req.body.variants;
         if (Array.isArray(parsedVariants) && parsedVariants.length > 0) {
           for (const v of parsedVariants) {
+            if (!v.name || !v.unit) continue;
             const vResult = await db.query(
               `INSERT INTO product_variants (product_id, name, unit, mrp, selling_price, stock_quantity, status)
                VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-              [result.rows[0].id, v.name, v.unit, v.mrp, v.selling_price, v.stock_quantity || 0, v.status || 'active']
+              [result.rows[0].id, v.name, v.unit, Number(v.mrp) || 0, Number(v.selling_price) || 0, Number(v.stock_quantity) || 0, v.status || 'active']
             );
             variants.push(vResult.rows[0]);
           }
@@ -404,16 +412,17 @@ export async function updateProduct(req: AuthRequest, res: Response, next: NextF
 
     // Update variants if provided
     try {
-      if (req.body.variants) {
+      if (req.body.variants !== undefined) {
         const parsedVariants = typeof req.body.variants === 'string' ? JSON.parse(req.body.variants) : req.body.variants;
         if (Array.isArray(parsedVariants)) {
           // Delete old variants and re-create
           await db.query('DELETE FROM product_variants WHERE product_id = $1', [id]);
           for (const v of parsedVariants) {
+            if (!v.name || !v.unit) continue;
             await db.query(
               `INSERT INTO product_variants (product_id, name, unit, mrp, selling_price, stock_quantity, status)
                VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-              [id, v.name, v.unit, v.mrp, v.selling_price, v.stock_quantity || 0, v.status || 'active']
+              [id, v.name, v.unit, Number(v.mrp) || 0, Number(v.selling_price) || 0, Number(v.stock_quantity) || 0, v.status || 'active']
             );
           }
         }

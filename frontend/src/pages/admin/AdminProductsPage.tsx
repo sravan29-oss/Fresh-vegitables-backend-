@@ -1,9 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit2, Trash2, Check, X, AlertTriangle, Upload, Image as ImageIcon, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Check, X, AlertTriangle, Upload, Image as ImageIcon, Sparkles, Loader2, Layers } from 'lucide-react';
 import api from '../../services/api';
-import { Product, Category } from '../../types';
+import { Product, Category, ProductVariant } from '../../types';
 import { notifyLiveUpdate } from '../../services/liveSync';
 import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
+
+export interface VariantInput {
+  id?: string;
+  name: string;
+  unit: string;
+  mrp: number;
+  selling_price: number;
+  stock_quantity: number;
+  status: 'active' | 'inactive';
+}
 
 const VEGETABLE_IMAGE_PRESETS = [
   { name: 'Tomato', url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop', icon: '🍅' },
@@ -27,6 +37,9 @@ export const AdminProductsPage: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Variants State
+  const [variants, setVariants] = useState<VariantInput[]>([]);
 
   // Image Upload & Selection State
   const [imageUrl, setImageUrl] = useState('');
@@ -161,6 +174,7 @@ export const AdminProductsPage: React.FC = () => {
 
   const openCreateModal = () => {
     setEditingProduct(null);
+    setVariants([]);
     setImageFile(null);
     setImagePreview('');
     setImageUrl('');
@@ -183,6 +197,21 @@ export const AdminProductsPage: React.FC = () => {
 
   const openEditModal = (p: Product) => {
     setEditingProduct(p);
+    if (p.variants && p.variants.length > 0) {
+      setVariants(
+        p.variants.map((v) => ({
+          id: v.id,
+          name: v.name,
+          unit: v.unit,
+          mrp: Number(v.mrp || 0),
+          selling_price: Number(v.selling_price || 0),
+          stock_quantity: Number(v.stock_quantity ?? 0),
+          status: v.status || 'active',
+        }))
+      );
+    } else {
+      setVariants([]);
+    }
     setImageFile(null);
     const existingImg = p.images?.[0] || '';
     setImageUrl(existingImg);
@@ -204,6 +233,46 @@ export const AdminProductsPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  // Variant Helpers
+  const handleAddPresetVariant = (presetUnit: string, defaultName: string, ratio: number) => {
+    const baseMrp = Number(formData.mrp) || 50;
+    const basePrice = Number(formData.selling_price) || 40;
+    const calcMrp = Math.max(1, Math.round(baseMrp * ratio));
+    const calcPrice = Math.max(1, Math.round(basePrice * ratio));
+
+    const newVar: VariantInput = {
+      name: defaultName,
+      unit: presetUnit,
+      mrp: calcMrp,
+      selling_price: calcPrice,
+      stock_quantity: formData.stock_quantity || 30,
+      status: 'active',
+    };
+    setVariants((prev) => [...prev, newVar]);
+  };
+
+  const handleAddCustomVariant = () => {
+    const newVar: VariantInput = {
+      name: `${formData.name || 'Produce'} Pack`,
+      unit: '500g',
+      mrp: Math.round((Number(formData.mrp) || 50) * 0.55),
+      selling_price: Math.round((Number(formData.selling_price) || 40) * 0.55),
+      stock_quantity: formData.stock_quantity || 25,
+      status: 'active',
+    };
+    setVariants((prev) => [...prev, newVar]);
+  };
+
+  const handleUpdateVariant = (index: number, field: keyof VariantInput, value: any) => {
+    setVariants((prev) =>
+      prev.map((v, i) => (i === index ? { ...v, [field]: value } : v))
+    );
+  };
+
+  const handleRemoveVariant = (index: number) => {
+    setVariants((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -218,6 +287,7 @@ export const AdminProductsPage: React.FC = () => {
         if (imageUrl) {
           data.append('image_url', imageUrl);
         }
+        data.append('variants', JSON.stringify(variants));
 
         if (editingProduct) {
           await api.put(`/products/${editingProduct.id}`, data);
@@ -225,7 +295,7 @@ export const AdminProductsPage: React.FC = () => {
           await api.post('/products', data);
         }
       } else {
-        const payload: any = { ...formData };
+        const payload: any = { ...formData, variants };
         if (!payload.category_id) {
           delete payload.category_id;
         }
@@ -351,7 +421,7 @@ export const AdminProductsPage: React.FC = () => {
                         </div>
                         <div>
                           <p className="font-bold text-white text-sm">{p.name}</p>
-                          <div className="flex gap-1.5 mt-0.5">
+                          <div className="flex flex-wrap gap-1.5 mt-0.5">
                             {p.featured && (
                               <span className="text-[9px] bg-brand-500/20 text-brand-400 px-1.5 py-0.2 rounded font-bold">
                                 FEATURED
@@ -360,6 +430,11 @@ export const AdminProductsPage: React.FC = () => {
                             {p.best_seller && (
                               <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.2 rounded font-bold">
                                 BEST SELLER
+                              </span>
+                            )}
+                            {p.variants && p.variants.length > 0 && (
+                              <span className="text-[9px] bg-sky-500/20 text-sky-400 border border-sky-500/30 px-1.5 py-0.2 rounded font-bold">
+                                {p.variants.length} VARIANTS
                               </span>
                             )}
                           </div>
@@ -425,17 +500,17 @@ export const AdminProductsPage: React.FC = () => {
       {/* Create / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-xl w-full text-white shadow-2xl space-y-4 my-8">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-800">
-              <h3 className="font-extrabold text-base">
-                {editingProduct ? 'Edit Vegetable Produce' : 'Add New Fresh Vegetable'}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 max-w-2xl sm:max-w-3xl w-full text-white shadow-2xl space-y-4 my-8 max-h-[92vh] flex flex-col">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-800 shrink-0">
+              <h3 className="font-extrabold text-base flex items-center gap-2">
+                <span>{editingProduct ? 'Edit Vegetable Produce' : 'Add New Fresh Vegetable'}</span>
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSaveProduct} className="space-y-3.5 text-xs overflow-y-auto pr-1.5 flex-1">
               <div>
                 <label className="font-bold text-slate-300 block mb-1">Vegetable Name</label>
                 <input
@@ -640,15 +715,185 @@ export const AdminProductsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="font-bold text-slate-300 block mb-1">Description / Nutrition</label>
-                <textarea
-                  rows={2}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Organic, pesticide-free harvest notes..."
-                  className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white"
-                />
+              {/* Product Variants Section */}
+              <div className="p-4 bg-slate-800/80 border border-slate-700/80 rounded-2xl space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-700/60">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white text-xs">Product Variants (Weights & Pack Sizes)</h4>
+                      <p className="text-[10px] text-slate-400">
+                        {variants.length === 0
+                          ? 'Optional — if none added, product sells at base unit & price'
+                          : `${variants.length} pack variant${variants.length > 1 ? 's' : ''} configured`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomVariant}
+                    className="px-2.5 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Custom Variant</span>
+                  </button>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-400 mr-1 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-sky-400" /> Quick Add:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetVariant('250g', `${formData.name || 'Produce'} 250g`, 0.28)}
+                    className="px-2 py-1 rounded-md bg-slate-700/80 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-600/50 hover:border-sky-500/50 transition-all cursor-pointer"
+                  >
+                    + 250g
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetVariant('500g', `${formData.name || 'Produce'} 500g`, 0.55)}
+                    className="px-2 py-1 rounded-md bg-slate-700/80 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-600/50 hover:border-sky-500/50 transition-all cursor-pointer"
+                  >
+                    + 500g
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetVariant('1kg', `${formData.name || 'Produce'} 1kg`, 1.0)}
+                    className="px-2 py-1 rounded-md bg-slate-700/80 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-600/50 hover:border-sky-500/50 transition-all cursor-pointer"
+                  >
+                    + 1 kg
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetVariant('2kg', `${formData.name || 'Produce'} 2kg`, 1.9)}
+                    className="px-2 py-1 rounded-md bg-slate-700/80 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-600/50 hover:border-sky-500/50 transition-all cursor-pointer"
+                  >
+                    + 2 kg Family Pack
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetVariant('1 bunch', `${formData.name || 'Produce'} 1 Bunch`, 0.5)}
+                    className="px-2 py-1 rounded-md bg-slate-700/80 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-600/50 hover:border-sky-500/50 transition-all cursor-pointer"
+                  >
+                    + 1 Bunch
+                  </button>
+                </div>
+
+                {/* Empty State */}
+                {variants.length === 0 ? (
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
+                    <p className="text-[11px] text-slate-400">
+                      No variants added. This product will sell as a single option at{' '}
+                      <span className="text-white font-bold">{formData.unit || 'base unit'}</span> for{' '}
+                      <span className="text-brand-400 font-bold">₹{formData.selling_price || 0}</span>.
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Click any quick button above or "Add Custom Variant" to offer pack sizes like 250g, 500g, 1kg to customers.
+                    </p>
+                  </div>
+                ) : (
+                  /* Variants Table / Grid */
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {variants.map((v, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/60 flex flex-wrap sm:flex-nowrap items-center gap-2 text-[11px]"
+                      >
+                        {/* Variant Name */}
+                        <div className="flex-1 min-w-[130px]">
+                          <label className="text-[9px] text-slate-400 block font-bold mb-0.5">Variant Title</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 500g Pack"
+                            value={v.name}
+                            onChange={(e) => handleUpdateVariant(idx, 'name', e.target.value)}
+                            className="w-full p-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white font-bold"
+                            required
+                          />
+                        </div>
+
+                        {/* Unit */}
+                        <div className="w-20">
+                          <label className="text-[9px] text-slate-400 block font-bold mb-0.5">Unit</label>
+                          <input
+                            type="text"
+                            placeholder="500g"
+                            value={v.unit}
+                            onChange={(e) => handleUpdateVariant(idx, 'unit', e.target.value)}
+                            className="w-full p-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-center"
+                            required
+                          />
+                        </div>
+
+                        {/* MRP */}
+                        <div className="w-20">
+                          <label className="text-[9px] text-slate-400 block font-bold mb-0.5">MRP (₹)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={v.mrp}
+                            onChange={(e) => handleUpdateVariant(idx, 'mrp', parseFloat(e.target.value) || 0)}
+                            className="w-full p-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-center"
+                            required
+                          />
+                        </div>
+
+                        {/* Selling Price */}
+                        <div className="w-20">
+                          <label className="text-[9px] text-brand-400 block font-bold mb-0.5">Price (₹)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={v.selling_price}
+                            onChange={(e) => handleUpdateVariant(idx, 'selling_price', parseFloat(e.target.value) || 0)}
+                            className="w-full p-1.5 bg-slate-800 border border-brand-500/50 rounded-lg text-brand-300 font-bold text-center"
+                            required
+                          />
+                        </div>
+
+                        {/* Stock */}
+                        <div className="w-16">
+                          <label className="text-[9px] text-slate-400 block font-bold mb-0.5">Stock</label>
+                          <input
+                            type="number"
+                            value={v.stock_quantity}
+                            onChange={(e) => handleUpdateVariant(idx, 'stock_quantity', parseInt(e.target.value) || 0)}
+                            className="w-full p-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-center"
+                          />
+                        </div>
+
+                        {/* Status */}
+                        <div className="w-24">
+                          <label className="text-[9px] text-slate-400 block font-bold mb-0.5">Status</label>
+                          <select
+                            value={v.status}
+                            onChange={(e) => handleUpdateVariant(idx, 'status', e.target.value as 'active' | 'inactive')}
+                            className="w-full p-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-[10px]"
+                          >
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                        </div>
+
+                        {/* Delete Button */}
+                        <div className="pt-3">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveVariant(idx)}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
+                            title="Remove Variant"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-6 pt-2">
