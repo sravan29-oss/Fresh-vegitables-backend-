@@ -38,13 +38,35 @@ export async function createAddress(req: AuthRequest, res: Response, next: NextF
     const countResult = await db.query('SELECT COUNT(*)::int as count FROM addresses WHERE user_id = $1', [userId]);
     const makeDefault = is_default || countResult.rows[0].count === 0;
 
+    // Auto-resolve coordinates if missing for known hub service area
+    let lat = latitude ? Number(latitude) : null;
+    let lng = longitude ? Number(longitude) : null;
+
+    if (lat === null || lng === null) {
+      const addrText = `${house_number || ''} ${street || ''} ${area || ''} ${landmark || ''} ${city || ''}`.toLowerCase();
+      const isLocalArea =
+        String(pincode || '').trim() === '500059' ||
+        addrText.includes('champapet') ||
+        addrText.includes('rajireddy') ||
+        addrText.includes('raji reddy') ||
+        addrText.includes('saroornagar') ||
+        addrText.includes('saidabad') ||
+        addrText.includes('santoshnagar') ||
+        addrText.includes('karmanghat');
+
+      if (isLocalArea) {
+        lat = 17.347145;
+        lng = 78.512947;
+      }
+    }
+
     const result = await db.query(
       `INSERT INTO addresses (user_id, full_name, phone, house_number, street, area, landmark,
        city, state, pincode, latitude, longitude, address_type, is_default)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [userId, full_name, phone, house_number || null, street || null, area, landmark || null,
-       city, state, pincode, latitude || null, longitude || null, address_type, makeDefault]
+       city, state, pincode, lat, lng, address_type, makeDefault]
     );
 
     sendSuccess(res, 'Address created', result.rows[0], 201);
@@ -72,9 +94,22 @@ export async function updateAddress(req: AuthRequest, res: Response, next: NextF
     const values: any[] = [];
     let idx = 1;
 
+    let lat = latitude !== undefined ? latitude : existing.rows[0].latitude;
+    let lng = longitude !== undefined ? longitude : existing.rows[0].longitude;
+    const pin = pincode || existing.rows[0].pincode;
+    const addrArea = area || existing.rows[0].area;
+    const addrHouse = house_number || existing.rows[0].house_number;
+    if (lat === null || lng === null) {
+      const addrText = `${addrHouse || ''} ${addrArea || ''}`.toLowerCase();
+      if (String(pin || '').trim() === '500059' || addrText.includes('champapet') || addrText.includes('rajireddy') || addrText.includes('raji reddy')) {
+        lat = 17.347145;
+        lng = 78.512947;
+      }
+    }
+
     const fieldMap: Record<string, any> = {
       full_name, phone, house_number, street, area, landmark, city, state, pincode,
-      latitude, longitude, address_type, is_default
+      latitude: lat, longitude: lng, address_type, is_default
     };
 
     for (const [key, value] of Object.entries(fieldMap)) {

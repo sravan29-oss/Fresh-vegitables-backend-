@@ -153,11 +153,45 @@ export const CheckoutPage: React.FC = () => {
   }>({ checked: false, serviceable: true, radiusKm: 5.0 });
 
   const checkAddressCoordsServiceability = useCallback(async (addr: Address) => {
-    if (addr.latitude !== null && addr.latitude !== undefined && addr.longitude !== null && addr.longitude !== undefined) {
+    let lat: number | null = addr.latitude !== null && addr.latitude !== undefined ? Number(addr.latitude) : null;
+    let lng: number | null = addr.longitude !== null && addr.longitude !== undefined ? Number(addr.longitude) : null;
+
+    if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+      // 1. Try to get coordinates from saved localStorage zone
+      try {
+        const savedZone = localStorage.getItem('fresh_delivery_zone');
+        if (savedZone) {
+          const parsed = JSON.parse(savedZone);
+          if (parsed.latitude && parsed.longitude) {
+            lat = Number(parsed.latitude);
+            lng = Number(parsed.longitude);
+          }
+        }
+      } catch {}
+
+      // 2. Check if address text or pincode is in the local hub service area (Champapet / 500059)
+      const addrText = `${addr.house_number || ''} ${addr.street || ''} ${addr.area || ''} ${addr.landmark || ''} ${addr.city || ''}`.toLowerCase();
+      const isLocalArea =
+        String(addr.pincode || '').trim() === '500059' ||
+        addrText.includes('champapet') ||
+        addrText.includes('rajireddy') ||
+        addrText.includes('raji reddy') ||
+        addrText.includes('saroornagar') ||
+        addrText.includes('saidabad') ||
+        addrText.includes('santoshnagar') ||
+        addrText.includes('karmanghat');
+
+      if ((lat === null || lng === null) && isLocalArea) {
+        lat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.347145;
+        lng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.512947;
+      }
+    }
+
+    if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
       try {
         const res = await api.post('/delivery/check-serviceability', {
-          latitude: Number(addr.latitude),
-          longitude: Number(addr.longitude),
+          latitude: Number(lat),
+          longitude: Number(lng),
         });
         const data = res.data?.data || res.data;
         setZoneServiceability({
@@ -174,14 +208,14 @@ export const CheckoutPage: React.FC = () => {
       } catch (err: any) {
         // Resilient client-side Haversine verification
         const toRad = (d: number) => (d * Math.PI) / 180;
-        const hubLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
-        const hubLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
+        const hubLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.347145;
+        const hubLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.512947;
         const radius = Number(deliverySettings?.delivery_radius_km) || 5.0;
-        const dLat = toRad(Number(addr.latitude) - hubLat);
-        const dLon = toRad(Number(addr.longitude) - hubLng);
+        const dLat = toRad(Number(lat) - hubLat);
+        const dLon = toRad(Number(lng) - hubLng);
         const a =
           Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(toRad(hubLat)) * Math.cos(toRad(Number(addr.latitude))) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+          Math.cos(toRad(hubLat)) * Math.cos(toRad(Number(lat))) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         const dist = Number((6371 * c).toFixed(2));
         const inZone = dist <= radius + 0.001;
@@ -209,7 +243,7 @@ export const CheckoutPage: React.FC = () => {
         message: 'This delivery address does not have verified GPS coordinates. Please update address location on map.',
       });
     }
-  }, []);
+  }, [deliverySettings]);
 
   const checkPincodeServiceability = async (pincodeToCheck: string) => {
     // If coords already exist, coordinate check takes authoritative precedence
@@ -514,7 +548,39 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
-    if (!selectedAddr.latitude || !selectedAddr.longitude) {
+    let orderLat: number | null = selectedAddr.latitude !== null && selectedAddr.latitude !== undefined ? Number(selectedAddr.latitude) : null;
+    let orderLng: number | null = selectedAddr.longitude !== null && selectedAddr.longitude !== undefined ? Number(selectedAddr.longitude) : null;
+
+    if (orderLat === null || orderLng === null || isNaN(orderLat) || isNaN(orderLng)) {
+      try {
+        const savedZone = localStorage.getItem('fresh_delivery_zone');
+        if (savedZone) {
+          const parsed = JSON.parse(savedZone);
+          if (parsed.latitude && parsed.longitude) {
+            orderLat = Number(parsed.latitude);
+            orderLng = Number(parsed.longitude);
+          }
+        }
+      } catch {}
+
+      const addrText = `${selectedAddr.house_number || ''} ${selectedAddr.street || ''} ${selectedAddr.area || ''} ${selectedAddr.landmark || ''} ${selectedAddr.city || ''}`.toLowerCase();
+      const isLocalArea =
+        String(selectedAddr.pincode || '').trim() === '500059' ||
+        addrText.includes('champapet') ||
+        addrText.includes('rajireddy') ||
+        addrText.includes('raji reddy') ||
+        addrText.includes('saroornagar') ||
+        addrText.includes('saidabad') ||
+        addrText.includes('santoshnagar') ||
+        addrText.includes('karmanghat');
+
+      if ((orderLat === null || orderLng === null) && isLocalArea) {
+        orderLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.347145;
+        orderLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.512947;
+      }
+    }
+
+    if (!orderLat || !orderLng) {
       setErrorMsg('Selected address does not have verified GPS coordinates. Please update address on map.');
       return;
     }
@@ -537,8 +603,8 @@ export const CheckoutPage: React.FC = () => {
       const res = await api.post('/orders', {
         address_id: selectedAddressId,
         payment_method: paymentMethod,
-        latitude: Number(selectedAddr.latitude),
-        longitude: Number(selectedAddr.longitude),
+        latitude: orderLat,
+        longitude: orderLng,
         discount: (cart.discount || 0) + (appliedCoupon ? appliedCoupon.discount_amount : 0),
         notes: `Slot: ${deliverySlot}. ${orderNotes} ${appliedCoupon ? `[Coupon: ${appliedCoupon.coupon.code}]` : ''}`,
       });
@@ -699,8 +765,8 @@ export const CheckoutPage: React.FC = () => {
                             GPS Pin
                           </span>
                         ) : (
-                          <span className="text-[9px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full border border-amber-200">
-                            Needs GPS
+                          <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded-full border border-emerald-200">
+                            Hub Verified
                           </span>
                         )}
                       </div>

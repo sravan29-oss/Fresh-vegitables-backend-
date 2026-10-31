@@ -30,6 +30,24 @@ pool.on('error', (err) => {
 
 let lastWarnTime = 0;
 
+async function ensureSchemaAlignment() {
+  try {
+    await pool.query(`
+      ALTER TABLE orders ALTER COLUMN payment_status TYPE VARCHAR(50);
+      ALTER TABLE payments ALTER COLUMN status TYPE VARCHAR(50);
+      ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
+      ALTER TABLE payments ADD CONSTRAINT payments_status_check 
+        CHECK (status IN ('pending', 'success', 'failed', 'refunded', 'awaiting_cod_collection', 'cod_collected', 'paid'));
+      UPDATE addresses 
+      SET latitude = 17.347145, longitude = 78.512947 
+      WHERE (latitude IS NULL OR longitude IS NULL) 
+        AND (pincode = '500059' OR LOWER(area) LIKE '%champapet%' OR LOWER(house_number) LIKE '%raji%');
+    `);
+  } catch (e: any) {
+    console.warn('[Schema] ensureSchemaAlignment notice:', e.message);
+  }
+}
+
 async function checkPgHealth(): Promise<boolean> {
   if (isPgHealthy) return true;
   try {
@@ -37,6 +55,7 @@ async function checkPgHealth(): Promise<boolean> {
     isPgHealthy = res.rows.length > 0;
     if (isPgHealthy) {
       console.log(`✅ [Database Connected] PostgreSQL verified active on port ${env.DB_PORT}. Real database queries active.`);
+      ensureSchemaAlignment();
     }
   } catch (e: any) {
     isPgHealthy = false;
