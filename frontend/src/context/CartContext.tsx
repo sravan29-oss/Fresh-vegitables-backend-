@@ -30,7 +30,8 @@ interface CartContextType {
     productId: string,
     variantId?: string | null,
     quantity?: number,
-    meta?: ProductMeta
+    meta?: ProductMeta,
+    skipOpenDrawer?: boolean
   ) => Promise<boolean>;
   updateQuantity: (itemId: string, quantity: number) => Promise<void>;
   removeFromCart: (itemId: string) => Promise<void>;
@@ -380,7 +381,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     productId: string,
     variantId?: string | null,
     quantity = 1,
-    meta?: ProductMeta
+    meta?: ProductMeta,
+    skipOpenDrawer = false
   ): Promise<boolean> => {
     // Serviceability Guard: If outside zone or unconfigured, block add to cart and prompt location selector
     if (serviceability.checked && !serviceability.serviceable) {
@@ -431,8 +433,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         computeAndSaveGuestCart(guestCart);
       }
 
-      // Always open cart drawer popup on add to cart!
-      setIsCartOpen(true);
+      // Open cart drawer popup on add to cart unless suppressed (e.g. inside variant selection modal)
+      if (!skipOpenDrawer) {
+        setIsCartOpen(true);
+      }
       notifyLiveUpdate('cart');
       return true;
     } catch (error: any) {

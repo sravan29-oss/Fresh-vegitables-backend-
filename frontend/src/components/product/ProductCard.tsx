@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Minus, Check, Clock, Ban, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Plus, Minus, Check, Clock, Ban, AlertTriangle, AlertCircle, ChevronDown, X, ShoppingBag } from 'lucide-react';
 import { Product, ProductVariant } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +20,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     product.variants && product.variants.length > 0 ? product.variants[0] : null
   );
   const [isAdding, setIsAdding] = useState(false);
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
 
   const price = selectedVariant ? selectedVariant.selling_price : product.selling_price;
   const mrp = selectedVariant ? selectedVariant.mrp : product.mrp;
@@ -164,20 +166,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {/* Pack / Weight Pill & Brand Tag */}
           <div className="flex items-center justify-between gap-1 min-h-[22px]">
             {product.variants && product.variants.length > 0 ? (
-              <select
-                value={selectedVariant?.id || ''}
-                onChange={(e) => {
-                  const found = product.variants?.find((v) => v.id === e.target.value);
-                  if (found) setSelectedVariant(found);
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsVariantModalOpen(true);
                 }}
-                className="text-[10px] sm:text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200/60 rounded-md px-1.5 py-0.5 cursor-pointer focus:ring-1 focus:ring-emerald-500 transition-colors truncate max-w-[100px] xs:max-w-[130px]"
+                className="text-[10px] sm:text-[11px] font-bold text-slate-800 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200/80 rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-all cursor-pointer shadow-2xs group/pill"
+                title="Click to view all pack sizes & quantities"
               >
-                {product.variants.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} ({v.unit}) — ₹{Number(v.selling_price).toFixed(0)}
-                  </option>
-                ))}
-              </select>
+                <span className="truncate max-w-[85px] sm:max-w-[110px]">
+                  {selectedVariant?.unit || selectedVariant?.name || unit}
+                </span>
+                <ChevronDown className="w-3 h-3 text-slate-500 group-hover/pill:text-emerald-600 shrink-0 transition-transform group-hover/pill:translate-y-0.5" />
+              </button>
             ) : (
               <span className="text-[10px] sm:text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-200/60 px-1.5 py-0.5 rounded-md inline-block truncate max-w-[85px]">
                 {unit}
@@ -305,6 +308,260 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>
         </div>
       </div>
+
+      {/* ─── Product Variant Selection Popup Modal (Zepto / Blinkit Style) ─── */}
+      {isVariantModalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsVariantModalOpen(false);
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-200/90 flex flex-col max-h-[85vh] sm:max-h-[90vh] animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            >
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-start gap-3.5 bg-slate-50/80 relative">
+                {/* Fetched Product Image Stage */}
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white border border-slate-200/80 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+                  {product.images && product.images.length > 0 ? (
+                    <img
+                      src={getProductImageUrl(product.images[0], product.name)}
+                      alt={product.name}
+                      className="w-full h-full object-contain rounded-xl"
+                      onError={(e) => {
+                        e.currentTarget.src = getFallbackImageUrl(product.name);
+                      }}
+                    />
+                  ) : (
+                    <span className="text-3xl">🥬</span>
+                  )}
+                </div>
+
+                {/* Product Info */}
+                <div className="flex-1 min-w-0 pr-8">
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      {(product as any).brand || product.category_name || 'FRESH'}
+                    </span>
+                    <span className="text-[10px] font-semibold text-emerald-700 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Daily Farm Harvest
+                    </span>
+                  </div>
+
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight truncate">
+                    {product.name}
+                  </h3>
+
+                  <p className="text-xs text-slate-500 mt-1 font-medium">
+                    Select your preferred pack size & quantity
+                  </p>
+                </div>
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsVariantModalOpen(false)}
+                  className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Close variant modal"
+                >
+                  <X className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </div>
+
+              {/* Scrollable Variants List */}
+              <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 flex-1 divide-y divide-slate-100">
+                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between pb-1">
+                  <span>Available Pack Sizes</span>
+                  <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-emerald-600" /> 15–30 Mins Delivery
+                  </span>
+                </div>
+
+                {product.variants && product.variants.length > 0 ? (
+                  product.variants.map((v) => {
+                    const vCartItem = cart?.items?.find(
+                      (ci) => ci.product_id === product.id && ci.variant_id === v.id
+                    );
+                    const vQty = vCartItem ? vCartItem.quantity : 0;
+                    const vPrice = Number(v.selling_price);
+                    const vMrp = Number(v.mrp);
+                    const vDiscount = vMrp > vPrice ? Math.round(((vMrp - vPrice) / vMrp) * 100) : 0;
+                    const vStock = Number(v.stock_quantity ?? 0);
+                    const vOut = vStock <= 0 || v.status !== 'active';
+                    const isSelected = selectedVariant?.id === v.id;
+
+                    return (
+                      <div
+                        key={v.id}
+                        onClick={() => setSelectedVariant(v)}
+                        className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-3 rounded-2xl transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'border-emerald-500 bg-emerald-50/40 shadow-xs'
+                            : 'border-slate-200/80 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                        }`}
+                      >
+                        {/* Left Details */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-sm text-slate-900">
+                              {v.name}
+                            </span>
+                            {v.unit && (
+                              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                                {v.unit}
+                              </span>
+                            )}
+                            {vDiscount > 0 && (
+                              <span className="text-[9.5px] font-black text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                                {vDiscount}% OFF
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-base font-black text-slate-900">
+                              ₹{vPrice.toFixed(0)}
+                            </span>
+                            {vMrp > vPrice && (
+                              <span className="text-xs text-slate-400 line-through">
+                                ₹{vMrp.toFixed(0)}
+                              </span>
+                            )}
+                            {vOut ? (
+                              <span className="text-[10px] font-bold text-rose-600 ml-1">
+                                Sold Out
+                              </span>
+                            ) : vStock <= 5 ? (
+                              <span className="text-[10px] font-bold text-amber-700 ml-1">
+                                Only {vStock} left
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold text-emerald-700 ml-1">
+                                In Stock
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right Quantity Control */}
+                        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {serviceability.checked && !serviceability.serviceable ? (
+                            <button
+                              disabled
+                              className="h-8 px-2.5 rounded-lg bg-slate-100 text-slate-400 font-bold text-[10px] border border-slate-200 cursor-not-allowed"
+                            >
+                              Unavailable
+                            </button>
+                          ) : vOut ? (
+                            <button
+                              disabled
+                              className="h-8 px-3 rounded-lg bg-slate-100 text-slate-400 font-bold text-xs border border-slate-200 cursor-not-allowed"
+                            >
+                              Sold Out
+                            </button>
+                          ) : vQty > 0 ? (
+                            <div className="h-8 min-w-[84px] flex items-center justify-between bg-emerald-600 text-white rounded-lg p-0.5 shadow-sm shadow-emerald-600/25">
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (vCartItem) {
+                                    await updateQuantity(vCartItem.id, vQty - 1);
+                                  }
+                                }}
+                                className="w-7 h-7 rounded hover:bg-emerald-700 flex items-center justify-center text-white transition-all active:scale-90 cursor-pointer"
+                                title="Remove one"
+                                aria-label="Decrease quantity"
+                              >
+                                <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                              </button>
+                              <span className="text-xs font-black px-1.5 text-white font-mono select-none">
+                                {vQty}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (vCartItem) {
+                                    await updateQuantity(vCartItem.id, vQty + 1);
+                                  }
+                                }}
+                                disabled={vQty >= vStock}
+                                className="w-7 h-7 rounded hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all active:scale-90 cursor-pointer"
+                                title="Add one more"
+                                aria-label="Increase quantity"
+                              >
+                                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSelectedVariant(v);
+                                await addToCart(
+                                  product.id,
+                                  v.id,
+                                  1,
+                                  {
+                                    name: product.name,
+                                    image: product.images?.[0] || '',
+                                    selling_price: vPrice,
+                                    mrp: vMrp,
+                                    unit: v.unit,
+                                    variant_name: v.name,
+                                  },
+                                  true // stay inside popup without opening drawer immediately
+                                );
+                              }}
+                              className="h-8 min-w-[76px] px-3.5 rounded-lg border-1.5 border-emerald-600 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white font-black text-xs uppercase tracking-wider shadow-2xs hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                              <span>ADD</span>
+                              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : null}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+                <div className="text-xs text-slate-600 truncate">
+                  Pack: <strong className="font-extrabold text-slate-900">{selectedVariant?.unit || selectedVariant?.name || unit}</strong>
+                  {cart?.items?.filter((ci) => ci.product_id === product.id).length ? (
+                    <span className="ml-2 text-emerald-700 font-bold">
+                      ({cart.items.filter((ci) => ci.product_id === product.id).reduce((sum, ci) => sum + ci.quantity, 0)} in cart)
+                    </span>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsVariantModalOpen(false)}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  <span>Done</span>
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
