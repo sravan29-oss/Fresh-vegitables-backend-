@@ -97,17 +97,141 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
       if (cached) return JSON.parse(cached);
     } catch {}
     return {
-      default_delivery_charge: 30,
-      free_delivery_threshold: 499,
-      min_order_amount: 199,
+      default_delivery_charge: 10,
+      free_delivery_threshold: 99,
+      min_order_amount: 10,
       enable_free_delivery: true,
       express_delivery_fee: 45,
       estimated_delivery_time: '25–35 mins',
       is_delivery_active: true,
       surge_charge: 0,
+      operating_hours_start: '07:00',
+      operating_hours_end: '21:30',
+      express_enabled: true,
+      express_start_time: '07:00',
+      express_end_time: '21:00',
+      morning_slot_enabled: true,
+      morning_slot_start: '07:00',
+      morning_slot_end: '09:00',
+      morning_slot_cutoff: '08:30',
+      evening_slot_enabled: true,
+      evening_slot_start: '17:00',
+      evening_slot_end: '19:00',
+      evening_slot_cutoff: '18:30',
     };
   });
   const [savedSettings, setSavedSettings] = useState<DeliverySettings>(deliverySettings);
+
+  // Dedicated Slot Timings Edit Modal State
+  type SlotType = 'operating_hours' | 'express' | 'morning' | 'evening';
+  const [isSlotModalOpen, setIsSlotModalOpen] = useState(false);
+  const [slotModalData, setSlotModalData] = useState<{
+    type: SlotType;
+    title: string;
+    enabled: boolean;
+    startTime: string;
+    endTime: string;
+    cutoffTime?: string;
+    description: string;
+  }>({
+    type: 'morning',
+    title: 'Morning Harvest Batch',
+    enabled: true,
+    startTime: '07:00',
+    endTime: '09:00',
+    cutoffTime: '08:30',
+    description: 'Dawn fresh harvest batch delivered directly to customers before work.',
+  });
+
+  const handleOpenSlotModal = (type: SlotType) => {
+    if (type === 'operating_hours') {
+      setSlotModalData({
+        type: 'operating_hours',
+        title: 'Daily Store Operating Window',
+        enabled: deliverySettings.is_delivery_active !== false,
+        startTime: deliverySettings.operating_hours_start || '07:00',
+        endTime: deliverySettings.operating_hours_end || '21:30',
+        description: 'Daily opening and closing hours for accepting customer orders.',
+      });
+    } else if (type === 'express') {
+      setSlotModalData({
+        type: 'express',
+        title: 'Express 30 Mins Dispatch',
+        enabled: deliverySettings.express_enabled !== false,
+        startTime: deliverySettings.express_start_time || '07:00',
+        endTime: deliverySettings.express_end_time || '21:00',
+        description: 'Instant priority harvest dispatch in 15–30 minutes via EV fleet. Past night cutoff, checkout displays "Offline at night" and disables instant dispatch.',
+      });
+    } else if (type === 'morning') {
+      setSlotModalData({
+        type: 'morning',
+        title: 'Morning Harvest Batch',
+        enabled: deliverySettings.morning_slot_enabled !== false,
+        startTime: deliverySettings.morning_slot_start || '07:00',
+        endTime: deliverySettings.morning_slot_end || '09:00',
+        cutoffTime: deliverySettings.morning_slot_cutoff || '08:30',
+        description: 'Dawn fresh harvest batch. Orders placed after the cutoff time will automatically advance to "Tomorrow Morning" at checkout.',
+      });
+    } else if (type === 'evening') {
+      setSlotModalData({
+        type: 'evening',
+        title: 'Evening Harvest Batch',
+        enabled: deliverySettings.evening_slot_enabled !== false,
+        startTime: deliverySettings.evening_slot_start || '17:00',
+        endTime: deliverySettings.evening_slot_end || '19:00',
+        cutoffTime: deliverySettings.evening_slot_cutoff || '18:30',
+        description: 'Afternoon batch harvested for post-work dinner delivery. Orders placed after cutoff automatically advance to "Tomorrow Evening".',
+      });
+    }
+    setIsSlotModalOpen(true);
+  };
+
+  const handleSaveSlotModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSavingSettings(true);
+      const updatedSettings = { ...deliverySettings };
+
+      if (slotModalData.type === 'operating_hours') {
+        updatedSettings.is_delivery_active = slotModalData.enabled;
+        updatedSettings.operating_hours_start = slotModalData.startTime;
+        updatedSettings.operating_hours_end = slotModalData.endTime;
+      } else if (slotModalData.type === 'express') {
+        updatedSettings.express_enabled = slotModalData.enabled;
+        updatedSettings.express_start_time = slotModalData.startTime;
+        updatedSettings.express_end_time = slotModalData.endTime;
+      } else if (slotModalData.type === 'morning') {
+        updatedSettings.morning_slot_enabled = slotModalData.enabled;
+        updatedSettings.morning_slot_start = slotModalData.startTime;
+        updatedSettings.morning_slot_end = slotModalData.endTime;
+        updatedSettings.morning_slot_cutoff = slotModalData.cutoffTime || '08:30';
+      } else if (slotModalData.type === 'evening') {
+        updatedSettings.evening_slot_enabled = slotModalData.enabled;
+        updatedSettings.evening_slot_start = slotModalData.startTime;
+        updatedSettings.evening_slot_end = slotModalData.endTime;
+        updatedSettings.evening_slot_cutoff = slotModalData.cutoffTime || '18:30';
+      }
+
+      setDeliverySettings(updatedSettings);
+
+      const res = await api.put('/delivery/settings', updatedSettings);
+      if (res.data?.data) {
+        setSavedSettings(updatedSettings);
+        try {
+          localStorage.setItem('fresh_veg_delivery_settings', JSON.stringify(updatedSettings));
+        } catch {}
+        await syncCartDeliverySettings();
+      }
+
+      setIsSlotModalOpen(false);
+      setMsg({ type: 'success', text: `${slotModalData.title} updated and saved to database successfully!` });
+    } catch (err: any) {
+      console.error('Failed to update slot timing', err);
+      alert(err.response?.data?.message || 'Failed to save slot timing');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   // Determine if draft inputs have unsaved changes
   const isDirty =
@@ -1218,7 +1342,14 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                   <Clock className="w-4 h-4 text-brand-400" />
                   <h4 className="text-sm font-bold text-white">Daily Store Operating Hours</h4>
                 </div>
-                <span className="text-[11px] text-slate-400">Controls same-day customer order acceptance</span>
+                <button
+                  type="button"
+                  onClick={() => handleOpenSlotModal('operating_hours')}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-brand-400 hover:text-white font-bold text-xs flex items-center gap-1.5 border border-slate-700/80 transition-all cursor-pointer"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Operating Hours</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1338,6 +1469,17 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                     </div>
                   </div>
                 </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSlotModal('express')}
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 border border-amber-500/30 transition-all cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Express Timings</span>
+                  </button>
+                </div>
               </div>
 
               {/* Morning Slot */}
@@ -1429,6 +1571,17 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                     </div>
                   </div>
                 </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSlotModal('morning')}
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 border border-emerald-500/30 transition-all cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Morning Timings</span>
+                  </button>
+                </div>
               </div>
 
               {/* Evening Slot */}
@@ -1519,6 +1672,17 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                       💡 After cutoff, automatically rolls over to &ldquo;Tomorrow Evening&rdquo; at checkout.
                     </div>
                   </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSlotModal('evening')}
+                    className="w-full py-2.5 px-3 rounded-xl bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 border border-blue-500/30 transition-all cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Evening Timings</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -2676,6 +2840,124 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= EDIT DELIVERY SLOT TIMING MODAL ================= */}
+      {isSlotModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden my-8">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Edit {slotModalData.title}</h3>
+                  <p className="text-xs text-slate-400">Update active hours, cutoff times, and checkout availability</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSlotModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveSlotModal} className="p-6 space-y-5">
+              {/* Active Toggle */}
+              <label className="flex items-center justify-between p-4 rounded-2xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:bg-slate-900 transition-all">
+                <div>
+                  <span className="text-xs font-bold text-white block">Slot Status</span>
+                  <span className="text-[11px] text-slate-400">Enable or temporarily disable this slot at customer checkout</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={slotModalData.enabled}
+                  onChange={(e) => setSlotModalData((prev) => ({ ...prev, enabled: e.target.checked }))}
+                  className="w-5 h-5 rounded text-brand-500 focus:ring-0 accent-brand-500 cursor-pointer"
+                />
+              </label>
+
+              {/* Time Pickers */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    {slotModalData.type === 'express' ? 'Active From' : slotModalData.type === 'operating_hours' ? 'Opening Time' : 'Slot Start Time'}
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={slotModalData.startTime}
+                    onChange={(e) => setSlotModalData((prev) => ({ ...prev, startTime: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 focus:border-brand-500 rounded-xl font-mono text-sm text-white focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    {slotModalData.type === 'express' ? 'Active Until (Cutoff)' : slotModalData.type === 'operating_hours' ? 'Closing Time' : 'Slot End Time'}
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={slotModalData.endTime}
+                    onChange={(e) => setSlotModalData((prev) => ({ ...prev, endTime: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 focus:border-brand-500 rounded-xl font-mono text-sm text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Order Cutoff Time (Only for Morning and Evening batches) */}
+              {(slotModalData.type === 'morning' || slotModalData.type === 'evening') && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-300 flex items-center justify-between">
+                    <span>Same-Day Order Cutoff Time</span>
+                    <span className="text-[10px] text-amber-400 font-normal">Auto-advances to next day after cutoff</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={slotModalData.cutoffTime || ''}
+                    onChange={(e) => setSlotModalData((prev) => ({ ...prev, cutoffTime: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700/80 focus:border-brand-500 rounded-xl font-mono text-sm text-white focus:outline-none"
+                  />
+                  <span className="text-[11px] text-slate-500">
+                    Example: If cutoff is 08:30 AM, an order placed at 08:31 AM will automatically be placed for Tomorrow Morning batch.
+                  </span>
+                </div>
+              )}
+
+              {/* Description Preview */}
+              <div className="p-3.5 rounded-2xl bg-slate-900/50 border border-slate-800/80 space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Description / Note</span>
+                <p className="text-xs text-slate-300">{slotModalData.description}</p>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSlotModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-brand-500/25 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSavingSettings ? 'Saving...' : 'Save Timing Changes'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
