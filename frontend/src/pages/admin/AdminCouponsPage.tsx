@@ -34,68 +34,17 @@ export const AdminCouponsPage: React.FC = () => {
     status: 'active' as 'active' | 'inactive',
   });
 
-  const defaultCoupons: Coupon[] = [
-    {
-      id: 'coup01',
-      code: 'WELCOME50',
-      name: 'Welcome Flat ₹50 OFF',
-      description: 'Get flat ₹50 discount on your first farm harvest order over ₹299',
-      discount_type: 'FLAT',
-      discount_value: 50,
-      minimum_order_amount: 299,
-      maximum_discount: 50,
-      usage_limit: 1000,
-      usage_count: 84,
-      per_customer_limit: 1,
-      start_date: new Date('2026-01-01').toISOString(),
-      end_date: new Date('2027-12-31').toISOString(),
-      status: 'active',
-    },
-    {
-      id: 'coup02',
-      code: 'FRESH10',
-      name: '10% Seasonal Greens Discount',
-      description: 'Enjoy 10% off on all organic vegetables and salad greens',
-      discount_type: 'PERCENTAGE',
-      discount_value: 10,
-      minimum_order_amount: 199,
-      maximum_discount: 100,
-      usage_limit: 500,
-      usage_count: 122,
-      per_customer_limit: 2,
-      start_date: new Date('2026-01-01').toISOString(),
-      end_date: new Date('2027-12-31').toISOString(),
-      status: 'active',
-    },
-    {
-      id: 'coup03',
-      code: 'VEGGIE100',
-      name: 'Mega Harvest ₹100 Savings',
-      description: 'Save flat ₹100 on orders above ₹699',
-      discount_type: 'FLAT',
-      discount_value: 100,
-      minimum_order_amount: 699,
-      maximum_discount: 100,
-      usage_limit: 200,
-      usage_count: 47,
-      per_customer_limit: 1,
-      start_date: new Date('2024-01-01').toISOString(),
-      end_date: new Date('2027-12-31').toISOString(),
-      status: 'active',
-    },
-  ];
-
   const fetchCoupons = async () => {
     try {
       setLoading(true);
       const res = await api.get('/coupons/admin/all');
-      if (res.data?.data && res.data.data.length > 0) {
+      if (Array.isArray(res.data?.data)) {
         setCoupons(res.data.data);
       } else {
-        setCoupons(defaultCoupons);
+        setCoupons([]);
       }
     } catch (err) {
-      setCoupons(defaultCoupons);
+      console.error('Failed to fetch coupons:', err);
     } finally {
       setLoading(false);
     }
@@ -159,20 +108,28 @@ export const AdminCouponsPage: React.FC = () => {
   const handleToggleStatus = async (coupon: Coupon) => {
     const nextStatus = coupon.status === 'active' ? 'inactive' : 'active';
     try {
+      setCoupons((prev) =>
+        prev.map((c) => (c.id === coupon.id ? { ...c, status: nextStatus } : c))
+      );
       await api.put(`/coupons/admin/${coupon.id}`, { status: nextStatus });
       fetchCoupons();
-    } catch (err) {
-      alert('Failed to update coupon status');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update coupon status');
+      fetchCoupons();
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this coupon?')) return;
+    if (!window.confirm('Are you sure you want to permanently delete this coupon? This cannot be undone.')) return;
     try {
+      // Optimistically remove coupon from state immediately
+      setCoupons((prev) => prev.filter((c) => c.id !== id));
       await api.delete(`/coupons/admin/${id}`);
       fetchCoupons();
-    } catch (err) {
-      alert('Failed to delete coupon');
+    } catch (err: any) {
+      console.error('Failed to delete coupon:', err);
+      alert(err.response?.data?.message || 'Failed to delete coupon');
+      fetchCoupons();
     }
   };
 
@@ -202,8 +159,23 @@ export const AdminCouponsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Coupons Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      {/* Coupons Grid or Empty State */}
+      {!loading && coupons.length === 0 ? (
+        <div className="text-center py-16 px-4 bg-slate-950/60 rounded-3xl border border-dashed border-slate-800 space-y-3">
+          <Tag className="w-10 h-10 text-slate-600 mx-auto" />
+          <h3 className="text-base font-bold text-white">No Coupons or Offers Available</h3>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            All coupons have been removed. Click &ldquo;Create Coupon Offer&rdquo; to launch a new promotion campaign.
+          </p>
+          <button
+            onClick={handleOpenCreate}
+            className="mt-2 bg-brand-500 hover:bg-brand-400 text-slate-950 text-xs font-black px-4 py-2 rounded-xl inline-flex items-center gap-1.5 transition-all"
+          >
+            <Plus className="w-4 h-4" /> Create Coupon Offer
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {coupons.map((coupon) => (
           <div
             key={coupon.id}
@@ -281,6 +253,7 @@ export const AdminCouponsPage: React.FC = () => {
           </div>
         ))}
       </div>
+      )}
 
       {/* Create / Edit Coupon Modal */}
       {isModalOpen && (

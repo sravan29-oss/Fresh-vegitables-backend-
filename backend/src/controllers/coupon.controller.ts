@@ -130,36 +130,44 @@ export async function createCoupon(req: AuthRequest, res: Response, next: NextFu
       status,
     } = req.body;
 
-    if (!code || !name || !discount_value) {
+    if (!code || !name || discount_value === undefined || discount_value === null) {
       throw new ValidationError('Code, name, and discount value are required');
     }
 
     const normalizedCode = String(code).trim().toUpperCase();
 
-    // Check existing
-    const existing = memoryStore.coupons.find((c) => c.code.toUpperCase() === normalizedCode);
-    if (existing) {
+    // Check existing in PostgreSQL
+    const existing = await db.query('SELECT id FROM coupons WHERE UPPER(code) = $1', [normalizedCode]);
+    if (existing.rows.length > 0) {
       throw new ValidationError(`Coupon code ${normalizedCode} already exists`);
     }
 
-    const newCoupon = {
-      id: `coup_${Date.now()}`,
-      code: normalizedCode,
-      name,
-      description: description || '',
-      discount_type: discount_type || 'FLAT',
-      discount_value: Number(discount_value),
-      minimum_order_amount: Number(minimum_order_amount || 0),
-      maximum_discount: Number(maximum_discount || discount_value),
-      usage_limit: Number(usage_limit || 500),
-      usage_count: 0,
-      per_customer_limit: Number(per_customer_limit || 1),
-      start_date: start_date || new Date().toISOString(),
-      end_date: end_date || new Date(Date.now() + 365 * 86400000).toISOString(),
-      status: status || 'active',
-      created_at: new Date().toISOString(),
-    };
+    const insertRes = await db.query(
+      `INSERT INTO coupons (
+        code, name, description, discount_type, discount_value,
+        minimum_order_amount, maximum_discount, usage_limit, usage_count,
+        per_customer_limit, start_date, end_date, status, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, $10, $11, $12, NOW(), NOW())
+      RETURNING *`,
+      [
+        normalizedCode,
+        name,
+        description || '',
+        discount_type || 'FLAT',
+        Number(discount_value),
+        Number(minimum_order_amount || 0),
+        Number(maximum_discount || discount_value),
+        Number(usage_limit || 500),
+        Number(per_customer_limit || 1),
+        start_date || new Date().toISOString(),
+        end_date || new Date(Date.now() + 365 * 86400000).toISOString(),
+        status || 'active',
+      ]
+    );
 
+    const newCoupon = insertRes.rows[0];
+
+    // Synchronize mock store
     memoryStore.coupons.unshift(newCoupon);
 
     sendSuccess(res, 'Coupon campaign created successfully', newCoupon, 201);
@@ -171,11 +179,64 @@ export async function createCoupon(req: AuthRequest, res: Response, next: NextFu
 export async function updateCoupon(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const coupon = memoryStore.coupons.find((c) => c.id === id);
-    if (!coupon) throw new NotFoundError('Coupon not found');
+    if (!id) throw new ValidationError('Coupon ID is required');
 
-    Object.assign(coupon, req.body);
-    sendSuccess(res, 'Coupon updated successfully', coupon);
+    const updateFields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    const allowed = [
+      'name',
+      'description',
+      'discount_type',
+      'discount_value',
+      'minimum_order_amount',
+      'maximum_discount',
+      'usage_limit',
+      'per_customer_limit',
+      'start_date',
+      'end_date',
+      'status',
+    ];
+
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        updateFields.push(`${field} = $${idx++}`);
+        values.push(req.body[field]);
+      }
+    }
+
+    if (updateFields.length === 0) {
+      const existing = await db.query(
+        'SELECT * FROM coupons WHERE id::text = $1 OR UPPER(code) = UPPER($1)',
+        [id]
+      );
+      if (existing.rows.length === 0) throw new NotFoundError('Coupon not found');
+      return sendSuccess(res, 'Coupon unchanged', existing.rows[0]);
+    }
+
+    updateFields.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const query = `UPDATE coupons SET ${updateFields.join(', ')} WHERE id::text = $${idx} OR UPPER(code) = UPPER($${idx}) RETURNING *`;
+    const result = await db.query(query, values);
+
+    if (result.rows.length === 0) {
+      const mem = memoryStore.coupons.find(
+        (c) => c.id === id || c.code.toUpperCase() === id.toUpperCase()
+      );
+      if (!mem) throw new NotFoundError('Coupon not found');
+      Object.assign(mem, req.body);
+      return sendSuccess(res, 'Coupon updated successfully', mem);
+    }
+
+    const updated = result.rows[0];
+    const mem = memoryStore.coupons.find(
+      (c) => c.id === id || c.code.toUpperCase() === id.toUpperCase()
+    );
+    if (mem) Object.assign(mem, updated);
+
+    sendSuccess(res, 'Coupon updated successfully', updated);
   } catch (error) {
     next(error);
   }
@@ -184,11 +245,33 @@ export async function updateCoupon(req: AuthRequest, res: Response, next: NextFu
 export async function deleteCoupon(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const index = memoryStore.coupons.findIndex((c) => c.id === id);
-    if (index !== -1) {
-      memoryStore.coupons.splice(index, 1);
+    if (!id) throw new ValidationError('Coupon ID is required');
+
+    // 1. Delete associated usage records first to satisfy foreign key constraints
+    await db
+      .query(
+        'DELETE FROM coupon_usage WHERE coupon_id::text = $1 OR coupon_id IN (SELECT id FROM coupons WHERE id::text = $1 OR UPPER(code) = UPPER($1))',
+        [id]
+      )
+      .catch((err) => console.warn('Coupon usage cleanup notice:', err.message));
+
+    // 2. Permanently delete the coupon from PostgreSQL database (supports UUID, text ID, or code)
+    const result = await db.query(
+      'DELETE FROM coupons WHERE id::text = $1 OR UPPER(code) = UPPER($1) RETURNING *',
+      [id]
+    );
+
+    // 3. Clean up from mock store as well
+    const memIndex = memoryStore.coupons.findIndex(
+      (c) => c.id === id || c.code.toUpperCase() === id.toUpperCase()
+    );
+    if (memIndex !== -1) {
+      memoryStore.coupons.splice(memIndex, 1);
     }
-    sendSuccess(res, 'Coupon deleted');
+
+    sendSuccess(res, 'Coupon deleted successfully', {
+      deleted: result.rows[0] || { id },
+    });
   } catch (error) {
     next(error);
   }
