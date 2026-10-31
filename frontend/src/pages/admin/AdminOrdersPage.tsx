@@ -75,6 +75,7 @@ export const AdminOrdersPage: React.FC = () => {
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isResendingEmail, setIsResendingEmail] = useState<boolean>(false);
   const [resendEmailMsg, setResendEmailMsg] = useState<{ id: string; success: boolean; text: string } | null>(null);
+  const [showWhatsAppPreview, setShowWhatsAppPreview] = useState<boolean>(false);
 
   const { id: paramOrderId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -332,6 +333,92 @@ export const AdminOrdersPage: React.FC = () => {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   };
 
+  // Generate complete WhatsApp customer message with itemized produce, payment info & live location request
+  const generateOrderWhatsAppMessage = useCallback((order: Order): string => {
+    const customerName = order.customer_name || order.address_snapshot?.full_name || 'Valued Customer';
+    const orderNumber = order.order_number || order.id?.slice(0, 8) || 'N/A';
+
+    let dateStr = '';
+    try {
+      dateStr = new Date(order.created_at).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      dateStr = 'Recently';
+    }
+
+    const statusLabels: Record<string, string> = {
+      pending: 'New Order (Pending Confirmation)',
+      confirmed: 'Confirmed & Queued for Harvest',
+      preparing: 'Harvesting & Packing Fresh Produce',
+      packed: 'Packed & Ready for Dispatch',
+      out_for_delivery: 'Out for Delivery (On Route 🛵)',
+      delivered: 'Delivered Successfully ✅',
+      cancelled: 'Cancelled',
+    };
+    const statusLabel = statusLabels[order.order_status] || order.order_status?.toUpperCase() || 'Pending';
+
+    const paymentMethodLabels: Record<string, string> = {
+      cod: 'Cash on Delivery (COD)',
+      upi: 'UPI Online Payment',
+      online: 'Online Payment Gateway',
+      wallet: 'Fresh Wallet Balance',
+    };
+    const paymentMethodStr = paymentMethodLabels[order.payment_method] || order.payment_method?.toUpperCase() || 'COD';
+    const paymentStatusStr = (order.payment_status || 'PENDING').toUpperCase();
+
+    let itemsText = '';
+    if (order.items && order.items.length > 0) {
+      itemsText = order.items
+        .map((item, idx) => {
+          const name = item.product_name || (item as any).product_name_snapshot || 'Fresh Vegetable';
+          const unit = item.unit || (item as any).unit_snapshot || '1 unit';
+          const qty = item.quantity || 1;
+          const lineTotal = Number(item.subtotal || item.total || (Number(item.price || 0) * qty));
+          return `  ${idx + 1}. *${name}* (${unit}) × ${qty} = ₹${lineTotal.toFixed(2)}`;
+        })
+        .join('\n');
+    } else {
+      itemsText = '  • Farm-Fresh Organic Vegetables Harvest Batch';
+    }
+
+    const formattedAddress = getFormattedAddress(order);
+
+    return (
+      `🌱 *FRESH VEGETABLES ORGANIC*\n` +
+      `📦 *Order & Payment Confirmation*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Hello *${customerName}*,\n` +
+      `Thank you for shopping with Fresh Vegetables Organic! Here is your complete order, produce list, and payment summary:\n\n` +
+      `🧾 *Order ID:* #${orderNumber}\n` +
+      `📅 *Order Date:* ${dateStr}\n` +
+      `⚡ *Order Status:* ${statusLabel}\n\n` +
+      `🛒 *ORDERED PRODUCE LIST:*\n` +
+      `${itemsText}\n\n` +
+      `💳 *PAYMENT & BILL DETAILS:*\n` +
+      `• Item Subtotal: ₹${Number(order.subtotal || 0).toFixed(2)}\n` +
+      `• Delivery Charge: ${order.delivery_charge > 0 ? `₹${Number(order.delivery_charge).toFixed(2)}` : 'FREE'}\n` +
+      (order.discount > 0 ? `• Discount Applied: -₹${Number(order.discount).toFixed(2)}\n` : '') +
+      `• *Total Net Payable: ₹${Number(order.total || 0).toFixed(2)}*\n` +
+      `• Payment Mode: ${paymentMethodStr}\n` +
+      `• Payment Status: *${paymentStatusStr}*\n\n` +
+      `📍 *DELIVERY ADDRESS ON RECORD:*\n` +
+      `${formattedAddress}\n` +
+      (order.notes ? `🕒 *Delivery Preference / Slot:* ${order.notes}\n` : '') +
+      `\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📍 *LOCATION SHARING REQUEST:*\n` +
+      `*Please share your current WhatsApp live location* with us in this chat so our delivery partner can navigate directly to your exact doorstep without delay! 🛵💨\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🌿 *100% Certified Organic • Harvested Fresh Today*\n` +
+      `📞 Customer Support: +91 8106970384`
+    );
+  }, []);
+
   // Update order status handler
   const handleUpdateStatus = async (orderId: string, newStatus: string, newPaymentStatus?: string) => {
     try {
@@ -409,6 +496,7 @@ export const AdminOrdersPage: React.FC = () => {
   // Open order details drawer
   const openOrderDetails = (order: Order) => {
     setSelectedOrder(order);
+    setShowWhatsAppPreview(false);
     setIsDetailDrawerOpen(true);
   };
 
@@ -1263,12 +1351,12 @@ export const AdminOrdersPage: React.FC = () => {
                           </a>
                           <a
                             href={`https://wa.me/91${cleanMobile.length === 10 ? cleanMobile : cleanMobile.slice(-10)}?text=${encodeURIComponent(
-                              `Hello ${customerName}, regarding your Fresh Vegetables Organic order #${o.order_number}...`
+                              generateOrderWhatsAppMessage(o)
                             )}`}
                             target="_blank"
                             rel="noreferrer"
                             className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors"
-                            title="WhatsApp Customer"
+                            title="Send WhatsApp Order & Location Request"
                           >
                             <MessageCircle className="w-3.5 h-3.5" />
                           </a>
@@ -1552,9 +1640,7 @@ export const AdminOrdersPage: React.FC = () => {
 
                           <a
                             href={`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(
-                              `Hello ${
-                                selectedOrder.customer_name || 'Customer'
-                              }, this is Fresh Vegetables regarding your order #${selectedOrder.order_number}.`
+                              generateOrderWhatsAppMessage(selectedOrder)
                             )}`}
                             target="_blank"
                             rel="noreferrer"
@@ -1702,6 +1788,96 @@ export const AdminOrdersPage: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {/* WhatsApp Customer Dispatch & Live Location Request Card */}
+              {(() => {
+                const ph = selectedOrder.customer_mobile || selectedOrder.address_snapshot?.phone || '';
+                const cleanPhoneRaw = ph.replace(/\D/g, '');
+                const cleanPhone = cleanPhoneRaw.length > 10 ? cleanPhoneRaw.slice(-10) : cleanPhoneRaw;
+                const waMessage = generateOrderWhatsAppMessage(selectedOrder);
+
+                return (
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-950 border border-emerald-500/30 space-y-3.5 shadow-lg">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0 shadow-inner">
+                          <MessageCircle className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-white text-xs">WhatsApp Customer Dispatch</h4>
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                              Order + Bill + Location Request
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Connects to customer WhatsApp with itemized produce list, payment summary, and asks for their live doorstep location.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setShowWhatsAppPreview((prev) => !prev)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all border border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{showWhatsAppPreview ? 'Hide Preview' : 'Preview Message'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(waMessage, `modal-wa-text-${selectedOrder.id}`, 'WhatsApp Message')}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all border border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                          title="Copy formatted message text"
+                        >
+                          {copiedField === `modal-wa-text-${selectedOrder.id}` ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-emerald-400 font-bold">Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy Text</span>
+                            </>
+                          )}
+                        </button>
+
+                        {cleanPhone ? (
+                          <a
+                            href={`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(waMessage)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/25 cursor-pointer"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                            <span>Connect on WhatsApp</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-500 italic">No phone number available</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Expandable Preview */}
+                    {showWhatsAppPreview && (
+                      <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 pb-1.5 border-b border-slate-800">
+                          <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> WhatsApp Message Body Preview
+                          </span>
+                          <span className="text-[10px] text-emerald-400 font-mono">Ready to Send</span>
+                        </div>
+                        <pre className="text-[11px] font-mono text-emerald-300/90 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto select-all bg-slate-900/70 p-3 rounded-lg border border-slate-800/80">
+                          {waMessage}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* 3. Delivery Address & Google Maps Location */}
               <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
