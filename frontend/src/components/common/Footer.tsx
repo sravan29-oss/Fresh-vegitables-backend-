@@ -80,7 +80,7 @@ export const Footer: React.FC = () => {
                 className="w-11 h-11 rounded-full object-cover border-2 border-emerald-500/40 shadow-lg shadow-emerald-900/40"
               />
               <span className="font-black text-xl text-white tracking-tight">
-                Fresh<span className="text-brand-400">Vegetables</span>
+                Fresh<span className="text-brand-400"> Vegetables Organic</span>
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
@@ -158,7 +158,7 @@ export const Footer: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-        <p>© 2026 Fresh Vegetables Marketplace. All rights reserved.</p>
+        <p>© 2026 Fresh Vegetables Organic. All rights reserved.</p>
         <div className="flex items-center gap-2 text-emerald-400 font-semibold bg-emerald-950/60 border border-emerald-500/30 px-3.5 py-1.5 rounded-full shadow-xs">
           <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>EST. 2026 • 100% Genuine Certified Organic • Hyderabad, Telangana</span>

@@ -6,6 +6,15 @@ Allow: /
 Allow: /products
 Allow: /products/*
 
+# Ensure image bots & favicon crawlers have immediate access to brand icons
+User-agent: Googlebot-Image
+Allow: /
+Allow: /*.ico
+Allow: /*.png
+Allow: /*.jpg
+Allow: /*.jpeg
+Allow: /*.webp
+
 # Disallow Private & Administrative Sections
 Disallow: /admin/
 Disallow: /admin
@@ -21,4 +30,3 @@ Disallow: /register
 
 # Canonical XML Sitemap
 Sitemap: https://fresh-vegetables-organic.vercel.app/sitemap.xml
-

@@ -262,10 +262,10 @@ export const Header: React.FC = () => {
           
           {/* Left: Brand Icon + Delivery Time & Location Stack + Choose Location Control */}
           <div className="flex items-center gap-1.5 min-w-0">
-            <Link to="/" className="shrink-0 flex items-center" aria-label="Fresh Vegetables Home">
+            <Link to="/" className="shrink-0 flex items-center" aria-label="Fresh Vegetables Organic Home">
               <img
                 src="/logo.png"
-                alt="Fresh Vegetables"
+                alt="Fresh Vegetables Organic"
                 className="w-9 h-9 rounded-xl object-cover ring-1 ring-emerald-500/20 shadow-xs"
               />
             </Link>
@@ -480,7 +480,7 @@ export const Header: React.FC = () => {
               <div className="relative">
                 <img
                   src="/logo.png"
-                  alt="Fresh Vegetables Logo"
+                  alt="Fresh Vegetables Organic Logo"
                   className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm group-hover:scale-105 transition-all duration-300"
                 />
                 <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#0c831f] border-2 border-white flex items-center justify-center">
@@ -489,8 +489,9 @@ export const Header: React.FC = () => {
               </div>
 
               <div className="flex flex-col justify-center leading-none">
-                <span className="text-lg sm:text-2xl lg:text-[26px] font-black tracking-tight text-slate-900 group-hover:text-emerald-800 transition-colors">
-                  Fresh<span className="text-[#0c831f]">Vegetables</span>
+                <span className="text-lg sm:text-2xl lg:text-[24px] font-black tracking-tight text-slate-900 group-hover:text-emerald-800 transition-colors flex items-center gap-1.5 flex-wrap">
+                  <span>Fresh<span className="text-[#0c831f]">Vegetables</span></span>
+                  <span className="text-emerald-700 text-[10px] sm:text-xs font-black tracking-wider uppercase px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200/80">Organic</span>
                 </span>
                 <div className="flex text-[9.5px] font-extrabold uppercase tracking-[0.14em] text-slate-500 mt-1 items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
@@ -830,12 +831,13 @@ export const Header: React.FC = () => {
               <div className="flex items-center gap-3">
                 <img
                   src="/logo.png"
-                  alt="Fresh Vegetables Logo"
+                  alt="Fresh Vegetables Organic Logo"
                   className="w-11 h-11 rounded-xl object-cover ring-1 ring-slate-200"
                 />
                 <div>
-                  <h3 className="font-black text-base text-slate-900 leading-tight">
-                    Fresh<span className="text-[#0c831f]">Vegetables</span>
+                  <h3 className="font-black text-base text-slate-900 leading-tight flex items-center gap-1.5">
+                    <span>Fresh<span className="text-[#0c831f]">Vegetables</span></span>
+                    <span className="text-emerald-700 text-[10px] font-black uppercase px-1 py-0.5 rounded bg-emerald-50 border border-emerald-200/80">Organic</span>
                   </h3>
                   <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f]"></span>

@@ -1,16 +1,30 @@
 {
-  "short_name": "FreshVeggies",
-  "name": "Fresh Vegetables — Daily Farm Harvest",
+  "short_name": "FreshVegOrganic",
+  "name": "Fresh Vegetables Organic — Farm-Fresh Delivery",
   "icons": [
+    {
+      "src": "/favicon-48x48.png",
+      "type": "image/png",
+      "sizes": "48x48",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-96x96.png",
+      "type": "image/png",
+      "sizes": "96x96",
+      "purpose": "any"
+    },
     {
       "src": "/icon-192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
@@ -19,6 +33,6 @@
   "display": "standalone",
   "orientation": "portrait",
   "scope": "/",
-  "description": "Farm-fresh vegetables, crisp greens, and native harvest delivered straight from farmers to your kitchen in 30 minutes.",
+  "description": "Shop fresh vegetables online in Hyderabad with convenient home delivery within our 5 km service zone.",
   "categories": ["shopping", "food", "lifestyle"]
 }

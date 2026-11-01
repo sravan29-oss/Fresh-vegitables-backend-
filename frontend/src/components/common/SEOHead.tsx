@@ -12,10 +12,10 @@ interface SEOProps {
 }
 
 const BASE_URL = 'https://fresh-vegetables-organic.vercel.app';
-const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=1200&auto=format&fit=crop';
-const DEFAULT_TITLE = 'Fresh Vegetables Organic | Farm-Fresh Vegetables Online';
-const DEFAULT_DESCRIPTION = 'Shop fresh daily vegetables online with Fresh Vegetables Organic. Local doorstep delivery within our 5 km service zone in Hyderabad.';
-const DEFAULT_KEYWORDS = 'Fresh Vegetables Organic, fresh vegetables online, buy vegetables online, fresh vegetable delivery, online vegetable shopping';
+const DEFAULT_IMAGE = `${BASE_URL}/logo.png`;
+const DEFAULT_TITLE = 'Fresh Vegetables Organic Hyderabad | Buy Fresh Vegetables Online';
+const DEFAULT_DESCRIPTION = 'Shop fresh vegetables online with Fresh Vegetables Organic in Hyderabad. Discover fresh vegetables and convenient home delivery within our 5 km service zone.';
+const DEFAULT_KEYWORDS = 'Fresh Vegetables Organic, fresh vegetables online Hyderabad, buy vegetables online Hyderabad, organic vegetables Champapet, fresh vegetable delivery';
 
 function setMetaTag(attributeName: 'name' | 'property', attributeValue: string, content: string) {
   let element = document.querySelector(`meta[${attributeName}="${attributeValue}"]`) as HTMLMetaElement | null;
@@ -103,13 +103,44 @@ export const SEOHead: React.FC<SEOProps> = ({
         '@type': 'Organization',
         name: 'Fresh Vegetables Organic',
         url: BASE_URL,
-        logo: `${BASE_URL}/favicon.png`,
+        logo: `${BASE_URL}/logo.png`,
         contactPoint: {
           '@type': 'ContactPoint',
           telephone: '+91 8106970384',
           email: 'freshvegitables29@gmail.com',
           contactType: 'Customer Support',
           areaServed: 'IN',
+        },
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'LocalBusiness',
+        name: 'Fresh Vegetables Organic',
+        image: `${BASE_URL}/logo.png`,
+        url: BASE_URL,
+        telephone: '+91 8106970384',
+        priceRange: '₹₹',
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet',
+          addressLocality: 'Hyderabad',
+          addressRegion: 'Telangana',
+          postalCode: '500059',
+          addressCountry: 'IN',
+        },
+        geo: {
+          '@type': 'GeoCoordinates',
+          latitude: 17.34457,
+          longitude: 78.516972,
+        },
+        areaServed: {
+          '@type': 'GeoCircle',
+          geoMidpoint: {
+            '@type': 'GeoCoordinates',
+            latitude: 17.34457,
+            longitude: 78.516972,
+          },
+          geoRadius: '5000',
         },
       },
     ];

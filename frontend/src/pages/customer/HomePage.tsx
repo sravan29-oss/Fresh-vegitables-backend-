@@ -397,11 +397,10 @@ export const HomePage: React.FC = () => {
       }
 
       case 'testimonials': {
-        const reviews = section.configuration?.reviews || [
-          { name: 'Dr. Ananya Roy', role: 'Nutritionist, Hyderabad', comment: 'The palak and coriander stay fresh for an entire week. Truly farm quality!', rating: 5 },
-          { name: 'Rajesh Kulkarni', role: 'Home Chef', comment: 'Delivery is always on time within 15 mins and the tomatoes taste sweet and natural.', rating: 5 },
-          { name: 'Sneha Patel', role: 'Mother of two', comment: 'Zero pesticide test reports give me immense peace of mind for my kids.', rating: 5 },
-        ];
+        const reviews = section.configuration?.reviews;
+        if (!reviews || !Array.isArray(reviews) || reviews.length === 0) {
+          return null;
+        }
         return (
           <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
             <div className="text-center max-w-2xl mx-auto mb-10">
@@ -478,10 +477,37 @@ export const HomePage: React.FC = () => {
     <div className="space-y-8 sm:space-y-12 pb-24 md:pb-12">
       {/* Dynamic SEO Meta & Structured Data */}
       <SEOHead
-        title="Fresh Vegetables Organic | Farm-Fresh Vegetables Online"
-        description="Shop daily fresh vegetables online from Fresh Vegetables Organic. Local doorstep delivery within our 5 km service zone in Hyderabad."
+        title="Fresh Vegetables Organic Hyderabad | Buy Fresh Vegetables Online"
+        description="Shop fresh vegetables online with Fresh Vegetables Organic in Hyderabad. Discover fresh vegetables and convenient home delivery within our 5 km service zone."
         canonicalUrl="https://fresh-vegetables-organic.vercel.app/"
       />
+
+      {/* Primary Brand H1 & Regional Delivery Notice */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-1">
+        <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-xs border border-emerald-800/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-2xl">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] sm:text-xs font-bold tracking-wide uppercase">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+              Direct From Farmers • Hyderabad
+            </span>
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+              Fresh Vegetables Organic Hyderabad
+            </h1>
+            <p className="text-emerald-100/90 text-xs sm:text-sm font-medium leading-relaxed">
+              Buy fresh vegetables online with Fresh Vegetables Organic in Hyderabad. Discover farm-fresh produce and convenient doorstep delivery within our 5 km Champapet service zone.
+            </p>
+          </div>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Link
+              to="/products"
+              className="px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-black text-xs sm:text-sm transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Explore All Vegetables</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* Outside 5 km Service Area Prominent Banner */}
       {serviceability.checked && !serviceability.serviceable && (
