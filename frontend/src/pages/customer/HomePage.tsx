@@ -198,25 +198,25 @@ export const HomePage: React.FC = () => {
               </Link>
             </div>
 
-            <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-4">
+            <div className="flex overflow-x-auto no-scrollbar gap-3 pb-3 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-5">
               {catList.map((cat: Category) => (
                 <Link
                   key={cat.id}
                   to={`/products?category=${cat.slug}`}
-                  className="shrink-0 w-24 sm:w-auto p-3 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer select-none"
+                  className="group shrink-0 w-36 sm:w-auto p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
                 >
-                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center overflow-hidden mb-2 sm:mb-3 transition-colors">
+                  <div className="w-24 h-24 sm:w-36 sm:h-36 lg:w-40 lg:h-40 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
                     {cat.image ? (
                       <img
                         src={getProductImageUrl(cat.image, cat.name)}
                         alt={cat.name}
-                        className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full object-cover rounded-2xl sm:rounded-3xl group-hover:scale-108 transition-transform duration-500 ease-out"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                         }}
                       />
                     ) : (
-                      <span className="text-2xl sm:text-3xl">
+                      <span className="text-4xl sm:text-5xl">
                         {cat.slug.includes('leaf')
                           ? '🥬'
                           : cat.slug.includes('root')
@@ -231,10 +231,10 @@ export const HomePage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm group-hover:text-[#0c831f] transition-colors truncate max-w-full">
+                  <h3 className="font-black text-slate-900 text-sm sm:text-base lg:text-lg group-hover:text-[#0c831f] transition-colors truncate max-w-full tracking-tight">
                     {cat.name}
                   </h3>
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 font-medium">Fresh Harvest</span>
+                  <span className="text-[10px] sm:text-xs text-slate-400 group-hover:text-emerald-600 mt-1 font-semibold transition-colors">Fresh Harvest</span>
                 </Link>
               ))}
             </div>
@@ -566,30 +566,43 @@ export const HomePage: React.FC = () => {
                 </Link>
               </div>
 
-              <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-4">
+              <div className="flex overflow-x-auto no-scrollbar gap-3 pb-3 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-5">
                 {fallbackCategories.map((cat: Category) => (
                   <Link
                     key={cat.id}
                     to={`/products?category=${cat.slug}`}
-                    className="shrink-0 w-24 sm:w-auto p-3 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex flex-col items-center text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[#0c831f] cursor-pointer select-none"
+                    className="group shrink-0 w-36 sm:w-auto p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
                   >
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-2xl sm:text-3xl mb-2 sm:mb-3 transition-colors">
-                      {cat.slug.includes('leaf')
-                        ? '🥬'
-                        : cat.slug.includes('root')
-                        ? '🥕'
-                        : cat.slug.includes('exotic')
-                        ? '🥦'
-                        : cat.slug.includes('gourd')
-                        ? '🥒'
-                        : cat.slug.includes('herb')
-                        ? '🌿'
-                        : '🍅'}
+                    <div className="w-24 h-24 sm:w-36 sm:h-36 lg:w-40 lg:h-40 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
+                      {cat.image ? (
+                        <img
+                          src={getProductImageUrl(cat.image, cat.name)}
+                          alt={cat.name}
+                          className="w-full h-full object-cover rounded-2xl sm:rounded-3xl group-hover:scale-108 transition-transform duration-500 ease-out"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <span className="text-4xl sm:text-5xl">
+                          {cat.slug.includes('leaf')
+                            ? '🥬'
+                            : cat.slug.includes('root')
+                            ? '🥕'
+                            : cat.slug.includes('exotic')
+                            ? '🥦'
+                            : cat.slug.includes('gourd')
+                            ? '🥒'
+                            : cat.slug.includes('herb')
+                            ? '🌿'
+                            : '🍅'}
+                        </span>
+                      )}
                     </div>
-                    <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm group-hover:text-[#0c831f] transition-colors truncate max-w-full">
+                    <h3 className="font-black text-slate-900 text-sm sm:text-base lg:text-lg group-hover:text-[#0c831f] transition-colors truncate max-w-full tracking-tight">
                       {cat.name}
                     </h3>
-                    <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 font-medium">Fresh Harvest</span>
+                    <span className="text-[10px] sm:text-xs text-slate-400 group-hover:text-emerald-600 mt-1 font-semibold transition-colors">Fresh Harvest</span>
                   </Link>
                 ))}
               </div>
