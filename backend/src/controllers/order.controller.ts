@@ -23,6 +23,7 @@ import {
   getRecentOrderAlerts,
   handleAdminLiveStream,
 } from '../services/adminNotification.service';
+import { resolveCustomerUserId } from '../services/customerUser.service';
 
 // ===================== CUSTOMER =====================
 
@@ -31,7 +32,7 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
   try {
     await client.query('BEGIN');
 
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { address_id, payment_method, notes } = req.body;
 
     // 1. Verify address
@@ -360,7 +361,7 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
 
 export async function getOrders(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { page, limit, offset } = parsePaginationParams(req.query);
 
     let countResult = await db.query(
@@ -428,7 +429,7 @@ export async function getOrders(req: AuthRequest, res: Response, next: NextFunct
 
 export async function getOrderById(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { id } = req.params;
 
     const isAdmin = req.user?.role === 'admin' || req.user?.role === 'super_admin';

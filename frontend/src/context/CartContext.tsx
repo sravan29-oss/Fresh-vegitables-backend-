@@ -64,6 +64,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [cartNotification, setCartNotification] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+
+  const showCartNotice = useCallback((message: string, type: 'error' | 'success' = 'error') => {
+    setCartNotification({ message, type });
+    const timer = setTimeout(() => {
+      setCartNotification((prev) => (prev?.message === message ? null : prev));
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Authoritative location serviceability state
   const [serviceability, setServiceability] = useState<ServiceabilityState>(() => {
@@ -324,7 +333,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    if (user && user.role !== 'admin') {
+    if (user) {
       try {
         setIsLoading(true);
         const res = await api.get('/cart');
@@ -353,7 +362,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(false);
       }
     } else {
-      // Guest or browsing admin user: use local guest cart
+      // Guest: use local guest cart
       const guest = readGuestCart();
       setCart(guest);
     }
@@ -391,8 +400,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      if (user && user.role !== 'admin') {
-        // Authenticated customer: backend API
+      if (user) {
+        // Authenticated customer/admin: backend API
         await api.post('/cart/items', {
           product_id: productId,
           variant_id: variantId || undefined,
@@ -400,7 +409,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         await fetchCart();
       } else {
-        // Guest user or browsing admin: local guest cart
+        // Guest user: local guest cart
         const guestCart = readGuestCart();
         const existingIdx = guestCart.items.findIndex(
           (it) => it.product_id === productId && (variantId ? it.variant_id === variantId : !it.variant_id)
@@ -440,7 +449,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notifyLiveUpdate('cart');
       return true;
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to add item to cart');
+      console.error('Add to cart failed:', error);
+      const msg = error.response?.data?.message || 'Could not add item to cart. Please try again.';
+      showCartNotice(msg, 'error');
       return false;
     }
   };
@@ -457,7 +468,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      if (user && user.role !== 'admin') {
+      if (user) {
         await api.put(`/cart/items/${itemId}`, { quantity });
         await fetchCart();
       } else {
@@ -471,13 +482,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       notifyLiveUpdate('cart');
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to update quantity');
+      console.error('Update quantity failed:', error);
+      const msg = error.response?.data?.message || 'Could not update quantity. Please try again.';
+      showCartNotice(msg, 'error');
     }
   };
 
   const removeFromCart = async (itemId: string) => {
     try {
-      if (user && user.role !== 'admin') {
+      if (user) {
         await api.delete(`/cart/items/${itemId}`);
         await fetchCart();
       } else {
@@ -487,13 +500,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       notifyLiveUpdate('cart');
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to remove item');
+      console.error('Remove from cart failed:', error);
+      const msg = error.response?.data?.message || 'Could not remove item. Please try again.';
+      showCartNotice(msg, 'error');
     }
   };
 
   const clearCart = async () => {
     try {
-      if (user && user.role !== 'admin') {
+      if (user) {
         await api.delete('/cart');
         await fetchCart();
       } else {
@@ -547,6 +562,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         itemCount,
       }}
     >
+      {cartNotification && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[10000] w-[90%] max-w-md animate-in slide-in-from-top duration-300 pointer-events-none">
+          <div
+            className={`p-3.5 rounded-2xl shadow-xl border flex items-center justify-between gap-3 text-xs font-bold pointer-events-auto backdrop-blur-md ${
+              cartNotification.type === 'error'
+                ? 'bg-rose-950/95 border-rose-500/50 text-white'
+                : 'bg-emerald-950/95 border-emerald-500/50 text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${cartNotification.type === 'error' ? 'bg-rose-400 animate-pulse' : 'bg-emerald-400'}`} />
+              <span className="truncate">{cartNotification.message}</span>
+            </div>
+            <button
+              onClick={() => setCartNotification(null)}
+              className="text-white/70 hover:text-white p-1 shrink-0 cursor-pointer text-sm"
+              aria-label="Dismiss notice"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       {children}
     </CartContext.Provider>
   );

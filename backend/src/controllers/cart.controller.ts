@@ -5,10 +5,11 @@ import { sendSuccess } from '../utils/apiResponse';
 import { AppError, NotFoundError, ValidationError } from '../utils/appError';
 import { memoryStore } from '../config/mockDb';
 import { getPersistedDeliverySettings } from '../services/deliverySettings.service';
+import { resolveCustomerUserId } from '../services/customerUser.service';
 
 export async function getCart(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
 
     // Ensure cart exists
     let cartResult = await db.query('SELECT id FROM carts WHERE user_id = $1', [userId]);
@@ -96,7 +97,7 @@ export async function getCart(req: AuthRequest, res: Response, next: NextFunctio
 
 export async function addToCart(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { product_id, variant_id, quantity } = req.body;
 
     // Verify product exists and is active
@@ -107,14 +108,20 @@ export async function addToCart(req: AuthRequest, res: Response, next: NextFunct
     if (product.rows.length === 0) throw new NotFoundError('Product not found or unavailable');
 
     // Check variant if provided
-    let availableStock = product.rows[0].stock_quantity;
-    if (variant_id) {
+    let availableStock = Number(product.rows[0].stock_quantity ?? 0);
+    let validVariantId: string | null = null;
+
+    if (variant_id && typeof variant_id === 'string' && variant_id.trim() && variant_id !== 'null' && variant_id !== 'undefined') {
+      const vId = variant_id.trim();
       const variant = await db.query(
         "SELECT id, stock_quantity FROM product_variants WHERE id = $1 AND product_id = $2 AND status = 'active'",
-        [variant_id, product_id]
+        [vId, product_id]
       );
-      if (variant.rows.length === 0) throw new NotFoundError('Variant not found');
-      availableStock = variant.rows[0].stock_quantity;
+      if (variant.rows.length === 0) {
+        throw new NotFoundError('Selected variant pack size is no longer available');
+      }
+      validVariantId = variant.rows[0].id;
+      availableStock = Number(variant.rows[0].stock_quantity ?? 0);
     }
 
     // Check stock
@@ -122,7 +129,7 @@ export async function addToCart(req: AuthRequest, res: Response, next: NextFunct
       throw new ValidationError(`Only ${availableStock} items available in stock`);
     }
 
-    // Get or create cart
+    // Get or create cart for resolved user
     let cartResult = await db.query('SELECT id FROM carts WHERE user_id = $1', [userId]);
     if (cartResult.rows.length === 0) {
       cartResult = await db.query('INSERT INTO carts (user_id) VALUES ($1) RETURNING id', [userId]);
@@ -133,7 +140,7 @@ export async function addToCart(req: AuthRequest, res: Response, next: NextFunct
     const existing = await db.query(
       `SELECT id, quantity FROM cart_items
        WHERE cart_id = $1 AND product_id = $2 AND (variant_id = $3 OR (variant_id IS NULL AND $3::uuid IS NULL))`,
-      [cartId, product_id, variant_id || null]
+      [cartId, product_id, validVariantId]
     );
 
     if (existing.rows.length > 0) {
@@ -149,7 +156,7 @@ export async function addToCart(req: AuthRequest, res: Response, next: NextFunct
       await db.query(
         `INSERT INTO cart_items (cart_id, product_id, variant_id, quantity)
          VALUES ($1, $2, $3, $4)`,
-        [cartId, product_id, variant_id || null, quantity]
+        [cartId, product_id, validVariantId, quantity]
       );
     }
 
@@ -161,7 +168,7 @@ export async function addToCart(req: AuthRequest, res: Response, next: NextFunct
 
 export async function updateCartItem(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { id } = req.params;
     const { quantity } = req.body;
 
@@ -180,8 +187,8 @@ export async function updateCartItem(req: AuthRequest, res: Response, next: Next
     if (item.rows.length === 0) throw new NotFoundError('Cart item not found');
 
     const availableStock = item.rows[0].variant_id
-      ? item.rows[0].variant_stock
-      : item.rows[0].product_stock;
+      ? Number(item.rows[0].variant_stock ?? 0)
+      : Number(item.rows[0].product_stock ?? 0);
 
     if (quantity > availableStock) {
       throw new ValidationError(`Only ${availableStock} items available`);
@@ -197,7 +204,7 @@ export async function updateCartItem(req: AuthRequest, res: Response, next: Next
 
 export async function removeCartItem(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { id } = req.params;
 
     const result = await db.query(
@@ -218,7 +225,7 @@ export async function removeCartItem(req: AuthRequest, res: Response, next: Next
 
 export async function clearCart(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
 
     await db.query(
       `DELETE FROM cart_items WHERE cart_id = (SELECT id FROM carts WHERE user_id = $1)`,

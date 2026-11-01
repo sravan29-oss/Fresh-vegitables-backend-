@@ -41,13 +41,18 @@ export async function getHomepageData(req: Request, res: Response, next: NextFun
     const banners = bannersRes.rows || [];
 
     // Pull active categories and products via database
-    const [categoriesRes, productsRes] = await Promise.all([
+    const [categoriesRes, productsRes, variantsRes] = await Promise.all([
       db.query("SELECT * FROM categories WHERE status = 'active' ORDER BY display_order ASC"),
       db.query("SELECT * FROM products WHERE status = 'active'"),
+      db.query("SELECT * FROM product_variants WHERE status = 'active' ORDER BY selling_price ASC"),
     ]);
 
     const allCategories = categoriesRes.rows || [];
-    const allProducts = productsRes.rows || [];
+    const allVariants = variantsRes.rows || [];
+    const allProducts = (productsRes.rows || []).map((p: any) => ({
+      ...p,
+      variants: allVariants.filter((v: any) => v.product_id === p.id),
+    }));
 
     // Attach enriched preview products or categories for specific rail types
     const enrichedSections = activeSections.map((sec: any) => {
@@ -92,19 +97,26 @@ export async function getHomepagePreview(req: Request, res: Response, next: Next
       `SELECT * FROM homepage_banners ORDER BY display_order ASC`
     );
 
-    const [categoriesRes, productsRes] = await Promise.all([
+    const [categoriesRes, productsRes, variantsRes] = await Promise.all([
       db.query("SELECT * FROM categories WHERE status = 'active' ORDER BY display_order ASC"),
       db.query("SELECT * FROM products WHERE status = 'active'"),
+      db.query("SELECT * FROM product_variants WHERE status = 'active' ORDER BY selling_price ASC"),
     ]);
+
+    const allVariants = variantsRes.rows || [];
+    const allProducts = (productsRes.rows || []).map((p: any) => ({
+      ...p,
+      variants: allVariants.filter((v: any) => v.product_id === p.id),
+    }));
 
     const enrichedSections = (sectionsRes.rows || []).map((sec: any) => {
       let enrichedData: any = {};
       if (sec.type === 'categories') {
         enrichedData.categories = categoriesRes.rows || [];
       } else if (sec.type === 'featured_products' || sec.type === 'fresh_arrivals') {
-        enrichedData.products = (productsRes.rows || []).filter((p: any) => p.featured).slice(0, 8);
+        enrichedData.products = allProducts.filter((p: any) => p.featured).slice(0, 8);
       } else if (sec.type === 'best_sellers') {
-        enrichedData.products = (productsRes.rows || []).filter((p: any) => p.best_seller).slice(0, 8);
+        enrichedData.products = allProducts.filter((p: any) => p.best_seller).slice(0, 8);
       } else if (sec.type === 'hero_banner') {
         enrichedData.banners = bannersRes.rows || [];
       }
