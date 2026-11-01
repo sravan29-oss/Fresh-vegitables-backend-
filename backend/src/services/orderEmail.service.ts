@@ -27,9 +27,24 @@ export function isValidEmail(email: string | null | undefined): boolean {
  * Extract verified customer email from order user record or address snapshot
  */
 export function extractCustomerEmail(order: any, addressSnapshot: any): string | null {
-  const candidate = order?.customer_email || addressSnapshot?.email || order?.email || null;
-  if (candidate && isValidEmail(candidate)) {
-    return candidate.trim();
+  const ownerEmail = (env.ORDER_NOTIFICATION_EMAIL || 'freshvegitables29@gmail.com').trim().toLowerCase();
+  const candidate = (
+    order?.customer_email ||
+    addressSnapshot?.email ||
+    order?.user_email ||
+    order?.email ||
+    null
+  );
+
+  if (candidate && typeof candidate === 'string') {
+    const clean = candidate.trim().toLowerCase();
+    if (isValidEmail(clean)) {
+      // Safeguard: Never use store owner's alert email as customer recipient fallback
+      if (clean === ownerEmail && !order?.customer_email && !addressSnapshot?.email) {
+        return null;
+      }
+      return clean;
+    }
   }
   return null;
 }
@@ -410,7 +425,10 @@ export async function sendNewOrderAdminEmail(orderId: string, forceRetry = false
   try {
     // 1. Fetch complete order details from database
     const orderRes = await db.query(
-      `SELECT o.*, u.name as customer_name, u.email as customer_email, u.mobile as customer_phone
+      `SELECT o.*, 
+              COALESCE(NULLIF(o.customer_email, ''), NULLIF(u.email, '')) as customer_email,
+              COALESCE(u.name, o.address_snapshot->>'full_name', 'Customer') as customer_name,
+              COALESCE(u.mobile, o.address_snapshot->>'phone', '') as customer_phone
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        WHERE o.id = $1`,
@@ -882,9 +900,12 @@ export async function sendCustomerOrderConfirmedEmail(
   const notificationType = 'customer_order_confirmed';
 
   try {
-    // 1. Fetch complete order details
+    // 1. Fetch complete order details (prevent u.email from overriding o.customer_email)
     const orderRes = await db.query(
-      `SELECT o.*, u.name as customer_name, u.email as customer_email, u.mobile as customer_phone
+      `SELECT o.*, 
+              COALESCE(NULLIF(o.customer_email, ''), NULLIF(u.email, '')) as customer_email,
+              COALESCE(u.name, o.address_snapshot->>'full_name', 'Valued Customer') as customer_name,
+              COALESCE(u.mobile, o.address_snapshot->>'phone', '') as customer_phone
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        WHERE o.id = $1`,
@@ -979,13 +1000,11 @@ export async function sendCustomerOrderConfirmedEmail(
 
     const paymentMethodUpper = (order.payment_method || 'cod').toUpperCase();
     const isPaid = order.payment_status === 'paid';
-    const paymentStatusBadge = isPaid
-      ? '<span style="color: #0c831f; font-weight: 800;">Paid & Verified</span>'
-      : order.payment_method === 'cod'
-      ? '<span style="color: #d97706; font-weight: 800;">Cash on Delivery (Pay at Doorstep)</span>'
-      : '<span style="color: #64748b; font-weight: 800;">Pending Verification</span>';
+    const isCod = order.payment_method === 'cod';
 
-    const frontendBaseUrl = (env.FRONTEND_URL || 'https://fresh-vegitables-frontend.vercel.app').replace(/\/$/, '');
+    const confirmedEta = order.confirmed_eta || addressSnapshot?.confirmed_eta || '30–45 MINS';
+
+    const frontendBaseUrl = (env.FRONTEND_URL || 'https://fresh-vegetables-organic.vercel.app').replace(/\/$/, '');
     const trackingUrl = `${frontendBaseUrl}/orders/${order.id}/track`;
 
     // Items Table HTML
@@ -1000,19 +1019,19 @@ export async function sendCustomerOrderConfirmedEmail(
 
         return `
           <tr style="background-color: ${bgColor};">
-            <td style="padding: 11px 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+            <td style="padding: 12px 14px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-size: 13.5px;">
               ${name}
             </td>
-            <td style="padding: 11px 14px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-size: 12px;">
+            <td style="padding: 12px 14px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-size: 12.5px;">
               ${unit}
             </td>
-            <td style="padding: 11px 14px; text-align: center; font-weight: 800; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+            <td style="padding: 12px 14px; text-align: center; font-weight: 800; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-size: 13.5px;">
               ${qty}
             </td>
-            <td style="padding: 11px 14px; text-align: right; color: #334155; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+            <td style="padding: 12px 14px; text-align: right; color: #334155; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
               ₹${price}
             </td>
-            <td style="padding: 11px 14px; text-align: right; font-weight: 800; color: #0c831f; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+            <td style="padding: 12px 14px; text-align: right; font-weight: 800; color: #0c831f; border-bottom: 1px solid #e2e8f0; font-size: 13.5px;">
               ₹${lineTotal}
             </td>
           </tr>
@@ -1020,7 +1039,7 @@ export async function sendCustomerOrderConfirmedEmail(
       })
       .join('');
 
-    const subject = `Order Confirmed! Your Fresh Vegetables Order #${orderNumber}`;
+    const subject = `Your Order is Confirmed! — Fresh Vegetables Organic | Order #${orderNumber}`;
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -1042,7 +1061,7 @@ export async function sendCustomerOrderConfirmedEmail(
               <span style="display: inline-block; background-color: rgba(255,255,255,0.22); color: #ffffff; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">
                 ✅ Order Confirmed
               </span>
-              <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 900; letter-spacing: -0.02em;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 900; letter-spacing: -0.02em;">
                 Fresh Vegetables Organic
               </h1>
               <p style="margin: 4px 0 0; color: #e2fbe8; font-size: 13.5px; font-weight: 500;">
@@ -1051,14 +1070,17 @@ export async function sendCustomerOrderConfirmedEmail(
             </td>
           </tr>
 
-          <!-- Welcome Message -->
+          <!-- Welcome & Confirmation Message -->
           <tr>
-            <td style="padding: 24px 28px 12px;">
-              <h2 style="margin: 0 0 8px; font-size: 18px; font-weight: 800; color: #0f172a;">
-                Hi ${escapeHtml(customerName)},
+            <td style="padding: 26px 28px 12px;">
+              <h2 style="margin: 0 0 10px; font-size: 19px; font-weight: 800; color: #0f172a;">
+                Hello ${escapeHtml(customerName)},
               </h2>
-              <p style="margin: 0; font-size: 13.5px; line-height: 1.6; color: #334155;">
-                Thank you for your order! Your morning harvest vegetables have been confirmed and are being carefully packed by our farm team for speedy doorstep delivery.
+              <p style="margin: 0 0 8px; font-size: 15px; font-weight: 800; color: #0c831f;">
+                Thank you for shopping with Fresh Vegetables Organic!
+              </p>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #334155;">
+                Your order has been successfully received and confirmed. Our farm team is hand-picking and packaging your fresh organic produce for express doorstep delivery.
               </p>
             </td>
           </tr>
@@ -1068,43 +1090,74 @@ export async function sendCustomerOrderConfirmedEmail(
             <td style="padding: 12px 28px;">
               <table width="100%" style="background-color: #f8fafc; border-radius: 14px; border: 1px solid #e2e8f0; padding: 16px;" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #64748b;">
-                    <strong>Order Number:</strong><br>
-                    <span style="font-size: 14px; font-weight: 800; color: #0c831f;">#${escapeHtml(orderNumber)}</span>
+                  <td width="50%" style="padding: 6px 8px; font-size: 12px; color: #64748b;">
+                    <strong>Order ID:</strong><br>
+                    <span style="font-size: 14.5px; font-weight: 800; color: #0c831f;">#${escapeHtml(orderNumber)}</span>
                   </td>
-                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #64748b;">
-                    <strong>Order Date:</strong><br>
+                  <td width="50%" style="padding: 6px 8px; font-size: 12px; color: #64748b;">
+                    <strong>Order Date & Time:</strong><br>
                     <span style="font-size: 13px; font-weight: 700; color: #0f172a;">${escapeHtml(formattedDate)}</span>
                   </td>
                 </tr>
                 <tr>
-                  <td width="50%" style="padding: 8px 8px 4px; font-size: 12px; color: #64748b;">
-                    <strong>Estimated Delivery:</strong><br>
-                    <span style="font-size: 13px; font-weight: 800; color: #0f172a;">Today, within 25–35 mins</span>
+                  <td width="50%" style="padding: 8px 8px 6px; font-size: 12px; color: #64748b;">
+                    <strong>Confirmed ETA:</strong><br>
+                    <span style="font-size: 13.5px; font-weight: 800; color: #0c831f;">${escapeHtml(confirmedEta)}</span>
                   </td>
-                  <td width="50%" style="padding: 8px 8px 4px; font-size: 12px; color: #64748b;">
-                    <strong>Payment:</strong><br>
-                    <span style="font-size: 13px;">${paymentMethodUpper} (${paymentStatusBadge})</span>
+                  <td width="50%" style="padding: 8px 8px 6px; font-size: 12px; color: #64748b;">
+                    <strong>Payment Method:</strong><br>
+                    <span style="font-size: 13px; font-weight: 700; color: #0f172a;">
+                      ${isCod ? 'Cash on Delivery (COD)' : paymentMethodUpper}
+                    </span>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
 
+          <!-- Payment Information Callout -->
+          ${isCod ? `
+          <tr>
+            <td style="padding: 4px 28px 12px;">
+              <div style="background-color: #fefce8; border: 1.5px solid #fef08a; border-left: 4px solid #eab308; border-radius: 12px; padding: 14px 18px;">
+                <p style="margin: 0 0 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #854d0e; letter-spacing: 0.05em;">
+                  💵 Payment Information
+                </p>
+                <p style="margin: 0; font-size: 13.5px; line-height: 1.5; color: #713f12; font-weight: 600;">
+                  Your selected payment method is Cash on Delivery. Please pay the order amount when your vegetables are delivered.
+                </p>
+              </div>
+            </td>
+          </tr>
+          ` : `
+          <tr>
+            <td style="padding: 4px 28px 12px;">
+              <div style="background-color: #f0fdf4; border: 1.5px solid #bbf7d0; border-left: 4px solid #22c55e; border-radius: 12px; padding: 14px 18px;">
+                <p style="margin: 0 0 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #166534; letter-spacing: 0.05em;">
+                  💳 Payment Information
+                </p>
+                <p style="margin: 0; font-size: 13.5px; line-height: 1.5; color: #14532d; font-weight: 600;">
+                  Payment Status: ${isPaid ? 'Paid & Verified' : 'Authorized'}. Thank you!
+                </p>
+              </div>
+            </td>
+          </tr>
+          `}
+
           <!-- Items Ordered Table -->
           <tr>
             <td style="padding: 12px 28px;">
               <h3 style="margin: 0 0 10px; font-size: 14px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.04em;">
-                Produce in Your Basket
+                Purchased Produce & Pack Sizes
               </h3>
               <table width="100%" style="border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;" cellspacing="0" cellpadding="0">
                 <thead>
                   <tr style="background-color: #f1f5f9; text-align: left;">
-                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">Vegetable</th>
-                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">Unit</th>
-                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: center;">Qty</th>
-                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: right;">Price</th>
-                    <th style="padding: 9px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: right;">Total</th>
+                    <th style="padding: 10px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">Product</th>
+                    <th style="padding: 10px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">Pack/Unit</th>
+                    <th style="padding: 10px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: center;">Qty</th>
+                    <th style="padding: 10px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: right;">Unit Price</th>
+                    <th style="padding: 10px 14px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; text-align: right;">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1129,14 +1182,14 @@ export async function sendCustomerOrderConfirmedEmail(
                 </tr>
                 ` : ''}
                 <tr>
-                  <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Delivery Fee:</td>
+                  <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Delivery Charges:</td>
                   <td style="padding: 4px 0; font-size: 13px; text-align: right; font-weight: 700; color: #0f172a;">
                     ${deliveryCharge === 0 ? '<span style="color: #0c831f; font-weight: 800;">FREE</span>' : `₹${deliveryCharge.toFixed(2)}`}
                   </td>
                 </tr>
                 <tr style="border-top: 1.5px solid #cbd5e1;">
-                  <td style="padding: 10px 0 4px; font-size: 15px; font-weight: 900; color: #0f172a;">Total to Pay:</td>
-                  <td style="padding: 10px 0 4px; font-size: 18px; text-align: right; font-weight: 900; color: #0c831f;">₹${total}</td>
+                  <td style="padding: 10px 0 4px; font-size: 15px; font-weight: 900; color: #0f172a;">Final Payable Amount:</td>
+                  <td style="padding: 10px 0 4px; font-size: 19px; text-align: right; font-weight: 900; color: #0c831f;">₹${total}</td>
                 </tr>
               </table>
             </td>
@@ -1161,12 +1214,34 @@ export async function sendCustomerOrderConfirmedEmail(
             </td>
           </tr>
 
-          <!-- CTA Tracking Button -->
+          <!-- Website & CTA Tracking Buttons -->
           <tr>
-            <td align="center" style="padding: 16px 28px 24px;">
-              <a href="${trackingUrl}" target="_blank" style="display: inline-block; background-color: #0c831f; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 800; padding: 13px 28px; border-radius: 12px; box-shadow: 0 4px 14px rgba(12,131,31,0.25);">
-                Track Your Delivery Live →
-              </a>
+            <td align="center" style="padding: 18px 28px 12px;">
+              <table role="presentation" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <a href="${frontendBaseUrl}" target="_blank" style="display: inline-block; background-color: #0c831f; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 800; padding: 13px 28px; border-radius: 12px; box-shadow: 0 4px 14px rgba(12,131,31,0.25);">
+                      Visit Fresh Vegetables Organic →
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 10px;">
+                    <a href="${trackingUrl}" target="_blank" style="color: #0c831f; font-size: 13px; font-weight: 700; text-decoration: underline;">
+                      Track Your Order Live
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Warm Closing -->
+          <tr>
+            <td style="padding: 10px 28px 24px; text-align: center;">
+              <p style="margin: 0; font-size: 14px; font-weight: 800; color: #0c831f;">
+                Thank you for choosing Fresh Vegetables Organic. Shop Fresh. Live Healthy!
+              </p>
             </td>
           </tr>
 
@@ -1195,34 +1270,35 @@ export async function sendCustomerOrderConfirmedEmail(
     `;
 
     const textContent = `
-ORDER CONFIRMED — FRESH VEGETABLES ORGANIC
-Order #${orderNumber}
+Hello ${customerName},
+
+Thank you for shopping with Fresh Vegetables Organic!
+Your order has been successfully received.
+
 ==================================================
+ORDER CONFIRMATION: #${orderNumber}
+==================================================
+Order Date & Time: ${formattedDate}
+Confirmed Estimated Delivery (ETA): ${confirmedEta}
+Payment Method: ${isCod ? 'Cash on Delivery (COD)' : paymentMethodUpper}
 
-Hi ${customerName},
+ITEMS PURCHASED:
+${items.map((i) => `- ${i.product_name_snapshot} (${i.unit_snapshot}) x ${i.quantity} @ ₹${Number(i.price_snapshot).toFixed(2)} = ₹${Number(i.total).toFixed(2)}`).join('\n')}
 
-Thank you for your order! Your morning harvest vegetables have been confirmed and are being prepared for delivery.
-
-Order Number: #${orderNumber}
-Order Date: ${formattedDate}
-Estimated Delivery: Today, within 25–35 mins
-Payment Method: ${paymentMethodUpper} (${isPaid ? 'Paid' : 'Pending'})
-
-ITEMS ORDERED:
-${items.map((i) => `- ${i.product_name_snapshot} (${i.unit_snapshot}) x ${i.quantity} = ₹${i.total}`).join('\n')}
-
+ORDER SUMMARY:
 Subtotal: ₹${subtotal}
-${Number(discount) > 0 ? `Discount Savings: -₹${discount}\n` : ''}Delivery Fee: ${deliveryCharge === 0 ? 'FREE' : `₹${deliveryCharge.toFixed(2)}`}
-Total Amount: ₹${total}
+${Number(discount) > 0 ? `Discount Savings: -₹${discount}\n` : ''}Delivery Charges: ${deliveryCharge === 0 ? 'FREE' : `₹${deliveryCharge.toFixed(2)}`}
+Final Payable Amount: ₹${total}
 
 DELIVERY ADDRESS:
 ${formattedAddress}
-${deliveryNotes ? `Instructions: ${deliveryNotes}\n` : ''}
-
+${deliveryNotes ? `Delivery Instructions: ${deliveryNotes}\n` : ''}
+${isCod ? '\nPAYMENT INFORMATION:\nYour selected payment method is Cash on Delivery. Please pay the order amount when your vegetables are delivered.\n' : ''}
 Track your order live: ${trackingUrl}
+Visit our website: https://fresh-vegetables-organic.vercel.app/
 
+Thank you for choosing Fresh Vegetables Organic. Shop Fresh. Live Healthy!
 Customer Support: +91 8106970384 | freshvegitables29@gmail.com
-Fresh Vegetables Organic, Hyderabad, Telangana
     `.trim();
 
     // 7. Dispatch via unified multi-engine
@@ -1292,7 +1368,10 @@ export async function sendCustomerOrderCancelledEmail(
 
   try {
     const orderRes = await db.query(
-      `SELECT o.*, u.name as customer_name, u.email as customer_email, u.mobile as customer_phone
+      `SELECT o.*, 
+              COALESCE(NULLIF(o.customer_email, ''), NULLIF(u.email, '')) as customer_email,
+              COALESCE(u.name, o.address_snapshot->>'full_name', 'Customer') as customer_name,
+              COALESCE(u.mobile, o.address_snapshot->>'phone', '') as customer_phone
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        WHERE o.id = $1`,
@@ -1563,7 +1642,10 @@ export async function sendCustomerOrderDeliveredEmail(
 
   try {
     const orderRes = await db.query(
-      `SELECT o.*, u.name as customer_name, u.email as customer_email, u.mobile as customer_phone
+      `SELECT o.*, 
+              COALESCE(NULLIF(o.customer_email, ''), NULLIF(u.email, '')) as customer_email,
+              COALESCE(u.name, o.address_snapshot->>'full_name', 'Customer') as customer_name,
+              COALESCE(u.mobile, o.address_snapshot->>'phone', '') as customer_phone
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        WHERE o.id = $1`,

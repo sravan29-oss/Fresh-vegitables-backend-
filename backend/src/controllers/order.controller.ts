@@ -18,6 +18,7 @@ import {
   sendCustomerOrderDeliveredEmail,
   handleOrderNotificationEvent,
   testOrderEmailConnection,
+  isValidEmail,
 } from '../services/orderEmail.service';
 import {
   broadcastNewOrderToAdmins,
@@ -34,7 +35,13 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     await client.query('BEGIN');
 
     const userId = await resolveCustomerUserId(req.user!);
-    const { address_id, payment_method, notes } = req.body;
+    const { address_id, payment_method, notes, customer_email, email } = req.body;
+
+    // Validate customer email address for order confirmation & receipt
+    const resolvedCustomerEmail = (customer_email || email || req.user?.email || '').trim().toLowerCase();
+    if (!resolvedCustomerEmail || !isValidEmail(resolvedCustomerEmail)) {
+      throw new ValidationError('A valid email address is required to receive your order confirmation.');
+    }
 
     // 1. Verify address
     const addressResult = await client.query(
@@ -296,6 +303,7 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     const addressSnapshot = {
       full_name: address.full_name,
       phone: address.phone,
+      email: resolvedCustomerEmail,
       house_number: address.house_number,
       street: address.street,
       area: address.area,
@@ -319,13 +327,23 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     const initialPaymentStatus = isCod ? 'awaiting_cod_collection' : 'pending';
     const orderNumber = generateOrderNumber();
     const orderResult = await client.query(
-      `INSERT INTO orders (order_number, user_id, address_snapshot, subtotal, delivery_charge,
+      `INSERT INTO orders (order_number, user_id, customer_email, address_snapshot, subtotal, delivery_charge,
        discount, tax, total, payment_method, payment_status, order_status, notes, confirmed_eta, delivery_zone_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING *`,
-      [orderNumber, userId, JSON.stringify(addressSnapshot), subtotal, deliveryCharge + codFee,
+      [orderNumber, userId, resolvedCustomerEmail, JSON.stringify(addressSnapshot), subtotal, deliveryCharge + codFee,
        discount, tax, total, payment_method, initialPaymentStatus, 'pending', notes || null, confirmedEta, zoneName]
     );
+
+    // Update user profile email if missing
+    try {
+      await client.query(
+        "UPDATE users SET email = $1 WHERE id = $2 AND (email IS NULL OR email = '')",
+        [resolvedCustomerEmail, userId]
+      );
+    } catch (uErr) {
+      console.warn('Could not backfill user profile email:', uErr);
+    }
 
     // 8. Create order items
     for (const item of orderItems) {
@@ -701,7 +719,7 @@ export async function adminGetOrders(req: AuthRequest, res: Response, next: Next
     }
 
     if (search) {
-      whereClause += ` AND (o.order_number ILIKE $${paramIdx} OR u.name ILIKE $${paramIdx} OR u.mobile ILIKE $${paramIdx} OR (o.address_snapshot->>'full_name') ILIKE $${paramIdx} OR (o.address_snapshot->>'phone') ILIKE $${paramIdx})`;
+      whereClause += ` AND (o.order_number ILIKE $${paramIdx} OR u.name ILIKE $${paramIdx} OR u.mobile ILIKE $${paramIdx} OR o.customer_email ILIKE $${paramIdx} OR (o.address_snapshot->>'full_name') ILIKE $${paramIdx} OR (o.address_snapshot->>'phone') ILIKE $${paramIdx} OR (o.address_snapshot->>'email') ILIKE $${paramIdx} OR u.email ILIKE $${paramIdx})`;
       params.push(`%${search}%`);
       paramIdx++;
     }
@@ -739,7 +757,9 @@ export async function adminGetOrders(req: AuthRequest, res: Response, next: Next
       `SELECT o.*,
               COALESCE(u.name, o.address_snapshot->>'full_name', 'Customer') as customer_name,
               COALESCE(u.mobile, o.address_snapshot->>'phone', '') as customer_mobile,
-              COALESCE(u.email, '') as customer_email
+              COALESCE(o.customer_email, o.address_snapshot->>'email', u.email, '') as customer_email,
+              (SELECT status FROM order_notifications WHERE order_id = o.id AND notification_type = 'admin_email' ORDER BY created_at DESC LIMIT 1) as admin_email_status,
+              (SELECT status FROM order_notifications WHERE order_id = o.id AND notification_type = 'customer_order_confirmed' ORDER BY created_at DESC LIMIT 1) as customer_email_status
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        ${whereClause}
@@ -776,7 +796,9 @@ export async function adminGetOrderById(req: AuthRequest, res: Response, next: N
       `SELECT o.*,
               COALESCE(u.name, o.address_snapshot->>'full_name', 'Customer') as customer_name,
               COALESCE(u.mobile, o.address_snapshot->>'phone', '') as customer_mobile,
-              COALESCE(u.email, '') as customer_email
+              COALESCE(o.customer_email, o.address_snapshot->>'email', u.email, '') as customer_email,
+              (SELECT status FROM order_notifications WHERE order_id = o.id AND notification_type = 'admin_email' ORDER BY created_at DESC LIMIT 1) as admin_email_status,
+              (SELECT status FROM order_notifications WHERE order_id = o.id AND notification_type = 'customer_order_confirmed' ORDER BY created_at DESC LIMIT 1) as customer_email_status
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        WHERE o.id = $1`,
@@ -966,6 +988,24 @@ export async function adminResendOrderEmail(req: AuthRequest, res: Response, nex
   try {
     const { id } = req.params;
     const type = req.body?.type || req.query?.type || 'admin';
+    const targetEmail = req.body?.email || req.body?.customer_email;
+
+    if (targetEmail && typeof targetEmail === 'string' && isValidEmail(targetEmail.trim())) {
+      const cleanEmail = targetEmail.trim().toLowerCase();
+      await db.query(
+        `UPDATE orders 
+         SET customer_email = $1,
+             customer_email_error = NULL,
+             address_snapshot = jsonb_set(
+               COALESCE(address_snapshot::jsonb, '{}'::jsonb),
+               '{email}',
+               to_jsonb($1::text)
+             )
+         WHERE id = $2`,
+        [cleanEmail, id]
+      );
+    }
+
     let result: { success: boolean; message: string; details?: any };
 
     if (type === 'customer_confirmed') {

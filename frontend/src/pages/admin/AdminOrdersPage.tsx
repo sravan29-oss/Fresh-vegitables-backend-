@@ -113,16 +113,26 @@ export const AdminOrdersPage: React.FC = () => {
     type: 'admin' | 'customer_confirmed' | 'customer_cancelled' | 'customer_delivered' = 'admin'
   ) => {
     try {
+      let emailToUse = selectedOrder?.customer_email;
+      if (type === 'customer_confirmed' && (!emailToUse || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToUse))) {
+        const prompted = window.prompt('Enter customer email address for this confirmation:', selectedOrder?.customer_email || '');
+        if (!prompted || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(prompted.trim())) {
+          showToast('error', 'A valid customer email address is required.');
+          return;
+        }
+        emailToUse = prompted.trim();
+      }
+
       setIsResendingEmail(true);
       setResendEmailMsg(null);
-      const res = await api.post(`/orders/admin/${orderId}/resend-email`, { type }, { timeout: 15000 });
+      const res = await api.post(`/orders/admin/${orderId}/resend-email`, { type, email: emailToUse }, { timeout: 15000 });
       const msg = res.data?.message || 'Email dispatched successfully!';
       showToast('success', msg);
       setResendEmailMsg({ id: orderId, success: true, text: msg });
       setSelectedOrder((prev: any) => {
         if (!prev || prev.id !== orderId) return prev;
         if (type === 'customer_confirmed') {
-          return { ...prev, customer_email_sent: true, customer_email_error: null };
+          return { ...prev, customer_email: emailToUse || prev.customer_email, customer_email_sent: true, customer_email_error: null };
         } else if (type === 'customer_cancelled') {
           return { ...prev, cancellation_email_sent: true };
         } else if (type === 'customer_delivered') {
@@ -1667,12 +1677,38 @@ export const AdminOrdersPage: React.FC = () => {
                   </div>
                 </div>
 
-                {selectedOrder.customer_email && (
-                  <div className="pt-2 border-t border-slate-800/60 text-xs">
-                    <span className="text-slate-500 text-[11px]">Email Address: </span>
-                    <span className="text-slate-300 font-medium">{selectedOrder.customer_email}</span>
+                <div className="pt-2 border-t border-slate-800/60 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 text-[11px]">Customer Email: </span>
+                    <span className={`font-medium ${selectedOrder.customer_email ? 'text-slate-300' : 'text-amber-400 italic'}`}>
+                      {selectedOrder.customer_email || 'Not on file'}
+                    </span>
                   </div>
-                )}
+                  <button
+                    onClick={() => {
+                      const prompted = window.prompt('Update customer email address:', selectedOrder.customer_email || '');
+                      if (prompted && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(prompted.trim())) {
+                        api.post(`/orders/admin/${selectedOrder.id}/resend-email`, {
+                          type: 'customer_confirmed',
+                          email: prompted.trim().toLowerCase(),
+                        }).then((res) => {
+                          showToast('success', res.data?.message || 'Email updated & confirmation sent!');
+                          setSelectedOrder((prev: any) => ({
+                            ...prev,
+                            customer_email: prompted.trim().toLowerCase(),
+                            customer_email_sent: true,
+                            customer_email_error: null,
+                          }));
+                        }).catch((err) => {
+                          showToast('error', err.response?.data?.message || 'Failed to update email');
+                        });
+                      }
+                    }}
+                    className="text-[10.5px] text-emerald-400 hover:text-emerald-300 underline font-semibold cursor-pointer"
+                  >
+                    {selectedOrder.customer_email ? 'Edit Email' : '+ Add Email'}
+                  </button>
+                </div>
 
                 {/* Email Notifications Status & Resend Options */}
                 <div className="pt-2.5 border-t border-slate-800/60 space-y-2.5">

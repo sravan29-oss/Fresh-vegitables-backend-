@@ -20,6 +20,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Loader2,
+  Mail,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Address, CouponValidationResult } from '../../types';
@@ -38,8 +39,19 @@ export const CheckoutPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'upi' | 'online' | 'wallet'>('cod');
   const [deliverySlot, setDeliverySlot] = useState<string>('');
   const [orderNotes, setOrderNotes] = useState<string>('');
+  const [customerEmail, setCustomerEmail] = useState<string>(() => {
+    return localStorage.getItem('fresh_customer_email') || '';
+  });
+  const [emailError, setEmailError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // Auto-populate customer email from authenticated user
+  useEffect(() => {
+    if (user?.email && !customerEmail) {
+      setCustomerEmail(user.email);
+    }
+  }, [user, customerEmail]);
 
   // Dynamically calculate real-time available delivery slots based on IST
   const availableSlots = useMemo(() => {
@@ -536,6 +548,18 @@ export const CheckoutPage: React.FC = () => {
       }
     }
 
+    // Customer confirmation email validation
+    const trimmedEmail = (customerEmail || '').trim().toLowerCase();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setEmailError('Please enter a valid email address to receive your order confirmation.');
+      setErrorMsg('Please enter a valid email address to receive your order confirmation.');
+      return;
+    }
+    setEmailError('');
+    try {
+      localStorage.setItem('fresh_customer_email', trimmedEmail);
+    } catch {}
+
     if (!selectedAddressId) {
       setErrorMsg('Please select or add a delivery address.');
       return;
@@ -623,14 +647,16 @@ export const CheckoutPage: React.FC = () => {
       setIsSubmitting(true);
       setErrorMsg('');
 
-      // Create base order in backend with verified coordinates
+      // Create base order in backend with verified coordinates and customer confirmation email
       const res = await api.post('/orders', {
         address_id: selectedAddressId,
+        customer_email: trimmedEmail,
+        email: trimmedEmail,
         payment_method: paymentMethod,
         latitude: orderLat,
         longitude: orderLng,
         discount: (cart.discount || 0) + (appliedCoupon ? appliedCoupon.discount_amount : 0),
-        notes: `Slot: ${deliverySlot}. ${orderNotes} ${appliedCoupon ? `[Coupon: ${appliedCoupon.coupon.code}]` : ''}`,
+        notes: `Slot: ${deliverySlot}. ${orderNotes} ${appliedCoupon ? `[Coupon: ${appliedCoupon.coupon.code}]` : ''}`.trim(),
       });
 
       if (res.data?.data) {
@@ -886,12 +912,53 @@ export const CheckoutPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 3. Payment Method Card (Admin-Controlled COD & Online Gateway) */}
+          {/* 3. Order Confirmation & Updates Email Card */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <Mail className="w-5 h-5 text-brand-600" />
+              <h3 className="text-lg font-bold text-slate-900">3. Order Confirmation Email</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              We'll send your verified order confirmation receipt, itemized produce breakdown, and live doorstep tracking updates to this email address.
+            </p>
+            <div>
+              <div className="relative">
+                <input
+                  type="email"
+                  placeholder="Enter your email address (e.g. name@gmail.com)"
+                  value={customerEmail}
+                  onChange={(e) => {
+                    setCustomerEmail(e.target.value);
+                    if (emailError) setEmailError('');
+                  }}
+                  className={`w-full text-xs sm:text-sm bg-slate-50 border rounded-2xl pl-10 pr-4 py-3.5 focus:outline-none focus:ring-2 transition-all ${
+                    emailError
+                      ? 'border-rose-400 focus:ring-rose-500/20 bg-rose-50/20 text-rose-900'
+                      : 'border-slate-200 focus:ring-brand-500/20 focus:border-brand-600 text-slate-800'
+                  }`}
+                />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+              {emailError ? (
+                <p className="text-[11px] text-rose-600 font-semibold mt-1.5 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{emailError}</span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>No spam guaranteed. Used strictly for order confirmations, invoices & delivery updates.</span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Payment Method Card (Admin-Controlled COD & Online Gateway) */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Banknote className="w-5 h-5 text-brand-600" />
-                <h3 className="text-lg font-bold text-slate-900">3. Payment Mode</h3>
+                <h3 className="text-lg font-bold text-slate-900">4. Payment Mode</h3>
               </div>
             </div>
 
