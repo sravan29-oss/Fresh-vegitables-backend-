@@ -726,7 +726,7 @@ export const AdminCMSPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-400 font-bold mb-1">Image URL (Optional)</label>
+                <label className="block text-slate-300 font-bold mb-1">Upload Image / Image URL (Optional)</label>
                 <input
                   type="text"
                   placeholder="https://images.unsplash.com/..."

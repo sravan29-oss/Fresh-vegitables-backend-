@@ -22,6 +22,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
 
+  const rawProductImage =
+    (product.images && product.images.length > 0 ? product.images[0] : '') ||
+    (product as any).image_url ||
+    (product as any).image ||
+    '';
+  const resolvedProductImage = getProductImageUrl(rawProductImage, product.name);
+
   const price = selectedVariant ? selectedVariant.selling_price : product.selling_price;
   const mrp = selectedVariant ? selectedVariant.mrp : product.mrp;
   const unit = selectedVariant ? selectedVariant.unit : product.unit;
@@ -48,11 +55,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     if (isOutOfStock) return;
 
+    // If product has multiple variants, open variant selection popup so customer can choose
+    if (product.variants && product.variants.length > 1) {
+      setIsVariantModalOpen(true);
+      return;
+    }
+
     setIsAdding(true);
     try {
       await addToCart(product.id, selectedVariant ? selectedVariant.id : null, 1, {
         name: product.name,
-        image: product.images?.[0] || '',
+        image: resolvedProductImage,
         selling_price: price,
         mrp: mrp,
         unit: selectedVariant ? selectedVariant.unit : product.unit,
@@ -131,23 +144,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
         {/* Vegetable Image - Strictly bounded within stage bounds */}
         <div className="w-full h-full flex items-center justify-center p-1.5 relative z-10 overflow-hidden">
-          {product.images && product.images.length > 0 ? (
-            <img
-              src={getProductImageUrl(product.images[0], product.name)}
-              alt={`Fresh ${product.name} - Organic Produce`}
-              className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain rounded-lg filter drop-shadow-xs group-hover:scale-105 transition-transform duration-300 ease-out select-none ${
-                isOutOfStock ? 'opacity-50 grayscale' : ''
-              }`}
-              loading="lazy"
-              onError={(e) => {
-                e.currentTarget.src = getFallbackImageUrl(product.name);
-              }}
-            />
-          ) : (
-            <span className="text-3xl sm:text-5xl select-none transform group-hover:scale-105 transition-transform duration-300">
-              🥬
-            </span>
-          )}
+          <img
+            src={resolvedProductImage}
+            alt={`Fresh ${product.name} - Organic Produce`}
+            className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain rounded-lg filter drop-shadow-xs group-hover:scale-105 transition-transform duration-300 ease-out select-none ${
+              isOutOfStock ? 'opacity-50 grayscale' : ''
+            }`}
+            loading="lazy"
+            onError={(e) => {
+              e.currentTarget.src = getFallbackImageUrl(product.name);
+            }}
+          />
         </div>
 
         {/* Sold Out Overlay */}
@@ -329,18 +336,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               <div className="p-4 sm:p-5 border-b border-slate-100 flex items-start gap-3.5 bg-slate-50/80 relative">
                 {/* Fetched Product Image Stage */}
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white border border-slate-200/80 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
-                  {product.images && product.images.length > 0 ? (
-                    <img
-                      src={getProductImageUrl(product.images[0], product.name)}
-                      alt={product.name}
-                      className="w-full h-full object-contain rounded-xl"
-                      onError={(e) => {
-                        e.currentTarget.src = getFallbackImageUrl(product.name);
-                      }}
-                    />
-                  ) : (
-                    <span className="text-3xl">🥬</span>
-                  )}
+                  <img
+                    src={resolvedProductImage}
+                    alt={product.name}
+                    className="w-full h-full object-contain rounded-xl"
+                    onError={(e) => {
+                      e.currentTarget.src = getFallbackImageUrl(product.name);
+                    }}
+                  />
                 </div>
 
                 {/* Product Info */}
@@ -407,6 +410,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                             : 'border-slate-200/80 hover:border-slate-300 bg-white hover:bg-slate-50/50'
                         }`}
                       >
+                        {/* Variant Thumbnail Stage */}
+                        <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200/80 p-1 shrink-0 flex items-center justify-center overflow-hidden">
+                          <img
+                            src={resolvedProductImage}
+                            alt={v.name}
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              e.currentTarget.src = getFallbackImageUrl(product.name);
+                            }}
+                          />
+                        </div>
+
                         {/* Left Details */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
