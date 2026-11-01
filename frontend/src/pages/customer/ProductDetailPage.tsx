@@ -16,16 +16,85 @@ export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addToCart, setIsCartOpen, serviceability, setIsLocationModalOpen, deliveryEstimate, deliverySettings } = useCart();
+  const { cart, addToCart, setIsCartOpen, serviceability, setIsLocationModalOpen, deliveryEstimate, deliverySettings } = useCart();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
-  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [serverError, setServerError] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+
+  // Unified available pack sizes list (Base Pack + Configured Variants)
+  const availablePackOptions = React.useMemo(() => {
+    if (!product) return [];
+    const list: Array<{
+      id: string | null;
+      name: string;
+      unit: string;
+      mrp: number;
+      selling_price: number;
+      stock_quantity: number;
+      status: string;
+      isBase?: boolean;
+    }> = [];
+
+    const activeVariants = (product.variants || []).filter((v) => v.status === 'active');
+    const baseUnitNorm = (product.unit || '').trim().toLowerCase();
+    const hasBaseInVariants = activeVariants.some(
+      (v) => (v.unit || '').trim().toLowerCase() === baseUnitNorm
+    );
+
+    if (product.unit && !hasBaseInVariants) {
+      list.push({
+        id: null,
+        name: `${product.name} Standard`,
+        unit: product.unit,
+        mrp: Number(product.mrp || product.selling_price),
+        selling_price: Number(product.selling_price),
+        stock_quantity: Number(product.stock_quantity ?? 0),
+        status: product.status || 'active',
+        isBase: true,
+      });
+    }
+
+    activeVariants.forEach((v) => {
+      list.push({
+        id: v.id,
+        name: v.name || `${product.name} ${v.unit}`,
+        unit: v.unit,
+        mrp: Number(v.mrp || v.selling_price),
+        selling_price: Number(v.selling_price),
+        stock_quantity: Number(v.stock_quantity ?? 0),
+        status: v.status,
+        isBase: false,
+      });
+    });
+
+    return list;
+  }, [product]);
+
+  useEffect(() => {
+    if (availablePackOptions.length > 0) {
+      const exists = availablePackOptions.some((o) => o.id === selectedOptionId);
+      if (!exists) {
+        const itemInCart = cart?.items?.find((ci) => ci.product_id === product?.id);
+        if (itemInCart) {
+          setSelectedOptionId(itemInCart.variant_id || null);
+        } else {
+          setSelectedOptionId(availablePackOptions[0].id);
+        }
+      }
+    } else {
+      setSelectedOptionId(null);
+    }
+  }, [availablePackOptions, selectedOptionId, cart?.items, product?.id]);
+
+  const currentOption = React.useMemo(() => {
+    return availablePackOptions.find((o) => o.id === selectedOptionId) || availablePackOptions[0] || null;
+  }, [availablePackOptions, selectedOptionId]);
 
   const fetchProduct = async (silent = false) => {
     try {
@@ -38,9 +107,6 @@ export const ProductDetailPage: React.FC = () => {
         const p = res.data.data;
         setProduct(p);
         setServerError(false);
-        if (p.variants && p.variants.length > 0 && !selectedVariant) {
-          setSelectedVariant(p.variants[0]);
-        }
         if (p.images && p.images.length > 0 && !activeImage) {
           setActiveImage(p.images[0]);
         }
@@ -111,11 +177,11 @@ export const ProductDetailPage: React.FC = () => {
   }
 
 
-  const price = selectedVariant ? selectedVariant.selling_price : product.selling_price;
-  const mrp = selectedVariant ? selectedVariant.mrp : product.mrp;
-  const unit = selectedVariant ? selectedVariant.unit : product.unit;
-  const stock = selectedVariant
-    ? Number(selectedVariant.stock_quantity ?? 0)
+  const price = currentOption ? currentOption.selling_price : Number(product.selling_price);
+  const mrp = currentOption ? currentOption.mrp : Number(product.mrp || product.selling_price);
+  const unit = currentOption ? currentOption.unit : product.unit;
+  const stock = currentOption
+    ? Number(currentOption.stock_quantity ?? 0)
     : Number(product.stock_quantity ?? 0);
   const minStock = product.minimum_stock ? Number(product.minimum_stock) : 5;
   const isOutOfStock = stock <= 0 || product.status !== 'active';
@@ -127,15 +193,15 @@ export const ProductDetailPage: React.FC = () => {
     try {
       const added = await addToCart(
         product.id,
-        selectedVariant ? selectedVariant.id : null,
+        currentOption?.id || null,
         quantity,
         {
           name: product.name,
           image: product.images?.[0] || '',
           selling_price: price,
           mrp: mrp,
-          unit: selectedVariant ? selectedVariant.unit : product.unit,
-          variant_name: selectedVariant?.name,
+          unit: unit,
+          variant_name: currentOption?.isBase ? undefined : currentOption?.name,
         }
       );
       if (added) {
@@ -360,31 +426,32 @@ export const ProductDetailPage: React.FC = () => {
             </div>
 
             {/* Weight / Pack Variant Selector */}
-            {product.variants && product.variants.length > 0 && (
+            {availablePackOptions && availablePackOptions.length > 1 && (
               <div className="pt-3">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Select Pack Size:
                 </label>
                 <div className="flex flex-wrap gap-2.5">
-                  {product.variants.map((v) => {
-                    const vStock = Number(v.stock_quantity ?? 0);
-                    const vOut = vStock <= 0;
-                    const vLow = !vOut && vStock <= 5;
+                  {availablePackOptions.map((opt) => {
+                    const optStock = Number(opt.stock_quantity ?? 0);
+                    const optOut = optStock <= 0 || opt.status !== 'active';
+                    const optLow = !optOut && optStock <= 5;
+                    const isSelected = selectedOptionId === opt.id;
                     return (
                       <button
-                        key={v.id}
-                        onClick={() => setSelectedVariant(v)}
-                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                          selectedVariant?.id === v.id
-                            ? 'border-brand-600 bg-brand-50 text-brand-800 shadow-sm'
+                        key={opt.id || 'base-pack'}
+                        onClick={() => setSelectedOptionId(opt.id)}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                          isSelected
+                            ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm ring-2 ring-emerald-500/20'
                             : 'border-slate-200 text-slate-700 hover:bg-slate-50'
                         }`}
                       >
-                        <span>{v.name} ({v.unit}) • ₹{v.selling_price}</span>
-                        {vOut ? (
+                        <span>{opt.name} ({opt.unit}) • ₹{opt.selling_price}</span>
+                        {optOut ? (
                           <span className="text-[10px] font-black text-rose-600 bg-rose-100 px-1.5 py-0.2 rounded">Out of stock</span>
-                        ) : vLow ? (
-                          <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded">Only {vStock}</span>
+                        ) : optLow ? (
+                          <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded">Only {optStock}</span>
                         ) : null}
                       </button>
                     );

@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { sendSuccess, sendPaginated } from '../utils/apiResponse';
 import { AppError, NotFoundError } from '../utils/appError';
 import { generateSlug } from '../utils/helpers';
+import cache from '../services/cache.service';
 
 // ===================== PUBLIC =====================
 
@@ -66,6 +67,7 @@ export async function createCategory(req: AuthRequest, res: Response, next: Next
       [name, slug, description || null, image, status, display_order]
     );
 
+    cache.invalidate('cms:homepage');
     sendSuccess(res, 'Category created successfully', result.rows[0], 201);
   } catch (error) {
     next(error);
@@ -113,6 +115,7 @@ export async function updateCategory(req: AuthRequest, res: Response, next: Next
       values
     );
 
+    cache.invalidate('cms:homepage');
     sendSuccess(res, 'Category updated successfully', result.rows[0]);
   } catch (error) {
     next(error);
@@ -132,6 +135,7 @@ export async function deleteCategory(req: AuthRequest, res: Response, next: Next
     // Permanently delete category from database
     await db.query('DELETE FROM categories WHERE id = $1', [id]);
 
+    cache.invalidate('cms:homepage');
     sendSuccess(res, 'Category deleted permanently from database');
   } catch (error) {
     next(error);

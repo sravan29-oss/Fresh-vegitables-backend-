@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Minus, Check, Clock, Ban, AlertTriangle, AlertCircle, ChevronDown, X, ShoppingBag } from 'lucide-react';
@@ -16,11 +16,94 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { addToCart, updateQuantity, cart, serviceability, deliveryEstimate, deliverySettings } = useCart();
   const navigate = useNavigate();
 
-  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
-    product.variants && product.variants.length > 0 ? product.variants[0] : null
-  );
   const [isAdding, setIsAdding] = useState(false);
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
+
+  // Filter active variants
+  const activeVariants = useMemo(() => {
+    return (product.variants || []).filter((v) => v.status === 'active');
+  }, [product.variants]);
+
+  // Unified available pack sizes list (Base Pack + Configured Variants)
+  const availablePackOptions = useMemo(() => {
+    const list: Array<{
+      id: string | null;
+      name: string;
+      unit: string;
+      mrp: number;
+      selling_price: number;
+      stock_quantity: number;
+      status: string;
+      isBase?: boolean;
+    }> = [];
+
+    const baseUnitNorm = (product.unit || '').trim().toLowerCase();
+    const hasBaseInVariants = activeVariants.some(
+      (v) => (v.unit || '').trim().toLowerCase() === baseUnitNorm
+    );
+
+    // If product has a base unit not already in variants, include base option
+    if (product.unit && !hasBaseInVariants) {
+      list.push({
+        id: null,
+        name: `${product.name} Standard`,
+        unit: product.unit,
+        mrp: Number(product.mrp || product.selling_price),
+        selling_price: Number(product.selling_price),
+        stock_quantity: Number(product.stock_quantity ?? 0),
+        status: product.status || 'active',
+        isBase: true,
+      });
+    }
+
+    activeVariants.forEach((v) => {
+      list.push({
+        id: v.id,
+        name: v.name || `${product.name} ${v.unit}`,
+        unit: v.unit,
+        mrp: Number(v.mrp || v.selling_price),
+        selling_price: Number(v.selling_price),
+        stock_quantity: Number(v.stock_quantity ?? 0),
+        status: v.status,
+        isBase: false,
+      });
+    });
+
+    return list;
+  }, [product, activeVariants]);
+
+  // Selected pack option ID: null for base pack, or variant UUID
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(() => {
+    const itemInCart = cart?.items?.find((item) => item.product_id === product.id);
+    if (itemInCart) return itemInCart.variant_id || null;
+    return null;
+  });
+
+  useEffect(() => {
+    if (availablePackOptions.length > 0) {
+      const exists = availablePackOptions.some((o) => o.id === selectedOptionId);
+      if (!exists) {
+        setSelectedOptionId(availablePackOptions[0].id);
+      }
+    } else {
+      setSelectedOptionId(null);
+    }
+  }, [availablePackOptions, selectedOptionId]);
+
+  // If user has an item in cart for this product, keep the card's active pack synchronized with their added item
+  useEffect(() => {
+    const itemsInCart = cart?.items?.filter((item) => item.product_id === product.id) || [];
+    if (itemsInCart.length > 0) {
+      const currentInCart = itemsInCart.find((ci) => (selectedOptionId ? ci.variant_id === selectedOptionId : !ci.variant_id));
+      if (!currentInCart) {
+        setSelectedOptionId(itemsInCart[0].variant_id || null);
+      }
+    }
+  }, [cart?.items, product.id, selectedOptionId]);
+
+  const currentOption = useMemo(() => {
+    return availablePackOptions.find((o) => o.id === selectedOptionId) || availablePackOptions[0] || null;
+  }, [availablePackOptions, selectedOptionId]);
 
   const rawProductImage =
     (product.images && product.images.length > 0 ? product.images[0] : '') ||
@@ -29,11 +112,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     '';
   const resolvedProductImage = getProductImageUrl(rawProductImage, product.name);
 
-  const price = selectedVariant ? selectedVariant.selling_price : product.selling_price;
-  const mrp = selectedVariant ? selectedVariant.mrp : product.mrp;
-  const unit = selectedVariant ? selectedVariant.unit : product.unit;
-  const stock = selectedVariant
-    ? Number(selectedVariant.stock_quantity ?? 0)
+  const price = currentOption ? currentOption.selling_price : Number(product.selling_price);
+  const mrp = currentOption ? currentOption.mrp : Number(product.mrp || product.selling_price);
+  const unit = currentOption ? currentOption.unit : product.unit;
+  const stock = currentOption
+    ? Number(currentOption.stock_quantity ?? 0)
     : Number(product.stock_quantity ?? 0);
   const minStock = product.minimum_stock ? Number(product.minimum_stock) : 5;
   const isOutOfStock = stock <= 0 || product.status !== 'active';
@@ -41,11 +124,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   const discount = mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
 
-  // Check if item currently in cart
-  const cartItem = cart?.items?.find(
-    (item) =>
-      item.product_id === product.id &&
-      (selectedVariant ? item.variant_id === selectedVariant.id : !item.variant_id)
+  // Check if current selected option is currently in cart
+  const cartItem = cart?.items?.find((item) =>
+    item.product_id === product.id &&
+    (currentOption?.id ? item.variant_id === currentOption.id : !item.variant_id)
   );
   const currentQuantity = cartItem ? cartItem.quantity : 0;
 
@@ -55,21 +137,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
     if (isOutOfStock) return;
 
-    // If product has multiple variants, open variant selection popup so customer can choose
-    if (product.variants && product.variants.length > 1) {
+    // If product has multiple pack size options, open variant selection popup so customer can choose
+    if (availablePackOptions.length > 1) {
       setIsVariantModalOpen(true);
       return;
     }
 
     setIsAdding(true);
     try {
-      await addToCart(product.id, selectedVariant ? selectedVariant.id : null, 1, {
+      await addToCart(product.id, currentOption?.id || null, 1, {
         name: product.name,
         image: resolvedProductImage,
         selling_price: price,
         mrp: mrp,
-        unit: selectedVariant ? selectedVariant.unit : product.unit,
-        variant_name: selectedVariant?.name,
+        unit: unit,
+        variant_name: currentOption?.isBase ? undefined : currentOption?.name,
       });
     } finally {
       setIsAdding(false);
@@ -179,7 +261,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <div>
           {/* Pack / Weight Pill & Brand Tag */}
           <div className="flex items-center justify-between gap-1 min-h-[22px]">
-            {product.variants && product.variants.length > 0 ? (
+            {availablePackOptions.length > 1 ? (
               <button
                 type="button"
                 onClick={(e) => {
@@ -191,7 +273,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 title="Click to view all pack sizes & quantities"
               >
                 <span className="truncate max-w-[85px] sm:max-w-[110px]">
-                  {selectedVariant?.unit || selectedVariant?.name || unit}
+                  {unit}
                 </span>
                 <ChevronDown className="w-3 h-3 text-slate-500 group-hover/pill:text-emerald-600 shrink-0 transition-transform group-hover/pill:translate-y-0.5" />
               </button>
@@ -395,23 +477,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   </span>
                 </div>
 
-                {product.variants && product.variants.length > 0 ? (
-                  product.variants.map((v) => {
-                    const vCartItem = cart?.items?.find(
-                      (ci) => ci.product_id === product.id && ci.variant_id === v.id
+                {availablePackOptions && availablePackOptions.length > 0 ? (
+                  availablePackOptions.map((opt) => {
+                    const optCartItem = cart?.items?.find(
+                      (ci) => ci.product_id === product.id && (opt.id ? ci.variant_id === opt.id : !ci.variant_id)
                     );
-                    const vQty = vCartItem ? vCartItem.quantity : 0;
-                    const vPrice = Number(v.selling_price);
-                    const vMrp = Number(v.mrp);
-                    const vDiscount = vMrp > vPrice ? Math.round(((vMrp - vPrice) / vMrp) * 100) : 0;
-                    const vStock = Number(v.stock_quantity ?? 0);
-                    const vOut = vStock <= 0 || v.status !== 'active';
-                    const isSelected = selectedVariant?.id === v.id;
+                    const optQty = optCartItem ? optCartItem.quantity : 0;
+                    const optPrice = Number(opt.selling_price);
+                    const optMrp = Number(opt.mrp);
+                    const optDiscount = optMrp > optPrice ? Math.round(((optMrp - optPrice) / optMrp) * 100) : 0;
+                    const optStock = Number(opt.stock_quantity ?? 0);
+                    const optOut = optStock <= 0 || opt.status !== 'active';
+                    const isSelected = selectedOptionId === opt.id;
 
                     return (
                       <div
-                        key={v.id}
-                        onClick={() => setSelectedVariant(v)}
+                        key={opt.id || 'base-pack'}
+                        onClick={() => setSelectedOptionId(opt.id)}
                         className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-3 rounded-2xl transition-all cursor-pointer border ${
                           isSelected
                             ? 'border-emerald-500 bg-emerald-50/40 shadow-xs'
@@ -422,7 +504,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                         <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200/80 p-1 shrink-0 flex items-center justify-center overflow-hidden">
                           <img
                             src={resolvedProductImage}
-                            alt={v.name}
+                            alt={opt.name}
                             className="w-full h-full object-contain"
                             onError={(e) => {
                               e.currentTarget.src = getFallbackImageUrl(product.name);
@@ -434,36 +516,36 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-extrabold text-sm text-slate-900">
-                              {v.name}
+                              {opt.name}
                             </span>
-                            {v.unit && (
+                            {opt.unit && (
                               <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
-                                {v.unit}
+                                {opt.unit}
                               </span>
                             )}
-                            {vDiscount > 0 && (
+                            {optDiscount > 0 && (
                               <span className="text-[9.5px] font-black text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
-                                {vDiscount}% OFF
+                                {optDiscount}% OFF
                               </span>
                             )}
                           </div>
 
                           <div className="flex items-baseline gap-2 mt-1">
                             <span className="text-base font-black text-slate-900">
-                              ₹{vPrice.toFixed(0)}
+                              ₹{optPrice.toFixed(0)}
                             </span>
-                            {vMrp > vPrice && (
+                            {optMrp > optPrice && (
                               <span className="text-xs text-slate-400 line-through">
-                                ₹{vMrp.toFixed(0)}
+                                ₹{optMrp.toFixed(0)}
                               </span>
                             )}
-                            {vOut ? (
+                            {optOut ? (
                               <span className="text-[10px] font-bold text-rose-600 ml-1">
                                 Sold Out
                               </span>
-                            ) : vStock <= 5 ? (
+                            ) : optStock <= 5 ? (
                               <span className="text-[10px] font-bold text-amber-700 ml-1">
-                                Only {vStock} left
+                                Only {optStock} left
                               </span>
                             ) : (
                               <span className="text-[10px] font-semibold text-emerald-700 ml-1">
@@ -482,22 +564,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                             >
                               Unavailable
                             </button>
-                          ) : vOut ? (
+                          ) : optOut ? (
                             <button
                               disabled
                               className="h-8 px-3 rounded-lg bg-slate-100 text-slate-400 font-bold text-xs border border-slate-200 cursor-not-allowed"
                             >
                               Sold Out
                             </button>
-                          ) : vQty > 0 ? (
+                          ) : optQty > 0 ? (
                             <div className="h-8 min-w-[84px] flex items-center justify-between bg-emerald-600 text-white rounded-lg p-0.5 shadow-sm shadow-emerald-600/25">
                               <button
                                 type="button"
                                 onClick={async (e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  if (vCartItem) {
-                                    await updateQuantity(vCartItem.id, vQty - 1);
+                                  if (optCartItem) {
+                                    await updateQuantity(optCartItem.id, optQty - 1);
                                   }
                                 }}
                                 className="w-7 h-7 rounded hover:bg-emerald-700 flex items-center justify-center text-white transition-all active:scale-90 cursor-pointer"
@@ -507,18 +589,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                                 <Minus className="w-3.5 h-3.5 stroke-[3]" />
                               </button>
                               <span className="text-xs font-black px-1.5 text-white font-mono select-none">
-                                {vQty}
+                                {optQty}
                               </span>
                               <button
                                 type="button"
                                 onClick={async (e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  if (vCartItem) {
-                                    await updateQuantity(vCartItem.id, vQty + 1);
+                                  if (optCartItem) {
+                                    await updateQuantity(optCartItem.id, optQty + 1);
                                   }
                                 }}
-                                disabled={vQty >= vStock}
+                                disabled={optQty >= optStock}
                                 className="w-7 h-7 rounded hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all active:scale-90 cursor-pointer"
                                 title="Add one more"
                                 aria-label="Increase quantity"
@@ -532,18 +614,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                               onClick={async (e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                setSelectedVariant(v);
+                                setSelectedOptionId(opt.id);
                                 await addToCart(
                                   product.id,
-                                  v.id,
+                                  opt.id || null,
                                   1,
                                   {
                                     name: product.name,
-                                    image: product.images?.[0] || '',
-                                    selling_price: vPrice,
-                                    mrp: vMrp,
-                                    unit: v.unit,
-                                    variant_name: v.name,
+                                    image: resolvedProductImage,
+                                    selling_price: optPrice,
+                                    mrp: optMrp,
+                                    unit: opt.unit,
+                                    variant_name: opt.isBase ? undefined : opt.name,
                                   },
                                   true // stay inside popup without opening drawer immediately
                                 );
@@ -564,7 +646,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               {/* Modal Footer */}
               <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
                 <div className="text-xs text-slate-600 truncate">
-                  Pack: <strong className="font-extrabold text-slate-900">{selectedVariant?.unit || selectedVariant?.name || unit}</strong>
+                  Pack: <strong className="font-extrabold text-slate-900">{unit}</strong>
                   {cart?.items?.filter((ci) => ci.product_id === product.id).length ? (
                     <span className="ml-2 text-emerald-700 font-bold">
                       ({cart.items.filter((ci) => ci.product_id === product.id).reduce((sum, ci) => sum + ci.quantity, 0)} in cart)

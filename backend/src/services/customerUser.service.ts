@@ -52,12 +52,13 @@ export async function resolveCustomerUserId(authUser: AuthUserPayload): Promise<
 
   // 3. If no customer record exists, automatically create a linked customer profile in users table
   const userName = authUser.name || (email ? email.split('@')[0] : 'Customer');
+  const fallbackPasswordHash = '$2b$10$e8W/2s13L7F.X5P0kK2v9.yP21cQhE0s3v3N2X4C7G9J1L8M3N5Q';
   try {
     const createdRes = await db.query(
-      `INSERT INTO users (name, email, mobile, status)
-       VALUES ($1, $2, $3, 'active')
+      `INSERT INTO users (name, email, mobile, password, status)
+       VALUES ($1, $2, $3, $4, 'active')
        RETURNING id`,
-      [userName, email, mobile]
+      [userName, email, mobile, fallbackPasswordHash]
     );
     return createdRes.rows[0].id;
   } catch (insertErr: any) {

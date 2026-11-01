@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { sendSuccess, sendPaginated } from '../utils/apiResponse';
 import { AppError, NotFoundError } from '../utils/appError';
 import { generateSlug, parsePaginationParams, calculateDiscount, getStockStatus } from '../utils/helpers';
+import cache from '../services/cache.service';
 
 // ===================== PUBLIC ROUTES =====================
 
@@ -344,6 +345,7 @@ export async function createProduct(req: AuthRequest, res: Response, next: NextF
       }
     } catch (e) { /* variants parsing is optional */ }
 
+    cache.invalidate('cms:homepage');
     sendSuccess(res, 'Product created successfully', { ...result.rows[0], variants }, 201);
   } catch (error) {
     next(error);
@@ -432,6 +434,7 @@ export async function updateProduct(req: AuthRequest, res: Response, next: NextF
     // Fetch updated product with variants
     const variants = await db.query('SELECT * FROM product_variants WHERE product_id = $1 ORDER BY selling_price', [id]);
 
+    cache.invalidate('cms:homepage');
     sendSuccess(res, 'Product updated successfully', { ...result.rows[0], variants: variants.rows });
   } catch (error) {
     next(error);
@@ -448,6 +451,7 @@ export async function deleteProduct(req: AuthRequest, res: Response, next: NextF
     // Permanently delete product from database
     await db.query('DELETE FROM products WHERE id = $1', [id]);
 
+    cache.invalidate('cms:homepage');
     sendSuccess(res, 'Product deleted permanently from database');
   } catch (error) {
     next(error);
@@ -500,6 +504,7 @@ export async function restoreAdminProducts(req: Request, res: Response, next: Ne
     const prods = await db.query('SELECT * FROM products');
     const cats = await db.query('SELECT * FROM categories');
 
+    cache.invalidate('cms:homepage');
     return res.json({
       success: true,
       message: 'Category "Fresh" and 6 products restored and synced successfully',

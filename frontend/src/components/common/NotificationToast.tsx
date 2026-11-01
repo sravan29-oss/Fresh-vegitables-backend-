@@ -16,6 +16,11 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
 }) => {
   const [isVisible, setIsVisible] = useState(false);
 
+  const handleDismiss = React.useCallback(() => {
+    setIsVisible(false);
+    setTimeout(onClose, 300);
+  }, [onClose]);
+
   useEffect(() => {
     if (notification) {
       setIsVisible(true);
@@ -27,14 +32,9 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
     } else {
       setIsVisible(false);
     }
-  }, [notification]);
+  }, [notification, handleDismiss]);
 
   if (!notification || !isVisible) return null;
-
-  const handleDismiss = () => {
-    setIsVisible(false);
-    setTimeout(onClose, 300);
-  };
 
   const handleReplayChime = (e: React.MouseEvent) => {
     e.stopPropagation();
