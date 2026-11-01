@@ -45,10 +45,12 @@ const AdminZonesPage = React.lazy(() => import('./pages/admin/AdminZonesPage').t
 const AdminLoyaltyPage = React.lazy(() => import('./pages/admin/AdminLoyaltyPage').then(m => ({ default: m.AdminLoyaltyPage })));
 const AdminAuditLogsPage = React.lazy(() => import('./pages/admin/AdminAuditLogsPage').then(m => ({ default: m.AdminAuditLogsPage })));
 import { PermissionsPromptModal } from './components/common/PermissionsPromptModal';
+import { SplashScreen } from './components/common/SplashScreen';
 
 const CustomerLayout: React.FC = () => {
   return (
     <div className="flex flex-col min-h-screen min-h-[100dvh] bg-[#f8fafc] text-slate-900 relative pb-safe-nav md:pb-0">
+      <SplashScreen />
       <Header />
       <main className="flex-1">
         <Outlet />
