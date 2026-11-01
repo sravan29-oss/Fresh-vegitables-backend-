@@ -16,6 +16,9 @@ export interface VariantInput {
 }
 
 const VEGETABLE_IMAGE_PRESETS = [
+  { name: 'Green Chilli', url: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop&q=80', icon: '🌶️' },
+  { name: 'Lemon', url: 'https://images.unsplash.com/photo-1590502593747-42a996133562?w=600&auto=format&fit=crop&q=80', icon: '🍋' },
+  { name: 'Mint', url: 'https://images.unsplash.com/photo-1608686207856-001b95cf60ca?w=600&auto=format&fit=crop&q=80', icon: '🌿' },
   { name: 'Tomato', url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop', icon: '🍅' },
   { name: 'Potato', url: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&auto=format&fit=crop', icon: '🥔' },
   { name: 'Onion', url: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=500&auto=format&fit=crop', icon: '🧅' },
@@ -142,6 +145,7 @@ export const AdminProductsPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       // Immediate local preview
+      setImageFile(file);
       const previewUrl = URL.createObjectURL(file);
       setImagePreview(previewUrl);
 
