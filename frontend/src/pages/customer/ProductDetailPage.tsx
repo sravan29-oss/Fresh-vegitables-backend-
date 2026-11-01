@@ -472,7 +472,7 @@ export const ProductDetailPage: React.FC = () => {
               <span className={deliveryEstimate.isPaused ? 'text-amber-700 font-bold' : ''}>
                 {deliveryEstimate.isPaused
                   ? 'Delivery Temporarily Paused'
-                  : `Delivered in ${deliveryEstimate.etaText || deliverySettings.estimated_delivery_time || '30–45 mins'}`}
+                  : (deliveryEstimate.etaText ? `Delivered in ${deliveryEstimate.etaText}` : 'Delivery estimate unavailable')}
               </span>
             </div>
             <div className="flex items-center gap-2.5">

@@ -54,7 +54,7 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
     id: 'zone-kphb',
     name: 'Kukatpally & KPHB Zone',
     pincodes: ['500072', '500085', '500090', '500018', '500038'],
-    delivery_radius_km: 8.5,
+    delivery_radius_km: 5.0,
     delivery_fee: 20.0,
     min_order_amount: 199.0,
     free_delivery_threshold: 499.0,
@@ -74,7 +74,7 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
     id: 'zone-hitech',
     name: 'Hitech City, Madhapur & Gachibowli',
     pincodes: ['500081', '500032', '500084', '500046', '500033'],
-    delivery_radius_km: 10.0,
+    delivery_radius_km: 5.0,
     delivery_fee: 25.0,
     min_order_amount: 199.0,
     free_delivery_threshold: 499.0,
@@ -94,7 +94,7 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
     id: 'zone-miyapur',
     name: 'Miyapur, Chandanagar & BHEL',
     pincodes: ['500049', '500050', '500019', '502032'],
-    delivery_radius_km: 9.0,
+    delivery_radius_km: 5.0,
     delivery_fee: 25.0,
     min_order_amount: 249.0,
     free_delivery_threshold: 549.0,
@@ -118,7 +118,10 @@ export function readZonesFromFile(): DeliveryZoneItem[] | null {
       const data = fs.readFileSync(ZONES_FILE, 'utf8');
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map((z: any) => ({
+          ...z,
+          delivery_radius_km: Math.min(5.0, Number(z.delivery_radius_km || 5.0)),
+        }));
       }
     }
   } catch (err) {

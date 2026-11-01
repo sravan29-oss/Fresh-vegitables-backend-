@@ -39,14 +39,14 @@ import { getRealtimeDeliverySlots } from '../../utils/deliverySlots';
 
 const HYDERABAD_ZONE_PRESETS = [
   { label: 'Champapet Central Hub', name: 'Champapet & Saroornagar Zone', colony: 'Champapet (Raji Reddy Nagar)', pincode: '500059', lat: 17.34457, lng: 78.516972, radius: 5.0 },
-  { label: 'KPHB Phase 1–4', name: 'KPHB Colony & Kukatpally Zone', colony: 'KPHB Colony', pincode: '500072', lat: 17.4938, lng: 78.3995, radius: 8.5 },
-  { label: 'Madhapur & Hitech', name: 'Madhapur & Cyber Towers Zone', colony: 'Madhapur', pincode: '500081', lat: 17.4474, lng: 78.3762, radius: 10.0 },
-  { label: 'Gachibowli DLF', name: 'Gachibowli & Financial District Zone', colony: 'Gachibowli', pincode: '500032', lat: 17.4401, lng: 78.3489, radius: 10.0 },
-  { label: 'Kondapur & Botanical', name: 'Kondapur & Silpa Park Zone', colony: 'Kondapur', pincode: '500084', lat: 17.4682, lng: 78.3639, radius: 8.0 },
-  { label: 'Jubilee Hills Rd 36', name: 'Jubilee Hills & Film Nagar Zone', colony: 'Jubilee Hills', pincode: '500033', lat: 17.4319, lng: 78.4073, radius: 9.0 },
-  { label: 'Banjara Hills Rd 12', name: 'Banjara Hills & Panjagutta Zone', colony: 'Banjara Hills', pincode: '500034', lat: 17.4156, lng: 78.4357, radius: 8.5 },
-  { label: 'Miyapur & Allwyn', name: 'Miyapur, Chandanagar & BHEL Zone', colony: 'Miyapur', pincode: '500049', lat: 17.4968, lng: 78.3547, radius: 9.0 },
-  { label: 'Pragathi Nagar', name: 'Pragathi Nagar & JNTU Zone', colony: 'Pragathi Nagar', pincode: '500090', lat: 17.5142, lng: 78.3887, radius: 7.5 },
+  { label: 'KPHB Phase 1–4', name: 'KPHB Colony & Kukatpally Zone', colony: 'KPHB Colony', pincode: '500072', lat: 17.4938, lng: 78.3995, radius: 5.0 },
+  { label: 'Madhapur & Hitech', name: 'Madhapur & Cyber Towers Zone', colony: 'Madhapur', pincode: '500081', lat: 17.4474, lng: 78.3762, radius: 5.0 },
+  { label: 'Gachibowli DLF', name: 'Gachibowli & Financial District Zone', colony: 'Gachibowli', pincode: '500032', lat: 17.4401, lng: 78.3489, radius: 5.0 },
+  { label: 'Kondapur & Botanical', name: 'Kondapur & Silpa Park Zone', colony: 'Kondapur', pincode: '500084', lat: 17.4682, lng: 78.3639, radius: 5.0 },
+  { label: 'Jubilee Hills Rd 36', name: 'Jubilee Hills & Film Nagar Zone', colony: 'Jubilee Hills', pincode: '500033', lat: 17.4319, lng: 78.4073, radius: 5.0 },
+  { label: 'Banjara Hills Rd 12', name: 'Banjara Hills & Panjagutta Zone', colony: 'Banjara Hills', pincode: '500034', lat: 17.4156, lng: 78.4357, radius: 5.0 },
+  { label: 'Miyapur & Allwyn', name: 'Miyapur, Chandanagar & BHEL Zone', colony: 'Miyapur', pincode: '500049', lat: 17.4968, lng: 78.3547, radius: 5.0 },
+  { label: 'Pragathi Nagar', name: 'Pragathi Nagar & JNTU Zone', colony: 'Pragathi Nagar', pincode: '500090', lat: 17.5142, lng: 78.3887, radius: 5.0 },
 ];
 
 interface AdminZonesPageProps {
@@ -286,7 +286,7 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
   const [pauseReason, setPauseReason] = useState<string>('');
   const [zoneLat, setZoneLat] = useState<number>(17.4938);
   const [zoneLng, setZoneLng] = useState<number>(78.3995);
-  const [zoneRadius, setZoneRadius] = useState<number>(8.5);
+  const [zoneRadius, setZoneRadius] = useState<number>(5.0);
   const [detectedAddress, setDetectedAddress] = useState<string>('KPHB Colony Phase 1, Kukatpally, Hyderabad - 500072');
   const [detectedColony, setDetectedColony] = useState<string>('KPHB Colony');
 
@@ -701,7 +701,7 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
         pause_reason: isZonePaused ? pauseReason : null,
         latitude: Number(zoneLat),
         longitude: Number(zoneLng),
-        delivery_radius_km: Math.max(0.5, Number(zoneRadius) || 8.5),
+        delivery_radius_km: Math.min(5.0, Math.max(0.5, Number(zoneRadius) || 5.0)),
       };
 
       if (editingZone) {
@@ -838,7 +838,7 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
     setPauseReason(zone.pause_reason || '');
     setZoneLat(zone.latitude ? Number(zone.latitude) : 17.4474);
     setZoneLng(zone.longitude ? Number(zone.longitude) : 78.3762);
-    setZoneRadius(Number(zone.delivery_radius_km) || 8.5);
+    setZoneRadius(Math.min(5.0, Number(zone.delivery_radius_km) || 5.0));
     setDetectedColony(zone.name);
     setDetectedAddress(`${zone.name}, Hyderabad`);
     setIsModalOpen(true);
@@ -1196,14 +1196,14 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                     type="number"
                     step="0.5"
                     min="0.5"
-                    max="50"
+                    max="5.0"
                     value={hubRadius}
-                    onChange={(e) => setHubRadius(Number(e.target.value))}
+                    onChange={(e) => setHubRadius(Math.min(5.0, Number(e.target.value)))}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-brand-500"
                   />
                   {/* Preset quick buttons */}
                   <div className="flex items-center gap-1.5 pt-1">
-                    {[3, 5, 8, 10].map((r) => (
+                    {[2, 3.5, 5].map((r) => (
                       <button
                         key={r}
                         type="button"
@@ -1214,7 +1214,7 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                             : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
                         }`}
                       >
-                        {r} km {r === 5 && '(Standard)'}
+                        {r} km {r === 5 && '(Store Limit)'}
                       </button>
                     ))}
                   </div>
@@ -2955,14 +2955,21 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                     <input
                       type="range"
                       min="1"
-                      max="30"
+                      max="5.0"
                       step="0.5"
                       value={zoneRadius}
-                      onChange={(e) => setZoneRadius(Number(e.target.value))}
+                      onChange={(e) => setZoneRadius(Math.min(5.0, Number(e.target.value)))}
                       className="w-full accent-emerald-400 cursor-pointer h-2 bg-slate-800 rounded-lg appearance-none"
                     />
 
                     <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => setZoneRadius(2.0)}
+                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 2.0 ? 'text-brand-400 font-bold' : ''}`}
+                      >
+                        2.0 km
+                      </button>
                       <button
                         type="button"
                         onClick={() => setZoneRadius(3.5)}
@@ -2972,31 +2979,10 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                       </button>
                       <button
                         type="button"
-                        onClick={() => setZoneRadius(5)}
-                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 5 ? 'text-brand-400 font-bold' : ''}`}
+                        onClick={() => setZoneRadius(5.0)}
+                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 5.0 ? 'text-brand-400 font-bold' : ''}`}
                       >
-                        5 km
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setZoneRadius(8.5)}
-                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 8.5 ? 'text-brand-400 font-bold' : ''}`}
-                      >
-                        8.5 km (Standard)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setZoneRadius(15)}
-                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 15 ? 'text-brand-400 font-bold' : ''}`}
-                      >
-                        15 km
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setZoneRadius(25)}
-                        className={`hover:text-brand-400 cursor-pointer ${zoneRadius === 25 ? 'text-brand-400 font-bold' : ''}`}
-                      >
-                        25 km (Regional)
+                        5.0 km (Store Limit)
                       </button>
                     </div>
                   </div>

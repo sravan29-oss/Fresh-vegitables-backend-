@@ -49,7 +49,7 @@ export function getRealtimeDeliverySlots(settings?: DeliverySettings | null): De
     const startTimeFormatted = formatMinutesTo12Hour(expressStart);
     const endTimeFormatted = formatMinutesTo12Hour(expressEnd);
 
-    const dynamicEta = settings?.estimated_delivery_time || '30–45 mins';
+    const dynamicEta = settings?.estimated_delivery_time || 'Delivery estimate unavailable';
     slots.push({
       id: 'express',
       title: `Express (${dynamicEta})`,

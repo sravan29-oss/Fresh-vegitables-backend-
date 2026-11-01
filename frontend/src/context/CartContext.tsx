@@ -102,9 +102,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       min_order_amount: 10,
       enable_free_delivery: true,
       express_delivery_fee: 45,
-      estimated_delivery_time: '30–45 mins',
-      min_eta_minutes: 30,
-      max_eta_minutes: 45,
+      estimated_delivery_time: 'Delivery estimate unavailable',
+      min_eta_minutes: 0,
+      max_eta_minutes: 0,
       is_delivery_active: true,
       global_delivery_status: 'available',
       global_pause_reason: '',
@@ -209,17 +209,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
+    if (serviceability.checked && serviceability.serviceable && minMinutes > 0 && maxMinutes > 0) {
+      return {
+        available: true,
+        isPaused: false,
+        globalStatus: 'available',
+        etaText: `${minMinutes}–${maxMinutes} MINS`,
+        minEtaMinutes: minMinutes,
+        maxEtaMinutes: maxMinutes,
+        zoneName,
+        priority: zone?.priority || 'normal',
+        distanceKm: serviceability.distanceKm,
+        statusMessage: `Express delivery in ${minMinutes}–${maxMinutes} mins.`,
+      };
+    }
+
     return {
-      available: true,
+      available: Boolean(serviceability.serviceable),
       isPaused: false,
       globalStatus: 'available',
-      etaText: `${minMinutes}–${maxMinutes} MINS`,
-      minEtaMinutes: minMinutes,
-      maxEtaMinutes: maxMinutes,
+      etaText: 'Delivery estimate unavailable',
+      minEtaMinutes: minMinutes || 0,
+      maxEtaMinutes: maxMinutes || 0,
       zoneName,
       priority: zone?.priority || 'normal',
       distanceKm: serviceability.distanceKm,
-      statusMessage: `Express delivery in ${minMinutes}–${maxMinutes} mins.`,
+      statusMessage: 'Delivery estimate unavailable.',
     };
   }, [deliverySettings, serviceability]);
 
@@ -272,6 +287,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         checked: true,
         configured: true,
         serviceable: isWithinRadius,
+        eta_text: isWithinRadius ? 'Delivery estimate unavailable' : 'Not Serviceable',
         distanceKm,
         radiusKm,
         message: isWithinRadius
@@ -334,9 +350,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           min_order_amount: Number(d.min_order_amount),
           enable_free_delivery: Boolean(d.enable_free_delivery),
           express_delivery_fee: Number(d.express_delivery_fee),
-          estimated_delivery_time: String(d.estimated_delivery_time || '30–45 mins'),
-          min_eta_minutes: d.min_eta_minutes ? Number(d.min_eta_minutes) : 30,
-          max_eta_minutes: d.max_eta_minutes ? Number(d.max_eta_minutes) : 45,
+          estimated_delivery_time: String(d.estimated_delivery_time || 'Delivery estimate unavailable'),
+          min_eta_minutes: d.min_eta_minutes ? Number(d.min_eta_minutes) : 0,
+          max_eta_minutes: d.max_eta_minutes ? Number(d.max_eta_minutes) : 0,
           is_delivery_active: d.is_delivery_active !== false,
           global_delivery_status: d.global_delivery_status || (d.is_delivery_active !== false ? 'available' : 'paused'),
           global_pause_reason: d.global_pause_reason || '',

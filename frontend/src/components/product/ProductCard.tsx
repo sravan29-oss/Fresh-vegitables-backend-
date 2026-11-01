@@ -144,7 +144,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           ) : (
             <>
               <Clock className="w-2.5 h-2.5 text-emerald-600 stroke-[2.5]" />
-              <span>{deliveryEstimate?.etaText || deliverySettings?.estimated_delivery_time || '30–45 MINS'}</span>
+              <span>{deliveryEstimate?.etaText || deliverySettings?.estimated_delivery_time || 'Delivery estimate unavailable'}</span>
             </>
           )}
         </div>
@@ -391,7 +391,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   <span>Available Pack Sizes</span>
                   <span className={`text-[11px] font-semibold flex items-center gap-1 ${deliveryEstimate?.isPaused ? 'text-amber-700' : 'text-emerald-700'}`}>
                     <Clock className={`w-3 h-3 ${deliveryEstimate?.isPaused ? 'text-amber-600' : 'text-emerald-600'}`} />
-                    {deliveryEstimate?.isPaused ? 'Delivery Paused' : `${deliveryEstimate?.etaText || '30–45 Mins'} Delivery`}
+                    {deliveryEstimate?.isPaused ? 'Delivery Paused' : (deliveryEstimate?.etaText ? `${deliveryEstimate.etaText} Delivery` : 'Delivery estimate unavailable')}
                   </span>
                 </div>
 

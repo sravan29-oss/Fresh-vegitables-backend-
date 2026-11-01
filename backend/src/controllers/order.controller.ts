@@ -194,6 +194,14 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
         throw new ValidationError(`${item.name} is no longer available`);
       }
 
+      if (item.variant_id) {
+        if (!item.variant_name || isNaN(parseFloat(item.variant_selling_price))) {
+          throw new ValidationError(
+            `The selected pack size for "${item.name}" is no longer available. Please update your cart.`
+          );
+        }
+      }
+
       const price = item.variant_id ? parseFloat(item.variant_selling_price) : parseFloat(item.selling_price);
       const mrp = item.variant_id ? parseFloat(item.variant_mrp) : parseFloat(item.mrp);
       const unit = item.variant_id ? item.variant_unit : item.unit;

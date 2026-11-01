@@ -36,7 +36,7 @@
       "500018",
       "500038"
     ],
-    "delivery_radius_km": 8.5,
+    "delivery_radius_km": 5.0,
     "delivery_fee": 20,
     "min_order_amount": 199,
     "free_delivery_threshold": 499,
@@ -64,7 +64,7 @@
       "500046",
       "500033"
     ],
-    "delivery_radius_km": 10,
+    "delivery_radius_km": 5.0,
     "delivery_fee": 25,
     "min_order_amount": 199,
     "free_delivery_threshold": 499,
@@ -91,7 +91,7 @@
       "500019",
       "502032"
     ],
-    "delivery_radius_km": 9,
+    "delivery_radius_km": 5.0,
     "delivery_fee": 25,
     "min_order_amount": 249,
     "free_delivery_threshold": 549,

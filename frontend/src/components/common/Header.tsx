@@ -227,7 +227,7 @@ export const Header: React.FC = () => {
             <span className={`px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider shrink-0 ${
               deliveryEstimate.isPaused ? 'bg-amber-500/30 text-amber-200' : 'bg-white/20 text-white'
             }`}>
-              {deliveryEstimate.isPaused ? '⚠️ DELIVERIES PAUSED' : `⚡ ${deliveryEstimate.etaText || '30–45 MINS'} DISPATCH`}
+              {deliveryEstimate.isPaused ? '⚠️ DELIVERIES PAUSED' : `⚡ ${deliveryEstimate.etaText || 'Estimate unavailable'} DISPATCH`}
             </span>
             <span className="truncate text-white font-bold tracking-wide text-[11px] sm:text-[11.5px]">
               {deliveryEstimate.isPaused
@@ -292,7 +292,7 @@ export const Header: React.FC = () => {
                     ) : (
                       <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                        <span>{serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} KM • ${deliveryEstimate.etaText || '30–45 MINS'}` : `${deliveryEstimate.etaText || '30–45 MINS'} DELIVERY`}</span>
+                        <span>{serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} KM • ${deliveryEstimate.etaText || 'Estimate unavailable'}` : `${deliveryEstimate.etaText || 'Delivery estimate unavailable'}`}</span>
                       </span>
                     )
                   ) : !serviceability.configured ? (
@@ -309,7 +309,7 @@ export const Header: React.FC = () => {
                 ) : (
                   <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                    <span>{deliveryEstimate.isPaused ? 'DELIVERY PAUSED' : `${deliveryEstimate.etaText || '30–45 MINS'} DELIVERY`}</span>
+                    <span>{deliveryEstimate.isPaused ? 'DELIVERY PAUSED' : `${deliveryEstimate.etaText || 'Delivery estimate unavailable'}`}</span>
                   </span>
                 )}
               </div>
@@ -506,7 +506,7 @@ export const Header: React.FC = () => {
                 </span>
                 <div className="flex text-[9.5px] font-extrabold uppercase tracking-[0.14em] text-slate-500 mt-1 items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${deliveryEstimate.isPaused ? 'bg-amber-500' : 'bg-[#0c831f]'} animate-pulse`}></span>
-                  <span>{deliveryEstimate.isPaused ? '⚠️ DELIVERIES PAUSED • 100% ORGANIC' : `⚡ ${deliveryEstimate.etaText || '30–45 MINS'} EXPRESS • 100% ORGANIC`}</span>
+                  <span>{deliveryEstimate.isPaused ? '⚠️ DELIVERIES PAUSED • 100% ORGANIC' : `⚡ ${deliveryEstimate.etaText || 'Estimate unavailable'} EXPRESS • 100% ORGANIC`}</span>
                 </div>
               </div>
             </Link>
@@ -559,7 +559,7 @@ export const Header: React.FC = () => {
                 <span className="text-slate-400">•</span>
                 <span className={`text-[10px] font-semibold flex items-center gap-1 shrink-0 ${deliveryEstimate.isPaused ? 'text-amber-700' : 'text-emerald-700'}`}>
                   <Clock className={`w-3 h-3 ${deliveryEstimate.isPaused ? 'text-amber-600' : 'text-[#0c831f]'}`} />
-                  {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || '30–45 mins')}
+                  {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || 'Delivery estimate unavailable')}
                 </span>
               </div>
             </div>
@@ -852,7 +852,7 @@ export const Header: React.FC = () => {
                   </h3>
                   <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
                     <span className={`w-1.5 h-1.5 rounded-full ${deliveryEstimate.isPaused ? 'bg-amber-500' : 'bg-[#0c831f]'}`}></span>
-                    ⚡ {deliveryEstimate.isPaused ? 'DELIVERY PAUSED' : `${deliveryEstimate.etaText || '30–45 MINS'} EXPRESS`} • 100% ORGANIC
+                    ⚡ {deliveryEstimate.isPaused ? 'DELIVERY PAUSED' : `${deliveryEstimate.etaText || 'Estimate unavailable'} EXPRESS`} • 100% ORGANIC
                   </p>
                 </div>
               </div>

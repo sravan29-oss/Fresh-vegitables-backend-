@@ -678,8 +678,8 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
 
     if (delivery_radius_km !== undefined) {
       const radius = Number(delivery_radius_km);
-      if (isNaN(radius) || radius <= 0 || radius > 100) {
-        throw new ValidationError('Delivery radius must be greater than 0 and within 100 km');
+      if (isNaN(radius) || radius <= 0 || radius > 5.0) {
+        throw new ValidationError('Delivery radius cannot exceed the store limit of 5.0 km without explicit authorization.');
       }
     }
 
@@ -940,12 +940,12 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
 
     // 3. Determine Global & Zone-level Availability
     const globalStatus = settings.global_delivery_status || (settings.is_delivery_active !== false ? 'available' : 'paused');
-    let isDeliveryActive = true;
-    let etaText = '30–45 MINS';
-    let statusMessage = 'Express delivery available at your location.';
-
     const minEta = matchedZone?.min_eta_minutes || settings.min_eta_minutes || 30;
     const maxEta = matchedZone?.max_eta_minutes || settings.max_eta_minutes || 45;
+
+    let isDeliveryActive = true;
+    let etaText = (minEta && maxEta) ? `${minEta}–${maxEta} MINS` : 'Delivery estimate unavailable';
+    let statusMessage = 'Express delivery available at your location.';
 
     if (globalStatus === 'paused') {
       isDeliveryActive = false;

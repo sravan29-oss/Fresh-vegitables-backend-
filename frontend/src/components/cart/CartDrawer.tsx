@@ -206,7 +206,7 @@ export const CartDrawer: React.FC = () => {
                   <span>Estimated Delivery</span>
                   <span className={`font-bold flex items-center gap-1 ${deliveryEstimate.isPaused ? 'text-amber-700' : 'text-[#0c831f]'}`}>
                     <Clock className="w-3 h-3" />
-                    {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || '30–45 mins')}
+                    {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || 'Delivery estimate unavailable')}
                   </span>
                 </div>
                 <div className="flex justify-between font-black text-slate-900 text-sm pt-2 border-t border-slate-100">

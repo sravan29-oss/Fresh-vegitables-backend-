@@ -18,6 +18,7 @@ import {
   Wallet,
   Navigation,
   AlertCircle,
+  AlertTriangle,
   Loader2,
 } from 'lucide-react';
 import api from '../../services/api';
@@ -196,7 +197,7 @@ export const CheckoutPage: React.FC = () => {
           longitude: Number(lng),
         });
         const data = res.data?.data || res.data;
-        const dynamicEta = data.eta_text || data.zone?.estimated_delivery_time || deliverySettings?.estimated_delivery_time || '30–45 mins';
+        const dynamicEta = data.eta_text || data.zone?.estimated_delivery_time || (deliverySettings?.estimated_delivery_time && deliverySettings.estimated_delivery_time !== '30–45 mins' ? deliverySettings.estimated_delivery_time : 'Delivery estimate unavailable');
         const isPaused = Boolean(data.is_delivery_active === false || data.global_status === 'paused' || data.zone?.is_paused);
         setZoneServiceability({
           checked: true,
@@ -234,7 +235,7 @@ export const CheckoutPage: React.FC = () => {
           radiusKm: radius,
           zoneName: deliverySettings?.hub_name || 'Fresh Vegetables Champapet Hub',
           deliveryFee: 10,
-          estimatedDelivery: deliverySettings?.estimated_delivery_time || '30–45 mins',
+          estimatedDelivery: (deliverySettings?.estimated_delivery_time && deliverySettings.estimated_delivery_time !== '30–45 mins') ? deliverySettings.estimated_delivery_time : 'Delivery estimate unavailable',
           message: inZone
             ? 'Delivery available at your location.'
             : `Selected address is ${dist} km from our hub (service zone: ${radius} km).`,
@@ -598,6 +599,23 @@ export const CheckoutPage: React.FC = () => {
 
     if (deliverySettings?.min_order_amount > 0 && (cart.subtotal || 0) < deliverySettings.min_order_amount) {
       setErrorMsg(`Minimum order amount for delivery is ₹${deliverySettings.min_order_amount}. Please add ₹${(deliverySettings.min_order_amount - (cart.subtotal || 0)).toFixed(0)} more of fresh produce.`);
+      return;
+    }
+
+    const isAreaPaused = Boolean(
+      deliveryEstimate?.isPaused ||
+      zoneServiceability?.isPaused ||
+      zoneServiceability?.isDeliveryActive === false ||
+      deliverySettings?.global_delivery_status === 'paused' ||
+      deliverySettings?.global_delivery_status === 'closed_for_today' ||
+      deliverySettings?.is_delivery_active === false
+    );
+    if (isAreaPaused) {
+      setErrorMsg(
+        deliveryEstimate?.pauseReason ||
+        deliveryEstimate?.statusMessage ||
+        'Deliveries are temporarily paused for your selected area. Please try again later.'
+      );
       return;
     }
 
@@ -1127,12 +1145,28 @@ export const CheckoutPage: React.FC = () => {
               </div>
             )}
 
+            {/* Deliveries Paused Alert Banner */}
+            {(deliveryEstimate.isPaused || zoneServiceability.isPaused || zoneServiceability.isDeliveryActive === false) && (
+              <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-2 text-amber-900 animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <h4 className="font-black text-xs sm:text-sm">Deliveries Paused for Selected Area</h4>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  {deliveryEstimate.pauseReason || zoneServiceability.message || 'Express deliveries in this area are temporarily paused. Orders will resume shortly.'}
+                </p>
+              </div>
+            )}
+
             <button
               onClick={handleInitiateOrder}
               disabled={
                 isSubmitting ||
                 (!paymentSettings.cod_enabled && !paymentSettings.online_enabled) ||
-                (zoneServiceability.checked && !zoneServiceability.serviceable)
+                (zoneServiceability.checked && !zoneServiceability.serviceable) ||
+                deliveryEstimate.isPaused ||
+                zoneServiceability.isPaused ||
+                zoneServiceability.isDeliveryActive === false
               }
               className="w-full bg-brand-600 hover:bg-brand-700 active:scale-98 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-4 px-6 rounded-2xl shadow-xl shadow-brand-600/25 disabled:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
@@ -1142,6 +1176,8 @@ export const CheckoutPage: React.FC = () => {
                 <span>Orders Temporarily Unavailable</span>
               ) : zoneServiceability.checked && !zoneServiceability.serviceable ? (
                 <span>Delivery Unavailable at Selected Address</span>
+              ) : deliveryEstimate.isPaused || zoneServiceability.isPaused || zoneServiceability.isDeliveryActive === false ? (
+                <span>Deliveries Paused for Selected Area</span>
               ) : (
                 <>
                   <span>
