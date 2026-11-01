@@ -83,70 +83,87 @@ export const SEOHead: React.FC<SEOProps> = ({
     setMetaTag('name', 'twitter:image', ogImage);
 
     // 6. Schema.org JSON-LD Structured Data
-    const defaultSchema = [
-      {
-        '@context': 'https://schema.org',
-        '@type': 'WebSite',
-        name: 'Fresh Vegetables Organic',
-        url: BASE_URL,
-        potentialAction: {
-          '@type': 'SearchAction',
-          target: {
-            '@type': 'EntryPoint',
-            urlTemplate: `${BASE_URL}/products?search={search_term_string}`,
+    const defaultSchema = {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'WebSite',
+          '@id': `${BASE_URL}/#website`,
+          name: 'Fresh Vegetables Organic',
+          alternateName: ['Fresh Vegetables', 'FreshVegOrganic'],
+          url: `${BASE_URL}/`,
+          potentialAction: {
+            '@type': 'SearchAction',
+            target: {
+              '@type': 'EntryPoint',
+              urlTemplate: `${BASE_URL}/products?search={search_term_string}`,
+            },
+            'query-input': 'required name=search_term_string',
           },
-          'query-input': 'required name=search_term_string',
         },
-      },
-      {
-        '@context': 'https://schema.org',
-        '@type': 'Organization',
-        name: 'Fresh Vegetables Organic',
-        url: BASE_URL,
-        logo: `${BASE_URL}/logo.png`,
-        contactPoint: {
-          '@type': 'ContactPoint',
+        {
+          '@type': 'Organization',
+          '@id': `${BASE_URL}/#organization`,
+          name: 'Fresh Vegetables Organic',
+          url: `${BASE_URL}/`,
+          logo: `${BASE_URL}/logo.png`,
+          contactPoint: {
+            '@type': 'ContactPoint',
+            telephone: '+91 8106970384',
+            email: 'freshvegitables29@gmail.com',
+            contactType: 'customer service',
+            areaServed: 'IN',
+            availableLanguage: ['English', 'Telugu', 'Hindi'],
+          },
+        },
+        {
+          '@type': 'LocalBusiness',
+          '@id': `${BASE_URL}/#store`,
+          name: 'Fresh Vegetables Organic',
+          image: `${BASE_URL}/logo.png`,
+          url: `${BASE_URL}/`,
           telephone: '+91 8106970384',
-          email: 'freshvegitables29@gmail.com',
-          contactType: 'Customer Support',
-          areaServed: 'IN',
-        },
-      },
-      {
-        '@context': 'https://schema.org',
-        '@type': 'LocalBusiness',
-        name: 'Fresh Vegetables Organic',
-        image: `${BASE_URL}/logo.png`,
-        url: BASE_URL,
-        telephone: '+91 8106970384',
-        priceRange: '₹₹',
-        address: {
-          '@type': 'PostalAddress',
-          streetAddress: 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet',
-          addressLocality: 'Hyderabad',
-          addressRegion: 'Telangana',
-          postalCode: '500059',
-          addressCountry: 'IN',
-        },
-        geo: {
-          '@type': 'GeoCoordinates',
-          latitude: 17.34457,
-          longitude: 78.516972,
-        },
-        areaServed: {
-          '@type': 'GeoCircle',
-          geoMidpoint: {
+          priceRange: '₹₹',
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress: 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet',
+            addressLocality: 'Hyderabad',
+            addressRegion: 'Telangana',
+            postalCode: '500059',
+            addressCountry: 'IN',
+          },
+          geo: {
             '@type': 'GeoCoordinates',
             latitude: 17.34457,
             longitude: 78.516972,
           },
-          geoRadius: '5000',
+          areaServed: {
+            '@type': 'GeoCircle',
+            geoMidpoint: {
+              '@type': 'GeoCoordinates',
+              latitude: 17.34457,
+              longitude: 78.516972,
+            },
+            geoRadius: '5000',
+          },
         },
-      },
-    ];
+      ],
+    };
 
     const finalSchema = schema || defaultSchema;
-    let scriptTag = document.getElementById('json-ld-schema') as HTMLScriptElement | null;
+
+    // Remove any duplicate or stray JSON-LD scripts to ensure strict 1-entity rule
+    const existingScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    let scriptTag: HTMLScriptElement | null = null;
+    existingScripts.forEach((tag, idx) => {
+      if (idx === 0) {
+        scriptTag = tag as HTMLScriptElement;
+        scriptTag.id = 'json-ld-schema';
+      } else {
+        tag.remove();
+      }
+    });
+
     if (!scriptTag) {
       scriptTag = document.createElement('script');
       scriptTag.id = 'json-ld-schema';
