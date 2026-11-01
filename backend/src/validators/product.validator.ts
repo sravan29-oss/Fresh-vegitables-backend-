@@ -11,6 +11,16 @@ const variantSchema = z.object({
 
 const emptyToUndefined = (val: any) => (!val || val === '' || val === 'null' || val === 'undefined' ? undefined : val);
 const parseBool = (val: any) => (val === true || val === 'true' || val === 1 || val === '1');
+const parseJsonIfString = (val: any) => {
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return val;
+    }
+  }
+  return val;
+};
 
 export const createProductSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(200),
@@ -27,7 +37,7 @@ export const createProductSchema = z.object({
   best_seller: z.preprocess(parseBool, z.boolean()).optional().default(false),
   images: z.union([z.array(z.string()), z.string()]).optional(),
   image_url: z.string().optional(),
-  variants: z.array(variantSchema).optional(),
+  variants: z.preprocess(parseJsonIfString, z.array(variantSchema).optional()),
 });
 
 export const updateProductSchema = z.object({
@@ -45,7 +55,7 @@ export const updateProductSchema = z.object({
   best_seller: z.preprocess(parseBool, z.boolean()).optional(),
   images: z.union([z.array(z.string()), z.string()]).optional(),
   image_url: z.string().optional(),
-  variants: z.array(variantSchema).optional(),
+  variants: z.preprocess(parseJsonIfString, z.array(variantSchema).optional()),
 });
 
 export const productQuerySchema = z.object({

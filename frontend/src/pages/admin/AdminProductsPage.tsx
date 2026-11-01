@@ -313,7 +313,11 @@ export const AdminProductsPage: React.FC = () => {
       loadProducts();
       notifyLiveUpdate('products');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to save product');
+      const serverMsg = err.response?.data?.message;
+      const validationDetails = err.response?.data?.errors
+        ?.map((e: any) => `${e.field}: ${e.message}`)
+        .join('\n');
+      alert(validationDetails ? `${serverMsg || 'Validation Error'}:\n${validationDetails}` : (serverMsg || 'Failed to save product'));
     } finally {
       setIsSaving(false);
     }
