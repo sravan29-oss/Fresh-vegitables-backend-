@@ -62,6 +62,15 @@ app.use(
 const uploadPath = path.resolve(__dirname, '../', env.UPLOAD_DIR);
 app.use('/uploads', express.static(uploadPath));
 
+// Resilient fallback for missing uploads (prevents 404 console errors on ephemeral container rebuilds)
+app.use('/uploads', (req, res, next) => {
+  const ext = path.extname(req.path).toLowerCase();
+  if (['.jpg', '.jpeg', '.png', '.webp', '.svg', '.gif'].includes(ext)) {
+    return res.redirect(302, 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=1200&auto=format&fit=crop&q=80');
+  }
+  next();
+});
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
