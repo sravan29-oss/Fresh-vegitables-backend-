@@ -157,6 +157,14 @@ export async function createZone(req: Request, res: Response, next: NextFunction
       min_order_amount,
       free_delivery_threshold,
       estimated_delivery_time,
+      min_eta_minutes,
+      max_eta_minutes,
+      priority,
+      daily_open_time,
+      daily_close_time,
+      max_capacity_per_slot,
+      is_paused,
+      pause_reason,
       latitude,
       longitude,
     } = req.body;
@@ -169,6 +177,9 @@ export async function createZone(req: Request, res: Response, next: NextFunction
       ? pincodes.map((p: any) => String(p).trim()).filter(Boolean)
       : String(pincodes).split(',').map((p) => p.trim()).filter(Boolean);
 
+    const minEta = Number(min_eta_minutes) > 0 ? Number(min_eta_minutes) : 30;
+    const maxEta = Number(max_eta_minutes) > 0 ? Number(max_eta_minutes) : 45;
+
     const newZone = {
       id: uuidv4(),
       name: String(name).trim(),
@@ -177,8 +188,16 @@ export async function createZone(req: Request, res: Response, next: NextFunction
       delivery_fee: Number(delivery_fee) >= 0 ? Number(delivery_fee) : 20.0,
       min_order_amount: Number(min_order_amount) >= 0 ? Number(min_order_amount) : 199.0,
       free_delivery_threshold: Number(free_delivery_threshold) >= 0 ? Number(free_delivery_threshold) : 499.0,
-      estimated_delivery_time: String(estimated_delivery_time || '25–35 mins').trim(),
-      status: 'ACTIVE',
+      min_eta_minutes: minEta,
+      max_eta_minutes: maxEta,
+      estimated_delivery_time: String(estimated_delivery_time || `${minEta}–${maxEta} min`).trim(),
+      priority: priority || 'normal',
+      daily_open_time: daily_open_time || '06:00',
+      daily_close_time: daily_close_time || '22:00',
+      max_capacity_per_slot: Number(max_capacity_per_slot) > 0 ? Number(max_capacity_per_slot) : 25,
+      is_paused: Boolean(is_paused),
+      pause_reason: pause_reason || '',
+      status: is_paused ? 'PAUSED' : 'ACTIVE',
       latitude: latitude ? Number(latitude) : 17.4938,
       longitude: longitude ? Number(longitude) : 78.3995,
       created_at: new Date().toISOString(),
@@ -223,6 +242,11 @@ export async function updateZone(req: Request, res: Response, next: NextFunction
         : String(body.pincodes).split(',').map((p) => p.trim()).filter(Boolean);
     }
 
+    const minEta = body.min_eta_minutes !== undefined ? Number(body.min_eta_minutes) : (zone.min_eta_minutes || 30);
+    const maxEta = body.max_eta_minutes !== undefined ? Number(body.max_eta_minutes) : (zone.max_eta_minutes || 45);
+
+    const isPaused = body.is_paused !== undefined ? Boolean(body.is_paused) : Boolean(zone.is_paused);
+
     const updatedZone = {
       ...zone,
       name: body.name !== undefined ? String(body.name).trim() : zone.name,
@@ -231,10 +255,18 @@ export async function updateZone(req: Request, res: Response, next: NextFunction
       delivery_fee: body.delivery_fee !== undefined ? Number(body.delivery_fee) : zone.delivery_fee,
       min_order_amount: body.min_order_amount !== undefined ? Number(body.min_order_amount) : zone.min_order_amount,
       free_delivery_threshold: body.free_delivery_threshold !== undefined ? Number(body.free_delivery_threshold) : zone.free_delivery_threshold,
-      estimated_delivery_time: body.estimated_delivery_time !== undefined ? String(body.estimated_delivery_time).trim() : zone.estimated_delivery_time,
+      min_eta_minutes: minEta,
+      max_eta_minutes: maxEta,
+      estimated_delivery_time: body.estimated_delivery_time !== undefined ? String(body.estimated_delivery_time).trim() : `${minEta}–${maxEta} min`,
+      priority: body.priority !== undefined ? body.priority : (zone.priority || 'normal'),
+      daily_open_time: body.daily_open_time !== undefined ? body.daily_open_time : (zone.daily_open_time || '06:00'),
+      daily_close_time: body.daily_close_time !== undefined ? body.daily_close_time : (zone.daily_close_time || '22:00'),
+      max_capacity_per_slot: body.max_capacity_per_slot !== undefined ? Number(body.max_capacity_per_slot) : (zone.max_capacity_per_slot || 25),
+      is_paused: isPaused,
+      pause_reason: body.pause_reason !== undefined ? body.pause_reason : (zone.pause_reason || ''),
       latitude: body.latitude !== undefined ? Number(body.latitude) : zone.latitude,
       longitude: body.longitude !== undefined ? Number(body.longitude) : zone.longitude,
-      status: body.status || zone.status,
+      status: body.status || (isPaused ? 'PAUSED' : 'ACTIVE'),
       updated_at: new Date().toISOString(),
     };
 
@@ -252,6 +284,36 @@ export async function updateZone(req: Request, res: Response, next: NextFunction
     });
 
     sendSuccess(res, 'Delivery zone updated successfully', updatedZone);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function toggleZonePause(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { is_paused, pause_reason } = req.body;
+
+    const zones = getPersistedZones();
+    const zoneIndex = zones.findIndex((z: any) => z.id === id);
+    if (zoneIndex === -1) throw new NotFoundError('Delivery zone not found');
+
+    const zone = zones[zoneIndex];
+    const newPauseState = is_paused !== undefined ? Boolean(is_paused) : !zone.is_paused;
+
+    const updatedZone = {
+      ...zone,
+      is_paused: newPauseState,
+      pause_reason: pause_reason !== undefined ? pause_reason : (newPauseState ? zone.pause_reason : ''),
+      status: newPauseState ? 'PAUSED' : 'ACTIVE',
+      updated_at: new Date().toISOString(),
+    };
+
+    zones[zoneIndex] = updatedZone;
+    savePersistedZones(zones);
+    cache.invalidate('zones:active');
+
+    sendSuccess(res, `Delivery zone ${newPauseState ? 'paused' : 'resumed'} successfully`, updatedZone);
   } catch (error) {
     next(error);
   }

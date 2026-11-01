@@ -49,11 +49,12 @@ export function getRealtimeDeliverySlots(settings?: DeliverySettings | null): De
     const startTimeFormatted = formatMinutesTo12Hour(expressStart);
     const endTimeFormatted = formatMinutesTo12Hour(expressEnd);
 
+    const dynamicEta = settings?.estimated_delivery_time || '30–45 mins';
     slots.push({
       id: 'express',
-      title: 'Express 30 Mins',
+      title: `Express (${dynamicEta})`,
       sub: isExpressLive
-        ? 'Immediate harvest run • Dispatch within 15–30 mins'
+        ? `Immediate harvest run • Delivery in ${dynamicEta}`
         : `Closed for night • Available daily ${startTimeFormatted} – ${endTimeFormatted}`,
       available: isExpressLive,
       tag: isExpressLive ? 'Fastest' : 'Offline at night',

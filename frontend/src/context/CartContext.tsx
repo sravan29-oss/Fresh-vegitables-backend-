@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../services/api';
-import { Cart, CartItem, DeliverySettings, ServiceabilityState } from '../types';
+import { Cart, CartItem, DeliverySettings, DeliveryZone, DeliveryEstimate, ServiceabilityState } from '../types';
 import { useAuth } from './AuthContext';
 import { subscribeLiveUpdates, notifyLiveUpdate } from '../services/liveSync';
 
@@ -19,6 +19,7 @@ interface CartContextType {
   isCartOpen: boolean;
   deliverySettings: DeliverySettings;
   serviceability: ServiceabilityState;
+  deliveryEstimate: DeliveryEstimate;
   isLocationModalOpen: boolean;
   setIsLocationModalOpen: (open: boolean) => void;
   checkLocationServiceability: (lat: number, lng: number) => Promise<ServiceabilityState>;
@@ -101,8 +102,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       min_order_amount: 10,
       enable_free_delivery: true,
       express_delivery_fee: 45,
-      estimated_delivery_time: '25–35 mins',
+      estimated_delivery_time: '30–45 mins',
+      min_eta_minutes: 30,
+      max_eta_minutes: 45,
       is_delivery_active: true,
+      global_delivery_status: 'available',
+      global_pause_reason: '',
+      global_reopen_at: null,
       surge_charge: 0,
       hub_name: 'Fresh Vegetables Champapet Hub',
       hub_address: 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
@@ -113,6 +119,109 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       is_hub_configured: true,
     };
   });
+
+  const deliveryEstimate = useMemo<DeliveryEstimate>(() => {
+    const globalStatus = deliverySettings.global_delivery_status || (deliverySettings.is_delivery_active !== false ? 'available' : 'paused');
+    const isGloballyPaused = globalStatus === 'paused';
+    const isClosedToday = globalStatus === 'closed_for_today';
+
+    const zone = serviceability.zone;
+    const isZonePaused = Boolean(zone?.is_paused || (zone && zone.status === 'PAUSED'));
+
+    const minMinutes = zone?.min_eta_minutes || deliverySettings.min_eta_minutes || 30;
+    const maxMinutes = zone?.max_eta_minutes || deliverySettings.max_eta_minutes || 45;
+    const zoneName = zone?.name || deliverySettings.hub_name || 'Champapet';
+
+    if (isGloballyPaused) {
+      return {
+        available: false,
+        isPaused: true,
+        globalStatus: 'paused',
+        etaText: 'Delivery Paused',
+        minEtaMinutes: minMinutes,
+        maxEtaMinutes: maxMinutes,
+        zoneName,
+        priority: zone?.priority || 'normal',
+        pauseReason: deliverySettings.global_pause_reason || 'Express deliveries are temporarily paused.',
+        distanceKm: serviceability.distanceKm,
+        statusMessage: deliverySettings.global_pause_reason || 'Express deliveries are temporarily paused. Resuming shortly.',
+      };
+    }
+
+    if (isClosedToday) {
+      return {
+        available: false,
+        isPaused: true,
+        globalStatus: 'closed_for_today',
+        etaText: 'Closed for Today',
+        minEtaMinutes: minMinutes,
+        maxEtaMinutes: maxMinutes,
+        zoneName,
+        priority: zone?.priority || 'normal',
+        pauseReason: 'Deliveries closed for today.',
+        distanceKm: serviceability.distanceKm,
+        statusMessage: 'We are closed for today. Express orders reopen tomorrow morning.',
+      };
+    }
+
+    if (serviceability.checked && !serviceability.serviceable) {
+      return {
+        available: false,
+        isPaused: false,
+        globalStatus: 'available',
+        etaText: 'Not Serviceable',
+        minEtaMinutes: minMinutes,
+        maxEtaMinutes: maxMinutes,
+        zoneName,
+        distanceKm: serviceability.distanceKm,
+        statusMessage: serviceability.message || 'Location outside express delivery radius.',
+      };
+    }
+
+    if (isZonePaused) {
+      return {
+        available: false,
+        isPaused: true,
+        globalStatus: 'available',
+        etaText: 'Delivery Paused',
+        minEtaMinutes: minMinutes,
+        maxEtaMinutes: maxMinutes,
+        zoneName,
+        priority: zone?.priority || 'normal',
+        pauseReason: zone?.pause_reason || `Delivery is temporarily paused in ${zoneName}.`,
+        distanceKm: serviceability.distanceKm,
+        statusMessage: zone?.pause_reason || `Express delivery is temporarily paused in ${zoneName}.`,
+      };
+    }
+
+    if (serviceability.eta_text) {
+      return {
+        available: serviceability.is_delivery_active !== false,
+        isPaused: serviceability.is_delivery_active === false,
+        globalStatus: 'available',
+        etaText: serviceability.eta_text,
+        minEtaMinutes: minMinutes,
+        maxEtaMinutes: maxMinutes,
+        zoneName,
+        priority: zone?.priority || 'normal',
+        distanceKm: serviceability.distanceKm,
+        statusMessage: serviceability.message || `Express delivery in ${minMinutes}–${maxMinutes} mins.`,
+      };
+    }
+
+    return {
+      available: true,
+      isPaused: false,
+      globalStatus: 'available',
+      etaText: `${minMinutes}–${maxMinutes} MINS`,
+      minEtaMinutes: minMinutes,
+      maxEtaMinutes: maxMinutes,
+      zoneName,
+      priority: zone?.priority || 'normal',
+      distanceKm: serviceability.distanceKm,
+      statusMessage: `Express delivery in ${minMinutes}–${maxMinutes} mins.`,
+    };
+  }, [deliverySettings, serviceability]);
 
   const checkLocationServiceability = useCallback(async (lat: number, lng: number): Promise<ServiceabilityState> => {
     setServiceability((prev) => ({ ...prev, checking: true }));
@@ -127,11 +236,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         checked: true,
         configured: Boolean(data.configured),
         serviceable: Boolean(data.serviceable),
+        is_delivery_active: data.is_delivery_active !== undefined ? Boolean(data.is_delivery_active) : Boolean(data.serviceable),
+        eta_text: data.eta_text,
         distanceKm: data.distanceKm,
         radiusKm: Number(data.radiusKm) || 5,
         message: data.message,
         hubName: data.hubName,
         hubAddress: data.hubAddress,
+        zone: data.zone || null,
         checking: false,
         coordinates: { latitude: Number(lat), longitude: Number(lng) },
       };
@@ -222,8 +334,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           min_order_amount: Number(d.min_order_amount),
           enable_free_delivery: Boolean(d.enable_free_delivery),
           express_delivery_fee: Number(d.express_delivery_fee),
-          estimated_delivery_time: String(d.estimated_delivery_time || '25–35 mins'),
+          estimated_delivery_time: String(d.estimated_delivery_time || '30–45 mins'),
+          min_eta_minutes: d.min_eta_minutes ? Number(d.min_eta_minutes) : 30,
+          max_eta_minutes: d.max_eta_minutes ? Number(d.max_eta_minutes) : 45,
           is_delivery_active: d.is_delivery_active !== false,
+          global_delivery_status: d.global_delivery_status || (d.is_delivery_active !== false ? 'available' : 'paused'),
+          global_pause_reason: d.global_pause_reason || '',
+          global_reopen_at: d.global_reopen_at || null,
           surge_charge: Number(d.surge_charge || 0),
           hub_name: d.hub_name,
           hub_address: d.hub_address,
@@ -246,6 +363,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     fetchDeliverySettings();
   }, [fetchDeliverySettings]);
+
+  // Real-time live sync subscription & background polling for delivery ETA and availability
+  useEffect(() => {
+    const unsub = subscribeLiveUpdates(['delivery_settings', 'zones'], () => {
+      fetchDeliverySettings();
+      recheckServiceability();
+    });
+
+    const interval = setInterval(() => {
+      fetchDeliverySettings();
+      recheckServiceability();
+    }, 25000);
+
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
+  }, [fetchDeliverySettings, recheckServiceability]);
 
   // Initial serviceability check on app boot & listener for location change events
   useEffect(() => {
@@ -547,6 +682,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isCartOpen,
         deliverySettings,
         serviceability,
+        deliveryEstimate,
         isLocationModalOpen,
         setIsLocationModalOpen,
         checkLocationServiceability,

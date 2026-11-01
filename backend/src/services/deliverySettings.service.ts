@@ -23,7 +23,12 @@ export interface StoreDeliverySettings {
   enable_free_delivery: boolean;
   express_delivery_fee: number;
   estimated_delivery_time: string;
+  min_eta_minutes?: number;
+  max_eta_minutes?: number;
   is_delivery_active: boolean;
+  global_delivery_status?: 'available' | 'paused' | 'closed_for_today';
+  global_pause_reason?: string;
+  global_reopen_at?: string | null;
   surge_charge: number;
   updated_at: string;
 
@@ -138,8 +143,13 @@ export function getPersistedDeliverySettings(): StoreDeliverySettings {
     min_order_amount: 10,
     enable_free_delivery: true,
     express_delivery_fee: 45,
-    estimated_delivery_time: '25–35 mins',
+    estimated_delivery_time: '30–45 mins',
+    min_eta_minutes: 30,
+    max_eta_minutes: 45,
     is_delivery_active: true,
+    global_delivery_status: 'available',
+    global_pause_reason: '',
+    global_reopen_at: null,
     surge_charge: 0,
     updated_at: new Date().toISOString(),
     // Delivery hub defaults to Champapet, Hyderabad central store
@@ -149,19 +159,19 @@ export function getPersistedDeliverySettings(): StoreDeliverySettings {
     hub_longitude: envHub.lng !== null ? envHub.lng : 78.516972,
     delivery_radius_km: envHub.radius > 0 ? envHub.radius : 5.0,
     serviceability_enabled: true,
-    operating_hours_start: '07:00',
-    operating_hours_end: '21:30',
+    operating_hours_start: '06:00',
+    operating_hours_end: '22:00',
     express_enabled: true,
-    express_start_time: '07:00',
-    express_end_time: '21:00',
+    express_start_time: '06:00',
+    express_end_time: '21:30',
     morning_slot_enabled: true,
-    morning_slot_start: '07:00',
+    morning_slot_start: '06:00',
     morning_slot_end: '09:00',
     morning_slot_cutoff: '08:30',
     evening_slot_enabled: true,
     evening_slot_start: '17:00',
-    evening_slot_end: '19:00',
-    evening_slot_cutoff: '18:30',
+    evening_slot_end: '20:00',
+    evening_slot_cutoff: '19:30',
   };
 
   writeSettingsToFile(fallback);
@@ -212,8 +222,13 @@ export function savePersistedDeliverySettings(partial: Partial<StoreDeliverySett
     min_order_amount: partial.min_order_amount !== undefined ? Math.max(0, Number(partial.min_order_amount)) : current.min_order_amount,
     enable_free_delivery: partial.enable_free_delivery !== undefined ? Boolean(partial.enable_free_delivery) : current.enable_free_delivery,
     express_delivery_fee: partial.express_delivery_fee !== undefined ? Math.max(0, Number(partial.express_delivery_fee)) : current.express_delivery_fee,
-    estimated_delivery_time: partial.estimated_delivery_time !== undefined ? String(partial.estimated_delivery_time).trim() : current.estimated_delivery_time,
-    is_delivery_active: partial.is_delivery_active !== undefined ? Boolean(partial.is_delivery_active) : current.is_delivery_active,
+    estimated_delivery_time: partial.estimated_delivery_time !== undefined ? String(partial.estimated_delivery_time).trim() : (current.estimated_delivery_time || '30–45 mins'),
+    min_eta_minutes: partial.min_eta_minutes !== undefined ? Math.max(5, Number(partial.min_eta_minutes)) : (current.min_eta_minutes || 30),
+    max_eta_minutes: partial.max_eta_minutes !== undefined ? Math.max(10, Number(partial.max_eta_minutes)) : (current.max_eta_minutes || 45),
+    is_delivery_active: partial.is_delivery_active !== undefined ? Boolean(partial.is_delivery_active) : (partial.global_delivery_status ? partial.global_delivery_status === 'available' : current.is_delivery_active),
+    global_delivery_status: partial.global_delivery_status !== undefined ? partial.global_delivery_status : (current.global_delivery_status || (current.is_delivery_active ? 'available' : 'paused')),
+    global_pause_reason: partial.global_pause_reason !== undefined ? String(partial.global_pause_reason).trim() : (current.global_pause_reason || ''),
+    global_reopen_at: partial.global_reopen_at !== undefined ? (partial.global_reopen_at ? String(partial.global_reopen_at) : null) : (current.global_reopen_at || null),
     surge_charge: partial.surge_charge !== undefined ? Math.max(0, Number(partial.surge_charge)) : current.surge_charge,
     hub_name: partial.hub_name !== undefined ? String(partial.hub_name).trim() : (current.hub_name || 'Fresh Vegetables Central Hub'),
     hub_address: partial.hub_address !== undefined ? String(partial.hub_address).trim() : (current.hub_address || ''),
@@ -221,19 +236,19 @@ export function savePersistedDeliverySettings(partial: Partial<StoreDeliverySett
     hub_longitude: newLng,
     delivery_radius_km: newRadius,
     serviceability_enabled: partial.serviceability_enabled !== undefined ? Boolean(partial.serviceability_enabled) : (current.serviceability_enabled !== false),
-    operating_hours_start: partial.operating_hours_start !== undefined ? String(partial.operating_hours_start) : (current.operating_hours_start || '07:00'),
-    operating_hours_end: partial.operating_hours_end !== undefined ? String(partial.operating_hours_end) : (current.operating_hours_end || '21:30'),
+    operating_hours_start: partial.operating_hours_start !== undefined ? String(partial.operating_hours_start) : (current.operating_hours_start || '06:00'),
+    operating_hours_end: partial.operating_hours_end !== undefined ? String(partial.operating_hours_end) : (current.operating_hours_end || '22:00'),
     express_enabled: partial.express_enabled !== undefined ? Boolean(partial.express_enabled) : (current.express_enabled !== false),
-    express_start_time: partial.express_start_time !== undefined ? String(partial.express_start_time) : (current.express_start_time || '07:00'),
-    express_end_time: partial.express_end_time !== undefined ? String(partial.express_end_time) : (current.express_end_time || '21:00'),
+    express_start_time: partial.express_start_time !== undefined ? String(partial.express_start_time) : (current.express_start_time || '06:00'),
+    express_end_time: partial.express_end_time !== undefined ? String(partial.express_end_time) : (current.express_end_time || '21:30'),
     morning_slot_enabled: partial.morning_slot_enabled !== undefined ? Boolean(partial.morning_slot_enabled) : (current.morning_slot_enabled !== false),
-    morning_slot_start: partial.morning_slot_start !== undefined ? String(partial.morning_slot_start) : (current.morning_slot_start || '07:00'),
+    morning_slot_start: partial.morning_slot_start !== undefined ? String(partial.morning_slot_start) : (current.morning_slot_start || '06:00'),
     morning_slot_end: partial.morning_slot_end !== undefined ? String(partial.morning_slot_end) : (current.morning_slot_end || '09:00'),
     morning_slot_cutoff: partial.morning_slot_cutoff !== undefined ? String(partial.morning_slot_cutoff) : (current.morning_slot_cutoff || '08:30'),
     evening_slot_enabled: partial.evening_slot_enabled !== undefined ? Boolean(partial.evening_slot_enabled) : (current.evening_slot_enabled !== false),
     evening_slot_start: partial.evening_slot_start !== undefined ? String(partial.evening_slot_start) : (current.evening_slot_start || '17:00'),
-    evening_slot_end: partial.evening_slot_end !== undefined ? String(partial.evening_slot_end) : (current.evening_slot_end || '19:00'),
-    evening_slot_cutoff: partial.evening_slot_cutoff !== undefined ? String(partial.evening_slot_cutoff) : (current.evening_slot_cutoff || '18:30'),
+    evening_slot_end: partial.evening_slot_end !== undefined ? String(partial.evening_slot_end) : (current.evening_slot_end || '20:00'),
+    evening_slot_cutoff: partial.evening_slot_cutoff !== undefined ? String(partial.evening_slot_cutoff) : (current.evening_slot_cutoff || '19:30'),
     updated_at: new Date().toISOString(),
   };
 

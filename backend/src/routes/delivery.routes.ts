@@ -13,12 +13,14 @@ import {
   updateDeliverySettings,
   checkDeliveryServiceability,
 } from '../controllers/delivery.controller';
+import { getActiveDeliveryZones } from '../controllers/zone.controller';
 import { authenticateAdmin } from '../middleware/auth';
 
 const router = Router();
 
 // Public / Customer delivery settings, serviceability & tracking
 router.get('/settings', getDeliverySettings);
+router.get('/zones', getActiveDeliveryZones);
 router.post('/check-serviceability', checkDeliveryServiceability);
 router.get('/tracking/:id', getOrderTracking);
 router.post('/location', updateDriverLocation);

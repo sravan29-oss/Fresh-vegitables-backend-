@@ -609,9 +609,31 @@ export interface DeliveryZone {
   min_order_amount: number;
   free_delivery_threshold: number;
   estimated_delivery_time: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  min_eta_minutes?: number;
+  max_eta_minutes?: number;
+  priority?: 'high' | 'medium' | 'normal';
+  daily_open_time?: string;
+  daily_close_time?: string;
+  max_capacity_per_slot?: number;
+  is_paused?: boolean;
+  pause_reason?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'PAUSED';
   latitude?: number;
   longitude?: number;
+}
+
+export interface DeliveryEstimate {
+  available: boolean;
+  isPaused: boolean;
+  globalStatus: 'available' | 'paused' | 'closed_for_today';
+  etaText: string; // e.g. "30–45 MINS"
+  minEtaMinutes: number;
+  maxEtaMinutes: number;
+  zoneName: string;
+  priority?: string;
+  pauseReason?: string;
+  distanceKm?: number;
+  statusMessage?: string;
 }
 
 export interface DeliverySettings {
@@ -622,7 +644,12 @@ export interface DeliverySettings {
   enable_free_delivery: boolean;
   express_delivery_fee: number;
   estimated_delivery_time: string;
+  min_eta_minutes?: number;
+  max_eta_minutes?: number;
   is_delivery_active: boolean;
+  global_delivery_status?: 'available' | 'paused' | 'closed_for_today';
+  global_pause_reason?: string;
+  global_reopen_at?: string | null;
   surge_charge: number;
   hub_name?: string;
   hub_address?: string;
@@ -653,12 +680,15 @@ export interface ServiceabilityState {
   checked: boolean;
   configured: boolean;
   serviceable: boolean;
+  is_delivery_active?: boolean;
+  eta_text?: string;
   distanceKm?: number;
   radiusKm: number;
   message?: string;
   hubName?: string;
   hubAddress?: string;
   checking: boolean;
+  zone?: DeliveryZone | null;
   coordinates?: { latitude: number; longitude: number } | null;
 }
 

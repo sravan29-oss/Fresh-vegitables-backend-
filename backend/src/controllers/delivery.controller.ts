@@ -6,7 +6,8 @@ import { AppError, NotFoundError, ValidationError } from '../utils/appError';
 import { memoryStore } from '../config/mockDb';
 import { logAuditEvent } from '../services/audit.service';
 import { getPersistedDeliverySettings, savePersistedDeliverySettings } from '../services/deliverySettings.service';
-import { checkServiceability, isValidCoordinate } from '../services/serviceability.service';
+import { checkServiceability, isValidCoordinate, calculateHaversineDistanceKm } from '../services/serviceability.service';
+import { getPersistedZones } from '../services/zoneStore.service';
 
 // ===================== ADMIN: DELIVERY PARTNERS =====================
 
@@ -572,8 +573,13 @@ export async function getDeliverySettings(req: Request, res: Response, next: Nex
           min_order_amount: Number(row.min_order_amount),
           enable_free_delivery: Boolean(row.enable_free_delivery),
           express_delivery_fee: Number(row.express_delivery_fee),
-          estimated_delivery_time: String(row.estimated_delivery_time || '25–35 mins'),
+          estimated_delivery_time: String(row.estimated_delivery_time || '30–45 mins'),
+          min_eta_minutes: row.min_eta_minutes ? Number(row.min_eta_minutes) : 30,
+          max_eta_minutes: row.max_eta_minutes ? Number(row.max_eta_minutes) : 45,
           is_delivery_active: row.is_delivery_active !== false,
+          global_delivery_status: (row.global_delivery_status as any) || (row.is_delivery_active !== false ? 'available' : 'paused'),
+          global_pause_reason: row.global_pause_reason || '',
+          global_reopen_at: row.global_reopen_at || null,
           surge_charge: Number(row.surge_charge || 0),
           hub_name: row.hub_name || settings.hub_name || 'Fresh Vegetables Central Hub',
           hub_address: row.hub_address !== undefined && row.hub_address !== null ? row.hub_address : (settings.hub_address || ''),
@@ -581,19 +587,19 @@ export async function getDeliverySettings(req: Request, res: Response, next: Nex
           hub_longitude: row.hub_longitude !== null && row.hub_longitude !== undefined ? Number(row.hub_longitude) : settings.hub_longitude,
           delivery_radius_km: row.delivery_radius_km ? Number(row.delivery_radius_km) : (settings.delivery_radius_km || 5.0),
           serviceability_enabled: row.serviceability_enabled !== false && settings.serviceability_enabled !== false,
-          operating_hours_start: row.operating_hours_start || settings.operating_hours_start || '07:00',
-          operating_hours_end: row.operating_hours_end || settings.operating_hours_end || '21:30',
+          operating_hours_start: row.operating_hours_start || settings.operating_hours_start || '06:00',
+          operating_hours_end: row.operating_hours_end || settings.operating_hours_end || '22:00',
           express_enabled: row.express_enabled !== false && settings.express_enabled !== false,
-          express_start_time: row.express_start_time || settings.express_start_time || '07:00',
-          express_end_time: row.express_end_time || settings.express_end_time || '21:00',
+          express_start_time: row.express_start_time || settings.express_start_time || '06:00',
+          express_end_time: row.express_end_time || settings.express_end_time || '21:30',
           morning_slot_enabled: row.morning_slot_enabled !== false && settings.morning_slot_enabled !== false,
-          morning_slot_start: row.morning_slot_start || settings.morning_slot_start || '07:00',
+          morning_slot_start: row.morning_slot_start || settings.morning_slot_start || '06:00',
           morning_slot_end: row.morning_slot_end || settings.morning_slot_end || '09:00',
           morning_slot_cutoff: row.morning_slot_cutoff || settings.morning_slot_cutoff || '08:30',
           evening_slot_enabled: row.evening_slot_enabled !== false && settings.evening_slot_enabled !== false,
           evening_slot_start: row.evening_slot_start || settings.evening_slot_start || '17:00',
-          evening_slot_end: row.evening_slot_end || settings.evening_slot_end || '19:00',
-          evening_slot_cutoff: row.evening_slot_cutoff || settings.evening_slot_cutoff || '18:30',
+          evening_slot_end: row.evening_slot_end || settings.evening_slot_end || '20:00',
+          evening_slot_cutoff: row.evening_slot_cutoff || settings.evening_slot_cutoff || '19:30',
           updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
         };
         savePersistedDeliverySettings(settings);
@@ -627,8 +633,13 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
       enable_free_delivery,
       express_delivery_fee,
       estimated_delivery_time,
+      min_eta_minutes,
+      max_eta_minutes,
       surge_charge,
       is_delivery_active,
+      global_delivery_status,
+      global_pause_reason,
+      global_reopen_at,
       hub_name,
       hub_address,
       hub_latitude,
@@ -682,8 +693,13 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
       enable_free_delivery,
       express_delivery_fee,
       estimated_delivery_time,
+      min_eta_minutes,
+      max_eta_minutes,
       surge_charge,
       is_delivery_active,
+      global_delivery_status,
+      global_pause_reason,
+      global_reopen_at,
       hub_name,
       hub_address,
       hub_latitude: hub_latitude !== undefined ? (hub_latitude === null || hub_latitude === '' ? null : Number(hub_latitude)) : undefined,
@@ -737,11 +753,17 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           evening_slot_start,
           evening_slot_end,
           evening_slot_cutoff,
+          global_delivery_status,
+          global_pause_reason,
+          global_reopen_at,
+          min_eta_minutes,
+          max_eta_minutes,
           updated_at
         ) VALUES (
           'global_delivery_settings',
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-          $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, NOW()
+          $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+          $28, $29, $30, $31, $32, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           default_delivery_charge = EXCLUDED.default_delivery_charge,
@@ -771,6 +793,11 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           evening_slot_start = EXCLUDED.evening_slot_start,
           evening_slot_end = EXCLUDED.evening_slot_end,
           evening_slot_cutoff = EXCLUDED.evening_slot_cutoff,
+          global_delivery_status = EXCLUDED.global_delivery_status,
+          global_pause_reason = EXCLUDED.global_pause_reason,
+          global_reopen_at = EXCLUDED.global_reopen_at,
+          min_eta_minutes = EXCLUDED.min_eta_minutes,
+          max_eta_minutes = EXCLUDED.max_eta_minutes,
           updated_at = NOW()
         RETURNING *`,
         [
@@ -788,19 +815,24 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
           updatedSettings.hub_longitude ?? null,
           updatedSettings.delivery_radius_km || 5.0,
           updatedSettings.serviceability_enabled !== false,
-          updatedSettings.operating_hours_start || '07:00',
-          updatedSettings.operating_hours_end || '21:30',
+          updatedSettings.operating_hours_start || '06:00',
+          updatedSettings.operating_hours_end || '22:00',
           updatedSettings.express_enabled !== false,
-          updatedSettings.express_start_time || '07:00',
-          updatedSettings.express_end_time || '21:00',
+          updatedSettings.express_start_time || '06:00',
+          updatedSettings.express_end_time || '21:30',
           updatedSettings.morning_slot_enabled !== false,
-          updatedSettings.morning_slot_start || '07:00',
+          updatedSettings.morning_slot_start || '06:00',
           updatedSettings.morning_slot_end || '09:00',
           updatedSettings.morning_slot_cutoff || '08:30',
           updatedSettings.evening_slot_enabled !== false,
           updatedSettings.evening_slot_start || '17:00',
-          updatedSettings.evening_slot_end || '19:00',
-          updatedSettings.evening_slot_cutoff || '18:30',
+          updatedSettings.evening_slot_end || '20:00',
+          updatedSettings.evening_slot_cutoff || '19:30',
+          updatedSettings.global_delivery_status || 'available',
+          updatedSettings.global_pause_reason || '',
+          updatedSettings.global_reopen_at || null,
+          updatedSettings.min_eta_minutes || 30,
+          updatedSettings.max_eta_minutes || 45,
         ]
       );
     } catch (dbErr) {
@@ -832,17 +864,19 @@ export async function updateDeliverySettings(req: AuthRequest, res: Response, ne
   }
 }
 
-// ===================== SERVICEABILITY CHECK (5 KM RADIUS) =====================
+// ===================== SERVICEABILITY CHECK (5 KM RADIUS) & DYNAMIC ETA =====================
 
 export async function checkDeliveryServiceability(req: Request, res: Response, next: NextFunction) {
   try {
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude, pincode } = req.body;
 
     if (latitude === undefined || longitude === undefined || latitude === null || longitude === null) {
       return res.status(400).json({
         success: false,
         configured: true,
         serviceable: false,
+        is_delivery_active: false,
+        eta_text: 'Location Required',
         message: 'Latitude and longitude are required to check delivery serviceability.',
       });
     }
@@ -855,21 +889,117 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
         success: false,
         configured: true,
         serviceable: false,
+        is_delivery_active: false,
+        eta_text: 'Invalid Location',
         message: 'Invalid coordinates: latitude must be between -90 and 90, longitude between -180 and 180.',
       });
     }
 
     const result = checkServiceability(lat, lng);
+    const settings = getPersistedDeliverySettings();
+    const zones = getPersistedZones();
+
+    // 1. If coordinates are outside 5 KM radius of the hub
+    if (!result.serviceable || !result.configured) {
+      return res.status(200).json({
+        success: true,
+        configured: result.configured,
+        serviceable: false,
+        is_delivery_active: false,
+        distanceKm: result.distanceKm,
+        radiusKm: result.radiusKm,
+        eta_text: 'Not Serviceable',
+        message: result.message || 'Location is outside our 5 km express delivery radius from Champapet hub.',
+        hubName: result.hubName,
+        data: result,
+      });
+    }
+
+    // 2. Resolve matched zone within serviceable range
+    let matchedZone: any = null;
+    let minZoneDistance = Infinity;
+
+    for (const z of zones) {
+      if (z.latitude && z.longitude) {
+        const dist = calculateHaversineDistanceKm(lat, lng, Number(z.latitude), Number(z.longitude));
+        if (dist < minZoneDistance) {
+          minZoneDistance = dist;
+          matchedZone = z;
+        }
+      }
+    }
+
+    if (!matchedZone && pincode) {
+      const cleanPin = String(pincode).trim();
+      matchedZone = zones.find((z) => Array.isArray(z.pincodes) && z.pincodes.includes(cleanPin));
+    }
+
+    if (!matchedZone && zones.length > 0) {
+      matchedZone = zones.find((z) => z.id === 'zone-champapet') || zones[0];
+    }
+
+    // 3. Determine Global & Zone-level Availability
+    const globalStatus = settings.global_delivery_status || (settings.is_delivery_active !== false ? 'available' : 'paused');
+    let isDeliveryActive = true;
+    let etaText = '30–45 MINS';
+    let statusMessage = 'Express delivery available at your location.';
+
+    const minEta = matchedZone?.min_eta_minutes || settings.min_eta_minutes || 30;
+    const maxEta = matchedZone?.max_eta_minutes || settings.max_eta_minutes || 45;
+
+    if (globalStatus === 'paused') {
+      isDeliveryActive = false;
+      etaText = 'Delivery Paused';
+      statusMessage = settings.global_pause_reason || 'Express deliveries are temporarily paused. Resuming shortly.';
+    } else if (globalStatus === 'closed_for_today') {
+      isDeliveryActive = false;
+      etaText = 'Closed for Today';
+      statusMessage = 'Deliveries are closed for today. Express orders reopen tomorrow morning.';
+    } else if (matchedZone && (matchedZone.is_paused === true || matchedZone.status === 'PAUSED')) {
+      isDeliveryActive = false;
+      etaText = 'Delivery Paused';
+      statusMessage = matchedZone.pause_reason || `Express delivery is temporarily paused in ${matchedZone.name}.`;
+    } else {
+      // Check operating hours in IST
+      const openTime = matchedZone?.daily_open_time || settings.operating_hours_start || '06:00';
+      const closeTime = matchedZone?.daily_close_time || settings.operating_hours_end || '22:00';
+      const nowIst = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit' });
+
+      if (nowIst < openTime || nowIst > closeTime) {
+        isDeliveryActive = false;
+        etaText = `Opens at ${openTime}`;
+        statusMessage = `Orders in this area are delivered between ${openTime} and ${closeTime}.`;
+      } else {
+        isDeliveryActive = true;
+        etaText = `${minEta}–${maxEta} MINS`;
+        statusMessage = `Express delivery in ${minEta}–${maxEta} mins.`;
+      }
+    }
 
     return res.status(200).json({
       success: true,
-      configured: result.configured,
-      serviceable: result.serviceable,
+      configured: true,
+      serviceable: true,
+      is_delivery_active: isDeliveryActive,
+      global_status: globalStatus,
       distanceKm: result.distanceKm,
       radiusKm: result.radiusKm,
-      message: result.message,
+      message: statusMessage,
       hubName: result.hubName,
-      data: result,
+      zone: matchedZone,
+      eta_text: etaText,
+      min_eta_minutes: minEta,
+      max_eta_minutes: maxEta,
+      priority: matchedZone?.priority || 'normal',
+      delivery_fee: matchedZone?.delivery_fee ?? settings.default_delivery_charge,
+      free_delivery_threshold: matchedZone?.free_delivery_threshold ?? settings.free_delivery_threshold,
+      min_order_amount: matchedZone?.min_order_amount ?? settings.min_order_amount,
+      data: {
+        ...result,
+        zone: matchedZone,
+        eta_text: etaText,
+        is_delivery_active: isDeliveryActive,
+      },
     });
   } catch (error) {
     next(error);

@@ -3,12 +3,14 @@ import db from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { sendSuccess } from '../utils/apiResponse';
 import { NotFoundError } from '../utils/appError';
+import { resolveCustomerUserId } from '../services/customerUser.service';
 
 export async function getAddresses(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    const userId = await resolveCustomerUserId(req.user!);
     let result = await db.query(
       'SELECT * FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC',
-      [req.user!.id]
+      [userId]
     );
 
     if (result.rows.length === 0 && (req.user?.role === 'admin' || req.user?.role === 'super_admin')) {
@@ -25,7 +27,7 @@ export async function getAddresses(req: AuthRequest, res: Response, next: NextFu
 
 export async function createAddress(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { full_name, phone, house_number, street, area, landmark, city, state, pincode,
             latitude, longitude, address_type, is_default } = req.body;
 
@@ -77,7 +79,7 @@ export async function createAddress(req: AuthRequest, res: Response, next: NextF
 
 export async function updateAddress(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { id } = req.params;
 
     const existing = await db.query('SELECT * FROM addresses WHERE id = $1 AND user_id = $2', [id, userId]);
@@ -137,7 +139,7 @@ export async function updateAddress(req: AuthRequest, res: Response, next: NextF
 
 export async function deleteAddress(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { id } = req.params;
 
     const result = await db.query(
@@ -155,7 +157,7 @@ export async function deleteAddress(req: AuthRequest, res: Response, next: NextF
 
 export async function setDefaultAddress(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user!.id;
+    const userId = await resolveCustomerUserId(req.user!);
     const { id } = req.params;
 
     const existing = await db.query('SELECT * FROM addresses WHERE id = $1 AND user_id = $2', [id, userId]);

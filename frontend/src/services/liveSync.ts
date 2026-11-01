@@ -1,5 +1,5 @@
 // Real-time cross-tab & live update synchronization
-export type SyncEventType = 'products' | 'categories' | 'orders' | 'payments' | 'cart' | 'cms' | 'notification' | 'all';
+export type SyncEventType = 'products' | 'categories' | 'orders' | 'payments' | 'cart' | 'cms' | 'notification' | 'delivery_settings' | 'zones' | 'all';
 
 let broadcastChannel: BroadcastChannel | null = null;
 try {

@@ -16,7 +16,7 @@ export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addToCart, setIsCartOpen, serviceability, setIsLocationModalOpen } = useCart();
+  const { addToCart, setIsCartOpen, serviceability, setIsLocationModalOpen, deliveryEstimate, deliverySettings } = useCart();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -468,8 +468,12 @@ export const ProductDetailPage: React.FC = () => {
           {/* Trust Guarantees */}
           <div className="pt-6 border-t border-slate-100 grid grid-cols-2 gap-4 text-xs text-slate-600">
             <div className="flex items-center gap-2.5">
-              <Truck className="w-4 h-4 text-brand-600" />
-              <span>Delivered in 30 minutes</span>
+              <Truck className={`w-4 h-4 ${deliveryEstimate.isPaused ? 'text-amber-600' : 'text-brand-600'}`} />
+              <span className={deliveryEstimate.isPaused ? 'text-amber-700 font-bold' : ''}>
+                {deliveryEstimate.isPaused
+                  ? 'Delivery Temporarily Paused'
+                  : `Delivered in ${deliveryEstimate.etaText || deliverySettings.estimated_delivery_time || '30–45 mins'}`}
+              </span>
             </div>
             <div className="flex items-center gap-2.5">
               <ShieldCheck className="w-4 h-4 text-brand-600" />

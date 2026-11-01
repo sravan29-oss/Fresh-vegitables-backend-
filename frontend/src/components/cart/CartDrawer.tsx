@@ -1,12 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, Sparkles, ShieldCheck, Clock, AlertTriangle } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
 
 export const CartDrawer: React.FC = () => {
-  const { cart, isCartOpen, setIsCartOpen, updateQuantity, removeFromCart, itemCount, deliverySettings, serviceability, setIsLocationModalOpen } = useCart();
+  const { cart, isCartOpen, setIsCartOpen, updateQuantity, removeFromCart, itemCount, deliverySettings, serviceability, deliveryEstimate, setIsLocationModalOpen } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -202,6 +202,13 @@ export const CartDrawer: React.FC = () => {
                     )}
                   </span>
                 </div>
+                <div className="flex justify-between items-center text-xs text-slate-500 pt-1">
+                  <span>Estimated Delivery</span>
+                  <span className={`font-bold flex items-center gap-1 ${deliveryEstimate.isPaused ? 'text-amber-700' : 'text-[#0c831f]'}`}>
+                    <Clock className="w-3 h-3" />
+                    {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || '30–45 mins')}
+                  </span>
+                </div>
                 <div className="flex justify-between font-black text-slate-900 text-sm pt-2 border-t border-slate-100">
                   <span>To Pay</span>
                   <span className="text-[#0c831f] text-base">₹{cart.total}</span>
@@ -231,6 +238,19 @@ export const CartDrawer: React.FC = () => {
                 </div>
               )}
 
+              {/* Delivery Paused Banner in Cart */}
+              {deliveryEstimate.isPaused && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs text-amber-900">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                    <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse"></span>
+                    <span>Express Delivery Temporarily Paused</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 leading-snug">
+                    {deliveryEstimate.statusMessage || 'Deliveries are temporarily paused in your area. Resuming shortly.'}
+                  </p>
+                </div>
+              )}
+
               {deliverySettings?.min_order_amount > 0 && currentSubtotal < deliverySettings.min_order_amount && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-900 text-[11px] p-2.5 rounded-xl font-medium flex items-center justify-between">
                   <span>Minimum order: ₹{deliverySettings.min_order_amount}</span>
@@ -240,7 +260,7 @@ export const CartDrawer: React.FC = () => {
 
               <button
                 onClick={handleCheckoutClick}
-                disabled={serviceability.checked && !serviceability.serviceable}
+                disabled={(serviceability.checked && !serviceability.serviceable) || deliveryEstimate.isPaused}
                 className="w-full bg-[#0c831f] hover:bg-[#0a701a] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed active:scale-[0.99] text-white py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-between shadow-md disabled:shadow-none transition-all cursor-pointer"
               >
                 <div className="flex flex-col text-left leading-tight">
@@ -248,7 +268,9 @@ export const CartDrawer: React.FC = () => {
                   <span className="font-black text-base">₹{cart.total}</span>
                 </div>
                 <div className="flex items-center gap-1.5 font-bold">
-                  {serviceability.checked && !serviceability.serviceable ? (
+                  {deliveryEstimate.isPaused ? (
+                    <span>Deliveries Paused</span>
+                  ) : serviceability.checked && !serviceability.serviceable ? (
                     <span>Delivery Unavailable</span>
                   ) : (
                     <>

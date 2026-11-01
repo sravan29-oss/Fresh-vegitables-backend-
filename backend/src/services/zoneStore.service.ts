@@ -13,6 +13,15 @@ export interface DeliveryZoneItem {
   min_order_amount: number;
   free_delivery_threshold: number;
   estimated_delivery_time: string;
+  min_eta_minutes?: number;
+  max_eta_minutes?: number;
+  priority?: 'high' | 'medium' | 'normal';
+  daily_open_time?: string;
+  daily_close_time?: string;
+  max_capacity_per_slot?: number;
+  current_orders_in_slot?: number;
+  is_paused?: boolean;
+  pause_reason?: string;
   status: string;
   latitude: number;
   longitude: number;
@@ -29,7 +38,14 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
     delivery_fee: 10.0,
     min_order_amount: 10.0,
     free_delivery_threshold: 99.0,
-    estimated_delivery_time: '25–35 mins',
+    estimated_delivery_time: '30–45 min',
+    min_eta_minutes: 30,
+    max_eta_minutes: 45,
+    priority: 'high',
+    daily_open_time: '06:00',
+    daily_close_time: '22:00',
+    max_capacity_per_slot: 35,
+    is_paused: false,
     status: 'ACTIVE',
     latitude: 17.34457,
     longitude: 78.516972,
@@ -42,7 +58,14 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
     delivery_fee: 20.0,
     min_order_amount: 199.0,
     free_delivery_threshold: 499.0,
-    estimated_delivery_time: '25–35 mins',
+    estimated_delivery_time: '45–60 min',
+    min_eta_minutes: 45,
+    max_eta_minutes: 60,
+    priority: 'medium',
+    daily_open_time: '06:00',
+    daily_close_time: '22:00',
+    max_capacity_per_slot: 25,
+    is_paused: false,
     status: 'ACTIVE',
     latitude: 17.4938,
     longitude: 78.3995,
@@ -55,7 +78,14 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
     delivery_fee: 25.0,
     min_order_amount: 199.0,
     free_delivery_threshold: 499.0,
-    estimated_delivery_time: '30–40 mins',
+    estimated_delivery_time: '40–50 min',
+    min_eta_minutes: 40,
+    max_eta_minutes: 50,
+    priority: 'medium',
+    daily_open_time: '06:00',
+    daily_close_time: '22:00',
+    max_capacity_per_slot: 25,
+    is_paused: false,
     status: 'ACTIVE',
     latitude: 17.4474,
     longitude: 78.3762,
@@ -68,7 +98,14 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
     delivery_fee: 25.0,
     min_order_amount: 249.0,
     free_delivery_threshold: 549.0,
-    estimated_delivery_time: '35–45 mins',
+    estimated_delivery_time: '45–60 min',
+    min_eta_minutes: 45,
+    max_eta_minutes: 60,
+    priority: 'normal',
+    daily_open_time: '06:00',
+    daily_close_time: '22:00',
+    max_capacity_per_slot: 20,
+    is_paused: false,
     status: 'ACTIVE',
     latitude: 17.4968,
     longitude: 78.3547,

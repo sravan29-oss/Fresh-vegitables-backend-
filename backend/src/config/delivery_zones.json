@@ -12,12 +12,19 @@
     "delivery_fee": 10,
     "min_order_amount": 10,
     "free_delivery_threshold": 99,
-    "estimated_delivery_time": "25–35 mins",
+    "estimated_delivery_time": "30–45 min",
+    "min_eta_minutes": 30,
+    "max_eta_minutes": 45,
+    "priority": "high",
+    "daily_open_time": "06:00",
+    "daily_close_time": "22:00",
+    "max_capacity_per_slot": 35,
+    "is_paused": false,
     "status": "ACTIVE",
     "latitude": 17.34457,
     "longitude": 78.516972,
     "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2026-10-30T12:00:00.000Z"
+    "updated_at": "2026-11-01T12:00:00.000Z"
   },
   {
     "id": "zone-kphb",
@@ -33,12 +40,19 @@
     "delivery_fee": 20,
     "min_order_amount": 199,
     "free_delivery_threshold": 499,
-    "estimated_delivery_time": "25–35 mins",
+    "estimated_delivery_time": "45–60 min",
+    "min_eta_minutes": 45,
+    "max_eta_minutes": 60,
+    "priority": "medium",
+    "daily_open_time": "06:00",
+    "daily_close_time": "22:00",
+    "max_capacity_per_slot": 25,
+    "is_paused": false,
     "status": "ACTIVE",
     "latitude": 17.4938,
     "longitude": 78.3995,
     "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2026-10-29T10:00:00.000Z"
+    "updated_at": "2026-11-01T12:00:00.000Z"
   },
   {
     "id": "zone-hitech",
@@ -54,12 +68,19 @@
     "delivery_fee": 25,
     "min_order_amount": 199,
     "free_delivery_threshold": 499,
-    "estimated_delivery_time": "30–40 mins",
+    "estimated_delivery_time": "40–50 min",
+    "min_eta_minutes": 40,
+    "max_eta_minutes": 50,
+    "priority": "medium",
+    "daily_open_time": "06:00",
+    "daily_close_time": "22:00",
+    "max_capacity_per_slot": 25,
+    "is_paused": false,
     "status": "ACTIVE",
     "latitude": 17.4474,
     "longitude": 78.3762,
     "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2026-10-29T10:00:00.000Z"
+    "updated_at": "2026-11-01T12:00:00.000Z"
   },
   {
     "id": "zone-miyapur",
@@ -74,11 +95,18 @@
     "delivery_fee": 25,
     "min_order_amount": 249,
     "free_delivery_threshold": 549,
-    "estimated_delivery_time": "35–45 mins",
+    "estimated_delivery_time": "45–60 min",
+    "min_eta_minutes": 45,
+    "max_eta_minutes": 60,
+    "priority": "normal",
+    "daily_open_time": "06:00",
+    "daily_close_time": "22:00",
+    "max_capacity_per_slot": 20,
+    "is_paused": false,
     "status": "ACTIVE",
     "latitude": 17.4968,
     "longitude": 78.3547,
     "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2026-10-29T10:00:00.000Z"
+    "updated_at": "2026-11-01T12:00:00.000Z"
   }
 ]

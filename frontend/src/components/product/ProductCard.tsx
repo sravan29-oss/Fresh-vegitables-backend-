@@ -13,7 +13,7 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { user } = useAuth();
-  const { addToCart, updateQuantity, cart, serviceability } = useCart();
+  const { addToCart, updateQuantity, cart, serviceability, deliveryEstimate, deliverySettings } = useCart();
   const navigate = useNavigate();
 
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
@@ -123,10 +123,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>
         </div>
 
-        {/* Delivery ETA Pill (Iconic Quick Commerce Badge) - High Z-Index */}
+        {/* Delivery ETA Pill (Dynamic Admin Controlled ETA) - High Z-Index */}
         <div className={`absolute bottom-1.5 left-1.5 z-30 flex items-center gap-1 backdrop-blur-xs px-1.5 py-0.5 rounded-md border shadow-xs text-[9px] sm:text-[9.5px] font-extrabold tracking-tight pointer-events-none ${
           serviceability.checked && !serviceability.serviceable
             ? 'bg-rose-50/95 border-rose-200 text-rose-800'
+            : deliveryEstimate?.isPaused
+            ? 'bg-amber-50/95 border-amber-200 text-amber-800'
             : 'bg-white/95 border-slate-200/90 text-slate-800'
         }`}>
           {serviceability.checked && !serviceability.serviceable ? (
@@ -134,10 +136,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               <AlertCircle className="w-2.5 h-2.5 text-rose-600 stroke-[2.5]" />
               <span>OUTSIDE 5 KM</span>
             </>
+          ) : deliveryEstimate?.isPaused ? (
+            <>
+              <AlertTriangle className="w-2.5 h-2.5 text-amber-600 stroke-[2.5]" />
+              <span>{deliveryEstimate.etaText || 'PAUSED'}</span>
+            </>
           ) : (
             <>
               <Clock className="w-2.5 h-2.5 text-emerald-600 stroke-[2.5]" />
-              <span>15 MINS</span>
+              <span>{deliveryEstimate?.etaText || deliverySettings?.estimated_delivery_time || '30–45 MINS'}</span>
             </>
           )}
         </div>
@@ -382,8 +389,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 flex-1 divide-y divide-slate-100">
                 <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between pb-1">
                   <span>Available Pack Sizes</span>
-                  <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-emerald-600" /> 15–30 Mins Delivery
+                  <span className={`text-[11px] font-semibold flex items-center gap-1 ${deliveryEstimate?.isPaused ? 'text-amber-700' : 'text-emerald-700'}`}>
+                    <Clock className={`w-3 h-3 ${deliveryEstimate?.isPaused ? 'text-amber-600' : 'text-emerald-600'}`} />
+                    {deliveryEstimate?.isPaused ? 'Delivery Paused' : `${deliveryEstimate?.etaText || '30–45 Mins'} Delivery`}
                   </span>
                 </div>
 

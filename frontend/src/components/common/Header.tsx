@@ -39,7 +39,7 @@ const DYNAMIC_PLACEHOLDERS = [
 
 export const Header: React.FC = () => {
   const { user, logout, showLogoutConfirm, showLogoutSuccess } = useAuth();
-  const { itemCount, setIsCartOpen, serviceability, isLocationModalOpen, setIsLocationModalOpen } = useCart();
+  const { itemCount, setIsCartOpen, serviceability, isLocationModalOpen, setIsLocationModalOpen, deliveryEstimate, deliverySettings } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -224,11 +224,15 @@ export const Header: React.FC = () => {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
             </span>
-            <span className="px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider bg-white/20 text-white shrink-0">
-              ⚡ 15-MIN DISPATCH
+            <span className={`px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider shrink-0 ${
+              deliveryEstimate.isPaused ? 'bg-amber-500/30 text-amber-200' : 'bg-white/20 text-white'
+            }`}>
+              {deliveryEstimate.isPaused ? '⚠️ DELIVERIES PAUSED' : `⚡ ${deliveryEstimate.etaText || '30–45 MINS'} DISPATCH`}
             </span>
             <span className="truncate text-white font-bold tracking-wide text-[11px] sm:text-[11.5px]">
-              {storeSettings.announcement_text || 'Same-Day Farm Delivery for orders placed before 2:00 PM'}
+              {deliveryEstimate.isPaused
+                ? (deliveryEstimate.statusMessage || 'Express delivery temporarily paused in your area')
+                : (storeSettings.announcement_text || 'Same-Day Farm Delivery for orders placed before 2:00 PM')}
             </span>
           </div>
 
@@ -280,10 +284,17 @@ export const Header: React.FC = () => {
               <div className="flex items-center gap-1 leading-none">
                 {serviceability.checked ? (
                   serviceability.serviceable ? (
-                    <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                      <span>{serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} KM • 15 MINS` : '15 MINS DELIVERY'}</span>
-                    </span>
+                    deliveryEstimate.isPaused ? (
+                      <span className="text-[9.5px] font-black uppercase text-amber-600 flex items-center gap-1 tracking-wider">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span>DELIVERY PAUSED</span>
+                      </span>
+                    ) : (
+                      <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
+                        <span>{serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} KM • ${deliveryEstimate.etaText || '30–45 MINS'}` : `${deliveryEstimate.etaText || '30–45 MINS'} DELIVERY`}</span>
+                      </span>
+                    )
                   ) : !serviceability.configured ? (
                     <span className="text-[9.5px] font-black uppercase text-amber-600 flex items-center gap-1 tracking-wider">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
@@ -298,7 +309,7 @@ export const Header: React.FC = () => {
                 ) : (
                   <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                    <span>15 MINS DELIVERY</span>
+                    <span>{deliveryEstimate.isPaused ? 'DELIVERY PAUSED' : `${deliveryEstimate.etaText || '30–45 MINS'} DELIVERY`}</span>
                   </span>
                 )}
               </div>
@@ -494,8 +505,8 @@ export const Header: React.FC = () => {
                   <span className="text-emerald-700 text-[10px] sm:text-xs font-black tracking-wider uppercase px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200/80">Organic</span>
                 </span>
                 <div className="flex text-[9.5px] font-extrabold uppercase tracking-[0.14em] text-slate-500 mt-1 items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                  <span>⚡ 15 MINS QUICK COMMERCE • 100% ORGANIC</span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${deliveryEstimate.isPaused ? 'bg-amber-500' : 'bg-[#0c831f]'} animate-pulse`}></span>
+                  <span>{deliveryEstimate.isPaused ? '⚠️ DELIVERIES PAUSED • 100% ORGANIC' : `⚡ ${deliveryEstimate.etaText || '30–45 MINS'} EXPRESS • 100% ORGANIC`}</span>
                 </div>
               </div>
             </Link>
@@ -546,9 +557,9 @@ export const Header: React.FC = () => {
                   {displayLocationName}
                 </span>
                 <span className="text-slate-400">•</span>
-                <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 shrink-0">
-                  <Clock className="w-3 h-3 text-[#0c831f]" />
-                  {currentZone?.estimated_delivery_time || '25–35 mins'}
+                <span className={`text-[10px] font-semibold flex items-center gap-1 shrink-0 ${deliveryEstimate.isPaused ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  <Clock className={`w-3 h-3 ${deliveryEstimate.isPaused ? 'text-amber-600' : 'text-[#0c831f]'}`} />
+                  {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || '30–45 mins')}
                 </span>
               </div>
             </div>
@@ -840,8 +851,8 @@ export const Header: React.FC = () => {
                     <span className="text-emerald-700 text-[10px] font-black uppercase px-1 py-0.5 rounded bg-emerald-50 border border-emerald-200/80">Organic</span>
                   </h3>
                   <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f]"></span>
-                    ⚡ 15 MINS QUICK COMMERCE • 100% ORGANIC
+                    <span className={`w-1.5 h-1.5 rounded-full ${deliveryEstimate.isPaused ? 'bg-amber-500' : 'bg-[#0c831f]'}`}></span>
+                    ⚡ {deliveryEstimate.isPaused ? 'DELIVERY PAUSED' : `${deliveryEstimate.etaText || '30–45 MINS'} EXPRESS`} • 100% ORGANIC
                   </p>
                 </div>
               </div>

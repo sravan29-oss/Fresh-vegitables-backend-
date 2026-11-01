@@ -8,6 +8,7 @@ import {
   createZone,
   updateZone,
   deleteZone,
+  toggleZonePause,
 } from '../controllers/zone.controller';
 import { getDeliverySettings, updateDeliverySettings } from '../controllers/delivery.controller';
 import { authenticateAdmin } from '../middleware/auth';
@@ -29,6 +30,7 @@ router.get('/stores', getStores);
 router.get('/admin', authenticateAdmin, getAdminZones);
 router.post('/admin', authenticateAdmin, createZone);
 router.put('/admin/:id', authenticateAdmin, updateZone);
+router.patch('/admin/:id/toggle-pause', authenticateAdmin, toggleZonePause);
 router.delete('/admin/:id', authenticateAdmin, deleteZone);
 
 export default router;

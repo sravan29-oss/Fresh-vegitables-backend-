@@ -275,12 +275,26 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
   const [fee, setFee] = useState(20);
   const [minOrder, setMinOrder] = useState(199);
   const [freeThreshold, setFreeThreshold] = useState(499);
-  const [eta, setEta] = useState('25–35 mins');
+  const [eta, setEta] = useState('30–45 mins');
+  const [minEta, setMinEta] = useState<number>(30);
+  const [maxEta, setMaxEta] = useState<number>(45);
+  const [priority, setPriority] = useState<'high' | 'medium' | 'normal'>('normal');
+  const [dailyOpen, setDailyOpen] = useState<string>('06:00');
+  const [dailyClose, setDailyClose] = useState<string>('22:00');
+  const [maxCapacity, setMaxCapacity] = useState<number>(25);
+  const [isZonePaused, setIsZonePaused] = useState<boolean>(false);
+  const [pauseReason, setPauseReason] = useState<string>('');
   const [zoneLat, setZoneLat] = useState<number>(17.4938);
   const [zoneLng, setZoneLng] = useState<number>(78.3995);
   const [zoneRadius, setZoneRadius] = useState<number>(8.5);
   const [detectedAddress, setDetectedAddress] = useState<string>('KPHB Colony Phase 1, Kukatpally, Hyderabad - 500072');
   const [detectedColony, setDetectedColony] = useState<string>('KPHB Colony');
+
+  // Master Global Delivery Status & Storefront ETA Controls
+  const [globalStatus, setGlobalStatus] = useState<'available' | 'paused' | 'closed_for_today'>('available');
+  const [globalPauseReason, setGlobalPauseReason] = useState<string>('');
+  const [globalMinEta, setGlobalMinEta] = useState<number>(30);
+  const [globalMaxEta, setGlobalMaxEta] = useState<number>(45);
 
   const fetchData = async () => {
     try {
@@ -301,8 +315,12 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
           min_order_amount: Number(s.min_order_amount),
           enable_free_delivery: Boolean(s.enable_free_delivery),
           express_delivery_fee: Number(s.express_delivery_fee),
-          estimated_delivery_time: String(s.estimated_delivery_time || '25–35 mins'),
-          is_delivery_active: s.is_delivery_active !== false,
+          estimated_delivery_time: String(s.estimated_delivery_time || `${s.min_eta_minutes || 30}–${s.max_eta_minutes || 45} mins`),
+          global_delivery_status: (s.global_delivery_status as any) || (s.is_delivery_active === false ? 'paused' : 'available'),
+          global_pause_reason: s.global_pause_reason || '',
+          min_eta_minutes: Number(s.min_eta_minutes || 30),
+          max_eta_minutes: Number(s.max_eta_minutes || 45),
+          is_delivery_active: s.global_delivery_status ? s.global_delivery_status === 'available' : s.is_delivery_active !== false,
           surge_charge: Number(s.surge_charge || 0),
           hub_name: s.hub_name || 'Fresh Vegetables Central Hub',
           hub_address: s.hub_address || '',
@@ -327,6 +345,10 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
         };
         setDeliverySettings(normalized);
         setSavedSettings(normalized);
+        setGlobalStatus(normalized.global_delivery_status || 'available');
+        setGlobalPauseReason(normalized.global_pause_reason || '');
+        setGlobalMinEta(normalized.min_eta_minutes || 30);
+        setGlobalMaxEta(normalized.max_eta_minutes || 45);
         setHubName(normalized.hub_name || 'Fresh Vegetables Central Hub');
         setHubAddress(normalized.hub_address || '');
         setHubLat(normalized.hub_latitude !== null && normalized.hub_latitude !== undefined ? normalized.hub_latitude : '');
@@ -660,13 +682,23 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
         return;
       }
 
+      const calculatedEta = `${minEta}–${maxEta} mins`;
+
       const payload = {
         name: name.trim(),
         pincodes: pinArray,
         delivery_fee: Math.max(0, Number(fee) || 0),
         min_order_amount: Math.max(0, Number(minOrder) || 0),
         free_delivery_threshold: Math.max(0, Number(freeThreshold) || 0),
-        estimated_delivery_time: eta.trim() || '25–35 mins',
+        estimated_delivery_time: calculatedEta,
+        min_eta_minutes: Math.max(1, Number(minEta) || 30),
+        max_eta_minutes: Math.max(Number(minEta) || 30, Number(maxEta) || 45),
+        priority: priority || 'normal',
+        daily_open_time: dailyOpen || '06:00',
+        daily_close_time: dailyClose || '22:00',
+        max_capacity_per_slot: Math.max(1, Number(maxCapacity) || 25),
+        is_paused: Boolean(isZonePaused),
+        pause_reason: isZonePaused ? pauseReason : null,
         latitude: Number(zoneLat),
         longitude: Number(zoneLng),
         delivery_radius_km: Math.max(0.5, Number(zoneRadius) || 8.5),
@@ -680,11 +712,76 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
         showToast(`New delivery zone "${name}" created successfully`);
       }
 
+      notifyLiveUpdate('zones');
+      notifyLiveUpdate('delivery_settings');
       setIsModalOpen(false);
       setEditingZone(null);
       await fetchData();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to save zone');
+    }
+  };
+
+  const handleToggleZonePause = async (zone: DeliveryZone) => {
+    try {
+      const isCurrentlyPaused = Boolean(zone.is_paused);
+      const newPaused = !isCurrentlyPaused;
+      await api.patch(`/zones/admin/${zone.id}/toggle-pause`, {
+        is_paused: newPaused,
+        pause_reason: newPaused ? 'Temporarily paused by store admin' : null,
+      });
+      showToast(`Zone "${zone.name}" ${newPaused ? 'paused' : 'resumed'}`);
+      notifyLiveUpdate('zones');
+      await fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to toggle zone status');
+    }
+  };
+
+  const handleUpdateGlobalDeliveryStatus = async (
+    newStatus: 'available' | 'paused' | 'closed_for_today',
+    customReason?: string,
+    newMinEta?: number,
+    newMaxEta?: number
+  ) => {
+    try {
+      setIsSavingSettings(true);
+      const statusToApply = newStatus;
+      const reasonToApply = customReason !== undefined ? customReason : globalPauseReason;
+      const minToApply = newMinEta !== undefined ? newMinEta : globalMinEta;
+      const maxToApply = newMaxEta !== undefined ? newMaxEta : globalMaxEta;
+
+      const updated = {
+        ...deliverySettings,
+        global_delivery_status: statusToApply,
+        global_pause_reason: reasonToApply,
+        min_eta_minutes: minToApply,
+        max_eta_minutes: maxToApply,
+        estimated_delivery_time: `${minToApply}–${maxToApply} mins`,
+        is_delivery_active: statusToApply === 'available',
+      };
+
+      setDeliverySettings(updated);
+      setGlobalStatus(statusToApply);
+      setGlobalPauseReason(reasonToApply);
+      setGlobalMinEta(minToApply);
+      setGlobalMaxEta(maxToApply);
+
+      const res = await api.put('/delivery/settings', updated);
+      if (res.data?.data) {
+        setSavedSettings(updated);
+        try {
+          localStorage.setItem('fresh_veg_delivery_settings', JSON.stringify(updated));
+        } catch {}
+        await syncCartDeliverySettings();
+        notifyLiveUpdate('delivery_settings');
+        notifyLiveUpdate('all');
+      }
+      showToast(`Store delivery status updated to: ${statusToApply.replace(/_/g, ' ').toUpperCase()}`);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update global delivery status');
+    } finally {
+      setIsSavingSettings(false);
     }
   };
 
@@ -706,7 +803,15 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
     setFee(20);
     setMinOrder(199);
     setFreeThreshold(499);
-    setEta('25–35 mins');
+    setEta('30–45 mins');
+    setMinEta(30);
+    setMaxEta(45);
+    setPriority('normal');
+    setDailyOpen('06:00');
+    setDailyClose('22:00');
+    setMaxCapacity(25);
+    setIsZonePaused(false);
+    setPauseReason('');
     setZoneLat(17.4938);
     setZoneLng(78.3995);
     setZoneRadius(8.5);
@@ -722,7 +827,15 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
     setFee(zone.delivery_fee);
     setMinOrder(zone.min_order_amount);
     setFreeThreshold(zone.free_delivery_threshold);
-    setEta(zone.estimated_delivery_time);
+    setEta(zone.estimated_delivery_time || `${zone.min_eta_minutes || 30}–${zone.max_eta_minutes || 45} mins`);
+    setMinEta(zone.min_eta_minutes ?? 30);
+    setMaxEta(zone.max_eta_minutes ?? 45);
+    setPriority((zone.priority as any) || 'normal');
+    setDailyOpen(zone.daily_open_time || '06:00');
+    setDailyClose(zone.daily_close_time || '22:00');
+    setMaxCapacity(zone.max_capacity_per_slot ?? 25);
+    setIsZonePaused(Boolean(zone.is_paused));
+    setPauseReason(zone.pause_reason || '');
     setZoneLat(zone.latitude ? Number(zone.latitude) : 17.4474);
     setZoneLng(zone.longitude ? Number(zone.longitude) : 78.3762);
     setZoneRadius(Number(zone.delivery_radius_km) || 8.5);
@@ -2429,91 +2542,297 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
 
       {/* ================= TAB 2: ZONES & PINCODES ================= */}
       {activeTab === 'zones' && (
-        <div className="bg-slate-950/70 border border-slate-800 rounded-3xl p-6 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="font-extrabold text-sm text-white">Active Delivery Zones &amp; Custom Fees</h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Each zone overrides the default store delivery fee for its specific list of covered pincodes.
-              </p>
+        <div className="space-y-6">
+          {/* ─── Top Master Global Availability & ETA Card ─── */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-3 h-3 rounded-full animate-pulse bg-emerald-400" />
+                  <h3 className="font-black text-white text-base tracking-tight">
+                    Storefront Delivery Availability &amp; Speed Promise
+                  </h3>
+                  <span className={`text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                    globalStatus === 'available'
+                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                      : globalStatus === 'paused'
+                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                      : 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                  }`}>
+                    {globalStatus === 'available' ? '🟢 Available' : globalStatus === 'paused' ? '🟠 Paused' : '🔴 Closed for Today'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Controls the live delivery promise and checkout availability on the customer website in real-time.
+                </p>
+              </div>
+
+              {/* Status Switcher Buttons */}
+              <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 self-start md:self-auto">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateGlobalDeliveryStatus('available')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    globalStatus === 'available'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>Available</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleUpdateGlobalDeliveryStatus('paused', globalPauseReason || 'Deliveries temporarily paused due to heavy rain. Resuming shortly.')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    globalStatus === 'paused'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>Pause Deliveries</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleUpdateGlobalDeliveryStatus('closed_for_today', globalPauseReason || 'Closed for today. Pre-orders open for tomorrow morning harvest delivery.')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    globalStatus === 'closed_for_today'
+                      ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                >
+                  <X className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>Closed for Today</span>
+                </button>
+              </div>
             </div>
-            <button
-              onClick={openCreate}
-              className="bg-brand-500 hover:bg-brand-400 text-slate-950 font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 self-start sm:self-auto shadow-md"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Custom Zone</span>
-            </button>
+
+            {/* Sub-Controls: Min ETA, Max ETA & Custom Pause Reason */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Default Min ETA (Mins)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="5"
+                    max="180"
+                    value={globalMinEta}
+                    onChange={(e) => setGlobalMinEta(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono font-bold text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">min</span>
+                </div>
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Default Max ETA (Mins)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="10"
+                    max="240"
+                    value={globalMaxEta}
+                    onChange={(e) => setGlobalMaxEta(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono font-bold text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">min</span>
+                </div>
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Customer Announcement / Pause Notice
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Heavy rain in Hyderabad - express delivery resuming soon"
+                  value={globalPauseReason}
+                  onChange={(e) => setGlobalPauseReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <button
+                  type="button"
+                  disabled={isSavingSettings}
+                  onClick={() => handleUpdateGlobalDeliveryStatus(globalStatus, globalPauseReason, globalMinEta, globalMaxEta)}
+                  className="w-full h-[38px] bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingSettings ? 'Saving...' : 'Apply ETA'}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-400">
-                  <th className="py-2.5 px-3">Zone Name</th>
-                  <th className="py-2.5 px-3">Covered Pincodes</th>
-                  <th className="py-2.5 px-3">Delivery Fee</th>
-                  <th className="py-2.5 px-3">Min Order</th>
-                  <th className="py-2.5 px-3">Free Delivery At</th>
-                  <th className="py-2.5 px-3">Speed ETA</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                {zones.map((zone) => (
-                  <tr key={zone.id} className="hover:bg-slate-900/50">
-                    <td className="py-3 px-3 font-bold text-white text-sm">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-brand-400 shrink-0" />
-                        <div>
-                          <span>{zone.name}</span>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] text-brand-400 bg-brand-500/10 border border-brand-500/20 px-1.5 py-0.2 rounded font-mono">
-                              {zone.latitude ? `${Number(zone.latitude).toFixed(3)}, ${Number(zone.longitude).toFixed(3)}` : '17.493, 78.399'}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-semibold">
-                              {zone.delivery_radius_km || 8.5} km coverage
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {zone.pincodes.map((pin) => (
-                          <span
-                            key={pin}
-                            className="bg-slate-900 text-slate-300 font-mono px-1.5 py-0.5 rounded text-[10px] border border-slate-800"
-                          >
-                            {pin}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 font-black text-brand-400">₹{zone.delivery_fee}</td>
-                    <td className="py-3 px-3 text-slate-300 font-mono">₹{zone.min_order_amount}</td>
-                    <td className="py-3 px-3 font-bold text-emerald-400 font-mono">₹{zone.free_delivery_threshold}+</td>
-                    <td className="py-3 px-3 text-slate-400">{zone.estimated_delivery_time}</td>
-                    <td className="py-3 px-3 text-right space-x-2">
-                      <button
-                        onClick={() => openEdit(zone)}
-                        className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white transition-colors"
-                        title="Edit Zone"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteZone(zone.id)}
-                        className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 transition-colors"
-                        title="Delete Zone"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+          {/* ─── Area / Zone Wise Delivery Table ─── */}
+          <div className="bg-slate-950/70 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-extrabold text-sm text-white">Area-Wise Delivery Settings &amp; Timings</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Admin controls actual delivery availability, priority dispatch, operating hours, and zone-specific ETAs.
+                </p>
+              </div>
+              <button
+                onClick={openCreate}
+                className="bg-brand-500 hover:bg-brand-400 text-slate-950 font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 self-start sm:self-auto shadow-md"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Custom Zone</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400">
+                    <th className="py-2.5 px-3">Area / Zone</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3">Priority</th>
+                    <th className="py-2.5 px-3">Estimated Delivery</th>
+                    <th className="py-2.5 px-3">Operating Hours</th>
+                    <th className="py-2.5 px-3">Covered Pincodes</th>
+                    <th className="py-2.5 px-3">Fee / Free At</th>
+                    <th className="py-2.5 px-3 text-right">Quick Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  {zones.map((zone) => {
+                    const isPaused = Boolean(zone.is_paused);
+                    const isHighPriority = zone.priority === 'high';
+                    return (
+                      <tr key={zone.id} className="hover:bg-slate-900/50">
+                        {/* Zone Name & Location */}
+                        <td className="py-3 px-3 font-bold text-white text-sm">
+                          <div className="flex items-center gap-2">
+                            <MapPin className={`w-3.5 h-3.5 shrink-0 ${isPaused ? 'text-amber-400' : 'text-brand-400'}`} />
+                            <div>
+                              <span>{zone.name}</span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[10px] text-brand-400 bg-brand-500/10 border border-brand-500/20 px-1.5 py-0.2 rounded font-mono">
+                                  {zone.latitude ? `${Number(zone.latitude).toFixed(3)}, ${Number(zone.longitude).toFixed(3)}` : '17.347, 78.513'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-semibold">
+                                  {zone.delivery_radius_km || 5.0} km
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="py-3 px-3">
+                          {isPaused ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                              Paused
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              Active
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Priority Level */}
+                        <td className="py-3 px-3">
+                          {isHighPriority ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-brand-500/20 border border-brand-500/40 text-brand-300">
+                              <Zap className="w-3 h-3 text-brand-400" />
+                              High Priority
+                            </span>
+                          ) : zone.priority === 'medium' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 border border-blue-500/30 text-blue-300">
+                              Medium
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300">
+                              Normal
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Estimated Delivery Time (Dynamic) */}
+                        <td className="py-3 px-3">
+                          <div className="font-extrabold text-white text-xs font-mono">
+                            {zone.min_eta_minutes || 30}–{zone.max_eta_minutes || 45} mins
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {zone.estimated_delivery_time}
+                          </div>
+                        </td>
+
+                        {/* Operating Hours */}
+                        <td className="py-3 px-3 font-mono text-slate-300">
+                          {zone.daily_open_time || '06:00'} – {zone.daily_close_time || '22:00'}
+                        </td>
+
+                        {/* Covered Pincodes */}
+                        <td className="py-3 px-3">
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {zone.pincodes.map((pin) => (
+                              <span
+                                key={pin}
+                                className="bg-slate-900 text-slate-300 font-mono px-1.5 py-0.5 rounded text-[10px] border border-slate-800"
+                              >
+                                {pin}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+
+                        {/* Fee / Free At */}
+                        <td className="py-3 px-3">
+                          <span className="font-black text-brand-400">₹{zone.delivery_fee}</span>
+                          <span className="text-slate-500 mx-1">/</span>
+                          <span className="font-bold text-emerald-400 font-mono">₹{zone.free_delivery_threshold}+ Free</span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-3 text-right space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleZonePause(zone)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              isPaused
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+                            }`}
+                            title={isPaused ? 'Resume deliveries in this area' : 'Temporarily pause deliveries in this area'}
+                          >
+                            {isPaused ? 'Resume' : 'Pause'}
+                          </button>
+                          <button
+                            onClick={() => openEdit(zone)}
+                            className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                            title="Edit Zone"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteZone(zone.id)}
+                            className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                            title="Delete Zone"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -2784,27 +3103,136 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-300 font-bold mb-1">Speed ETA</label>
+                        <label className="block text-slate-300 font-bold mb-1">Dispatch Priority</label>
+                        <select
+                          value={priority}
+                          onChange={(e) => setPriority(e.target.value as any)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs font-bold focus:outline-none focus:border-brand-500 cursor-pointer"
+                        >
+                          <option value="high">⚡ High Priority (Fast Dispatch)</option>
+                          <option value="medium">Medium Priority</option>
+                          <option value="normal">Normal Priority</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Min & Max ETA in Minutes */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">Min ETA (mins)</label>
                         <input
-                          type="text"
+                          type="number"
                           required
-                          value={eta}
-                          onChange={(e) => setEta(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
+                          min="5"
+                          max="180"
+                          value={minEta}
+                          onChange={(e) => setMinEta(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono font-bold focus:outline-none focus:border-brand-500"
                         />
                       </div>
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">Max ETA (mins)</label>
+                        <input
+                          type="number"
+                          required
+                          min="10"
+                          max="240"
+                          value={maxEta}
+                          onChange={(e) => setMaxEta(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono font-bold focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Daily Operating Hours & Slot Capacity */}
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] text-slate-300 font-bold mb-1">Daily Open</label>
+                        <input
+                          type="time"
+                          required
+                          value={dailyOpen}
+                          onChange={(e) => setDailyOpen(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-300 font-bold mb-1">Daily Close</label>
+                        <input
+                          type="time"
+                          required
+                          value={dailyClose}
+                          onChange={(e) => setDailyClose(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-300 font-bold mb-1">Slot Capacity</label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max="100"
+                          value={maxCapacity}
+                          onChange={(e) => setMaxCapacity(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Area Status Toggle & Pause Reason */}
+                    <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-white flex items-center gap-2">
+                          <span>Delivery Availability:</span>
+                          <span className={`text-[11px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            isZonePaused ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
+                          }`}>
+                            {isZonePaused ? 'Temporarily Paused' : 'Active & Delivering'}
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsZonePaused(!isZonePaused)}
+                          className={`px-3 py-1 rounded-xl text-xs font-extrabold cursor-pointer transition-all ${
+                            isZonePaused
+                              ? 'bg-amber-500 text-slate-950 shadow-sm'
+                              : 'bg-slate-800 text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          {isZonePaused ? 'Zone Paused' : 'Pause Zone'}
+                        </button>
+                      </div>
+
+                      {isZonePaused && (
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">
+                            Zone Pause Reason (Shown to Customers)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Area waterlogging / road maintenance - delivery resuming soon"
+                            value={pauseReason}
+                            onChange={(e) => setPauseReason(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Operational Summary Card */}
                     <div className="p-3 bg-brand-500/10 border border-brand-500/20 rounded-2xl space-y-1 text-[11px] text-slate-300">
                       <p className="font-bold text-brand-300 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Zone Economics Summary
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Zone Economics &amp; Speed Promise
                       </p>
                       <p className="text-slate-400">
                         • Flat fee: <strong className="text-white">₹{fee}</strong> (Free on orders ≥ <strong className="text-emerald-400">₹{freeThreshold}</strong>)
                       </p>
                       <p className="text-slate-400">
-                        • Min cart: <strong className="text-white">₹{minOrder}</strong> • Promise: <strong className="text-white">{eta}</strong>
+                        • Min cart: <strong className="text-white">₹{minOrder}</strong> • Promise: <strong className="text-white">{minEta}–{maxEta} mins</strong> ({priority.toUpperCase()} priority)
+                      </p>
+                      <p className="text-slate-400">
+                        • Operating window: <strong className="text-white">{dailyOpen} to {dailyClose}</strong> • Max <strong className="text-white">{maxCapacity} orders</strong>/slot
                       </p>
                       <p className="text-slate-400">
                         • Coverage: <strong className="text-white">{zoneRadius} km</strong> radius from epicenter

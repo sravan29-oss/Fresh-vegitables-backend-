@@ -7,7 +7,8 @@ import { generateOrderNumber, parsePaginationParams } from '../utils/helpers';
 import { v4 as uuidv4 } from 'uuid';
 import { memoryStore } from '../config/mockDb';
 import { getPersistedDeliverySettings } from '../services/deliverySettings.service';
-import { checkServiceability, isValidCoordinate } from '../services/serviceability.service';
+import { checkServiceability, isValidCoordinate, calculateHaversineDistanceKm } from '../services/serviceability.service';
+import { getPersistedZones } from '../services/zoneStore.service';
 import { getPersistedPaymentSettings } from '../services/paymentSettings.service';
 import { createAdminNotification, logPaymentTransaction } from './payment.controller';
 import {
@@ -104,6 +105,55 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       );
     }
 
+    // 5. Authoritatively revalidate Global & Zone Delivery Availability
+    const deliverySettings = getPersistedDeliverySettings();
+    const globalStatus = deliverySettings.global_delivery_status || (deliverySettings.is_delivery_active !== false ? 'available' : 'paused');
+    if (globalStatus === 'paused') {
+      throw new ValidationError(deliverySettings.global_pause_reason || 'Express deliveries are temporarily paused. Please try again in a few minutes.');
+    }
+    if (globalStatus === 'closed_for_today') {
+      throw new ValidationError('Express deliveries are closed for today. Orders reopen tomorrow morning.');
+    }
+
+    // Resolve matching zone for customer
+    const zones = getPersistedZones();
+    let matchedZone: any = null;
+    let minZoneDistance = Infinity;
+    for (const z of zones) {
+      if (z.latitude && z.longitude) {
+        const dist = calculateHaversineDistanceKm(deliveryLat, deliveryLng, Number(z.latitude), Number(z.longitude));
+        if (dist < minZoneDistance) {
+          minZoneDistance = dist;
+          matchedZone = z;
+        }
+      }
+    }
+    if (!matchedZone && address.pincode) {
+      const cleanPin = String(address.pincode).trim();
+      matchedZone = zones.find((z) => Array.isArray(z.pincodes) && z.pincodes.includes(cleanPin));
+    }
+    if (!matchedZone && zones.length > 0) {
+      matchedZone = zones.find((z) => z.id === 'zone-champapet') || zones[0];
+    }
+
+    // Check if zone is paused
+    if (matchedZone && (matchedZone.is_paused === true || matchedZone.status === 'PAUSED')) {
+      throw new ValidationError(matchedZone.pause_reason || `Express delivery is temporarily paused in ${matchedZone.name}. Please try again later.`);
+    }
+
+    // Check zone operating hours in IST
+    const openTime = matchedZone?.daily_open_time || deliverySettings.operating_hours_start || '06:00';
+    const closeTime = matchedZone?.daily_close_time || deliverySettings.operating_hours_end || '22:00';
+    const nowIst = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit' });
+    if (nowIst < openTime || nowIst > closeTime) {
+      throw new ValidationError(`Express deliveries in ${matchedZone?.name || 'your area'} operate between ${openTime} and ${closeTime}.`);
+    }
+
+    const minEta = matchedZone?.min_eta_minutes || deliverySettings.min_eta_minutes || 30;
+    const maxEta = matchedZone?.max_eta_minutes || deliverySettings.max_eta_minutes || 45;
+    const confirmedEta = `${minEta}–${maxEta} MINS`;
+    const zoneName = matchedZone?.name || deliverySettings.hub_name || 'Champapet & Saroornagar Zone';
+
     // Persist coordinates to address record if previously missing
     if (address.latitude === null || address.longitude === null) {
       try {
@@ -190,14 +240,8 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     let enableFreeDelivery = settings.enable_free_delivery !== false;
     let surgeCharge = Number(settings.surge_charge || 0);
 
-    // Check if customer pincode matches a delivery zone
-    const cleanPincode = String(address.pincode || '').trim();
+    // Applicable delivery fee based on matched zone or default settings
     let applicableDeliveryFee = defaultCharge;
-    const zones = (memoryStore as any).delivery_zones || [];
-    const matchedZone = zones.find((z: any) =>
-      z.status === 'ACTIVE' && Array.isArray(z.pincodes) && z.pincodes.includes(cleanPincode)
-    );
-
     if (matchedZone) {
       if (matchedZone.delivery_fee !== undefined) applicableDeliveryFee = Number(matchedZone.delivery_fee);
       if (matchedZone.free_delivery_threshold !== undefined) freeThreshold = Number(matchedZone.free_delivery_threshold);
@@ -255,6 +299,10 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       latitude: deliveryLat,
       longitude: deliveryLng,
       distance_km: serviceability.distanceKm,
+      confirmed_eta: confirmedEta,
+      delivery_zone_name: zoneName,
+      min_eta_minutes: minEta,
+      max_eta_minutes: maxEta,
     };
 
     // 7. Create order with authoritative payment status:
@@ -264,11 +312,11 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     const orderNumber = generateOrderNumber();
     const orderResult = await client.query(
       `INSERT INTO orders (order_number, user_id, address_snapshot, subtotal, delivery_charge,
-       discount, tax, total, payment_method, payment_status, order_status, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       discount, tax, total, payment_method, payment_status, order_status, notes, confirmed_eta, delivery_zone_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [orderNumber, userId, JSON.stringify(addressSnapshot), subtotal, deliveryCharge + codFee,
-       discount, tax, total, payment_method, initialPaymentStatus, 'pending', notes || null]
+       discount, tax, total, payment_method, initialPaymentStatus, 'pending', notes || null, confirmedEta, zoneName]
     );
 
     // 8. Create order items

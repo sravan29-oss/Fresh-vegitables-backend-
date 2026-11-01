@@ -28,7 +28,7 @@ import { SEOHead } from '../../components/common/SEOHead';
 import { getRealtimeDeliverySlots } from '../../utils/deliverySlots';
 
 export const CheckoutPage: React.FC = () => {
-  const { cart, fetchCart, deliverySettings } = useCart();
+  const { cart, fetchCart, deliverySettings, deliveryEstimate } = useCart();
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -149,6 +149,8 @@ export const CheckoutPage: React.FC = () => {
     radiusKm?: number;
     deliveryFee?: number;
     estimatedDelivery?: string;
+    isDeliveryActive?: boolean;
+    isPaused?: boolean;
     message?: string;
   }>({ checked: false, serviceable: true, radiusKm: 5.0 });
 
@@ -194,15 +196,19 @@ export const CheckoutPage: React.FC = () => {
           longitude: Number(lng),
         });
         const data = res.data?.data || res.data;
+        const dynamicEta = data.eta_text || data.zone?.estimated_delivery_time || deliverySettings?.estimated_delivery_time || '30–45 mins';
+        const isPaused = Boolean(data.is_delivery_active === false || data.global_status === 'paused' || data.zone?.is_paused);
         setZoneServiceability({
           checked: true,
           configured: Boolean(data.configured),
           serviceable: Boolean(data.serviceable),
           distanceKm: data.distanceKm,
           radiusKm: data.radiusKm || 5.0,
-          zoneName: data.hubName,
-          deliveryFee: 20,
-          estimatedDelivery: '25–35 mins',
+          zoneName: data.zone?.name || data.hubName,
+          deliveryFee: data.delivery_fee !== undefined ? data.delivery_fee : 20,
+          estimatedDelivery: dynamicEta,
+          isDeliveryActive: !isPaused,
+          isPaused,
           message: data.message,
         });
       } catch (err: any) {
@@ -228,7 +234,7 @@ export const CheckoutPage: React.FC = () => {
           radiusKm: radius,
           zoneName: deliverySettings?.hub_name || 'Fresh Vegetables Champapet Hub',
           deliveryFee: 10,
-          estimatedDelivery: '25–35 mins',
+          estimatedDelivery: deliverySettings?.estimated_delivery_time || '30–45 mins',
           message: inZone
             ? 'Delivery available at your location.'
             : `Selected address is ${dist} km from our hub (service zone: ${radius} km).`,
