@@ -6,12 +6,13 @@ import { sendSuccess } from '../utils/apiResponse';
 import { BadRequestError } from '../utils/appError';
 import { logAuditEvent } from '../services/audit.service';
 import { v4 as uuidv4 } from 'uuid';
+import { resolveCustomerUserId } from '../services/customerUser.service';
 
 // ================= CUSTOMER WALLET & LOYALTY =================
 
 export async function getLoyaltyAccount(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id || '11111111-1111-1111-1111-111111111111';
+    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
 
     let account: any = null;
     let transactions: any[] = [];
@@ -71,7 +72,7 @@ export async function getLoyaltyAccount(req: AuthRequest, res: Response, next: N
 
 export async function getWallet(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id || '11111111-1111-1111-1111-111111111111';
+    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
 
     let wallet: any = null;
     let transactions: any[] = [];
@@ -134,7 +135,7 @@ export async function getWallet(req: AuthRequest, res: Response, next: NextFunct
 
 export async function topupWallet(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id || '11111111-1111-1111-1111-111111111111';
+    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
     const amount = Number(req.body.amount);
 
     if (!amount || amount <= 0) {
@@ -209,7 +210,7 @@ export async function topupWallet(req: AuthRequest, res: Response, next: NextFun
 
 export async function payWithWallet(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id || '11111111-1111-1111-1111-111111111111';
+    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
     const { order_id, amount } = req.body;
 
     if (!amount || Number(amount) <= 0) {
@@ -309,7 +310,7 @@ export async function payWithWallet(req: AuthRequest, res: Response, next: NextF
 
 export async function getReferralProgram(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id || '11111111-1111-1111-1111-111111111111';
+    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
 
     let referralCode: any = null;
     let userReferrals: any[] = [];
@@ -379,7 +380,7 @@ export async function getReferralProgram(req: AuthRequest, res: Response, next: 
 
 export async function applyReferral(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id || '11111111-1111-1111-1111-111111111111';
+    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
     const { code } = req.body;
 
     if (!code) throw new BadRequestError('Referral code is required');

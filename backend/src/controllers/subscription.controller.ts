@@ -5,10 +5,11 @@ import { sendSuccess } from '../utils/apiResponse';
 import { BadRequestError, NotFoundError } from '../utils/appError';
 import { logAuditEvent } from '../services/audit.service';
 import { v4 as uuidv4 } from 'uuid';
+import { resolveCustomerUserId } from '../services/customerUser.service';
 
 export async function getUserSubscriptions(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id || '11111111-1111-1111-1111-111111111111';
+    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
     const userSubs = (memoryStore as any).subscriptions.filter((s: any) => s.user_id === userId);
     sendSuccess(res, 'User subscriptions', userSubs);
   } catch (error) {
@@ -18,7 +19,7 @@ export async function getUserSubscriptions(req: AuthRequest, res: Response, next
 
 export async function createSubscription(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id || '11111111-1111-1111-1111-111111111111';
+    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
     const {
       title,
       frequency, // DAILY, WEEKLY, BIWEEKLY, MONTHLY

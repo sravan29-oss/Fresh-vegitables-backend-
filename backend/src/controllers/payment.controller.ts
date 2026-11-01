@@ -303,7 +303,7 @@ export async function verifyPayment(req: AuthRequest, res: Response, next: NextF
       await db.query(
         `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [req.user?.id || order.user_id || null, 'Payment Received! 💳', `Your payment of ₹${payment.amount} has been verified successfully.`, 'ORDER_UPDATE', 'order', payment.order_id]
+        [order.user_id || null, 'Payment Received! 💳', `Your payment of ₹${payment.amount} has been verified successfully.`, 'ORDER_UPDATE', 'order', payment.order_id]
       );
 
       // Create Admin Real-Time Notification
