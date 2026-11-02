@@ -65,6 +65,8 @@ export const LoginPage: React.FC = () => {
         if (err.response?.data?.code === 'USER_NOT_FOUND') {
           setAccountNotFound(true);
         }
+      } else if (err.code === 'auth/operation-not-allowed' || err.message?.includes('region')) {
+        msg = 'SMS Region Policy: Please enable India (+91) in Firebase Console > Authentication > Settings > SMS region policy.';
       } else if (err.code === 'auth/configuration-not-found') {
         msg = 'Phone authentication is not enabled in your Firebase Console. Please open Firebase Console > Authentication > Sign-in method, click "Phone" and toggle "Enable".';
       } else if (err.code === 'auth/unauthorized-domain') {

@@ -72,7 +72,9 @@ export const RegisterPage: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to send registration OTP:', err);
       let msg = 'Failed to send OTP. Please check your mobile number and try again.';
-      if (err.code === 'auth/configuration-not-found') {
+      if (err.code === 'auth/operation-not-allowed' || err.message?.includes('region')) {
+        msg = 'SMS Region Policy: Please enable India (+91) in Firebase Console > Authentication > Settings > SMS region policy.';
+      } else if (err.code === 'auth/configuration-not-found') {
         msg = 'Phone authentication is not enabled in your Firebase Console. Please open Firebase Console > Authentication > Sign-in method, click "Phone" and toggle "Enable".';
       } else if (err.code === 'auth/unauthorized-domain') {
         msg = 'Domain not authorized. Please add fresh-vegetables-organic.vercel.app to Firebase Console > Authentication > Settings > Authorized domains.';
