@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, MapPin, Plus, Trash2, CheckCircle2, Phone, Mail, Navigation, AlertCircle, Loader2, CheckCircle, LogOut, Package, Wallet } from 'lucide-react';
 import api from '../../services/api';
@@ -70,6 +70,45 @@ export const ProfilePage: React.FC = () => {
       is_default: false,
     };
   });
+
+  // Fetch and auto-fill customer basic details into newAddress
+  const fetchUserBasicDetails = useCallback(async () => {
+    let nameVal = user?.name || '';
+    let phoneVal = user?.mobile || '';
+
+    if (!nameVal || !phoneVal) {
+      try {
+        const res = await api.get('/auth/profile');
+        if (res.data?.data) {
+          const profile = res.data.data;
+          nameVal = nameVal || profile.name || '';
+          phoneVal = phoneVal || profile.mobile || '';
+        }
+      } catch (err) {}
+    }
+
+    const cleanPhone = phoneVal ? phoneVal.replace(/\D/g, '').slice(-10) : '';
+
+    setNewAddress((prev) => ({
+      ...prev,
+      full_name: nameVal || prev.full_name,
+      phone: cleanPhone || prev.phone,
+    }));
+  }, [user]);
+
+  // Auto-sync whenever user state is updated
+  useEffect(() => {
+    if (user?.name || user?.mobile) {
+      fetchUserBasicDetails();
+    }
+  }, [user, fetchUserBasicDetails]);
+
+  const handleToggleAddAddress = () => {
+    if (!isAddingAddress) {
+      fetchUserBasicDetails();
+    }
+    setIsAddingAddress(!isAddingAddress);
+  };
 
   const checkPincodeServiceability = async (pincodeToCheck: string) => {
     const clean = pincodeToCheck.trim();
@@ -475,8 +514,8 @@ export const ProfilePage: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900">Saved Addresses</h3>
           </div>
           <button
-            onClick={() => setIsAddingAddress(!isAddingAddress)}
-            className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+            onClick={handleToggleAddAddress}
+            className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add New Address</span>
@@ -527,23 +566,48 @@ export const ProfilePage: React.FC = () => {
               </div>
             )}
 
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+              <span className="font-bold text-slate-700 text-xs">Recipient Details</span>
+              <button
+                type="button"
+                onClick={fetchUserBasicDetails}
+                className="text-[11px] font-bold text-[#0c831f] hover:underline flex items-center gap-1 cursor-pointer"
+                title="Auto-fetch your profile details"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Fetch My Details</span>
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
-              <input
-                type="text"
-                placeholder="Full Name"
-                required
-                value={newAddress.full_name}
-                onChange={(e) => setNewAddress({ ...newAddress, full_name: e.target.value })}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
-              />
-              <input
-                type="tel"
-                placeholder="Mobile (10 digits)"
-                required
-                value={newAddress.phone}
-                onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
-              />
+              <div>
+                <input
+                  type="text"
+                  placeholder="Full Name *"
+                  required
+                  value={newAddress.full_name}
+                  onChange={(e) => setNewAddress({ ...newAddress, full_name: e.target.value })}
+                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 text-xs font-medium"
+                />
+              </div>
+              <div className="relative flex items-center">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-extrabold text-slate-600 text-[11px] select-none bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                  +91
+                </span>
+                <input
+                  type="tel"
+                  placeholder="9876543210 *"
+                  required
+                  maxLength={10}
+                  value={newAddress.phone}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '');
+                    const clean = raw.length === 12 && raw.startsWith('91') ? raw.slice(2) : raw.slice(0, 10);
+                    setNewAddress({ ...newAddress, phone: clean });
+                  }}
+                  className="w-full pl-12 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 text-xs font-medium tracking-wider"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <input

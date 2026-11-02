@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   Loader2,
   Mail,
+  User,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Address, CouponValidationResult } from '../../types';
@@ -150,6 +151,47 @@ export const CheckoutPage: React.FC = () => {
       is_default: true,
     };
   });
+
+  // Fetch and auto-fill customer basic details into newAddress
+  const fetchUserBasicDetails = useCallback(async () => {
+    let name = user?.name || '';
+    let phone = user?.mobile || '';
+
+    // If context doesn't have details, fetch latest from /auth/profile
+    if (!name || !phone) {
+      try {
+        const res = await api.get('/auth/profile');
+        if (res.data?.data) {
+          const profile = res.data.data;
+          name = name || profile.name || '';
+          phone = phone || profile.mobile || '';
+        }
+      } catch (err) {
+        // non-blocking
+      }
+    }
+
+    const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : '';
+
+    setNewAddress((prev) => ({
+      ...prev,
+      full_name: name || prev.full_name,
+      phone: cleanPhone || prev.phone,
+    }));
+  }, [user]);
+
+  // Auto-sync whenever user state updates
+  useEffect(() => {
+    if (user?.name || user?.mobile) {
+      fetchUserBasicDetails();
+    }
+  }, [user, fetchUserBasicDetails]);
+
+  // When opening the Add Address modal, ensure user basic details are fresh and populated
+  const handleOpenAddAddressModal = () => {
+    fetchUserBasicDetails();
+    setIsAddAddressModalOpen(true);
+  };
 
   // Address Location Auto-fetch & Zone Serviceability State
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
@@ -422,6 +464,7 @@ export const CheckoutPage: React.FC = () => {
           } else if (res.data.data.length > 0) {
             setSelectedAddressId(res.data.data[0].id);
           } else {
+            fetchUserBasicDetails();
             setIsAddAddressModalOpen(true);
           }
         }
@@ -769,8 +812,8 @@ export const CheckoutPage: React.FC = () => {
                 <h3 className="text-lg font-bold text-slate-900">1. Delivery Address</h3>
               </div>
               <button
-                onClick={() => setIsAddAddressModalOpen(true)}
-                className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                onClick={handleOpenAddAddressModal}
+                className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add New Address</span>
@@ -781,8 +824,8 @@ export const CheckoutPage: React.FC = () => {
               <div className="p-6 text-center border-2 border-dashed border-slate-200 rounded-2xl">
                 <p className="text-xs text-slate-500 mb-3">No delivery address saved yet.</p>
                 <button
-                  onClick={() => setIsAddAddressModalOpen(true)}
-                  className="bg-brand-600 text-white text-xs font-bold px-4 py-2 rounded-xl"
+                  onClick={handleOpenAddAddressModal}
+                  className="bg-brand-600 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
                 >
                   Add Address
                 </button>
@@ -1213,7 +1256,7 @@ export const CheckoutPage: React.FC = () => {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setIsAddAddressModalOpen(true)}
+                  onClick={handleOpenAddAddressModal}
                   className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
                 >
                   Choose a Different Location
@@ -1518,26 +1561,55 @@ export const CheckoutPage: React.FC = () => {
             )}
 
             <form onSubmit={handleCreateAddress} className="space-y-4 text-xs">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                <span className="font-bold text-slate-700">Recipient Details</span>
+                <button
+                  type="button"
+                  onClick={fetchUserBasicDetails}
+                  className="text-[11px] font-bold text-[#0c831f] hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Auto-fetch your profile details"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Fetch My Details</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Full Name</label>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Full Name <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
+                    placeholder="e.g. Rahul Sharma"
                     value={newAddress.full_name}
                     onChange={(e) => setNewAddress({ ...newAddress, full_name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500 font-medium text-slate-800"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Mobile</label>
-                  <input
-                    type="tel"
-                    required
-                    value={newAddress.phone}
-                    onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500"
-                  />
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Mobile Number <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-extrabold text-slate-600 text-[11px] select-none bg-slate-200/80 px-1.5 py-0.5 rounded border border-slate-200">
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      placeholder="9876543210"
+                      value={newAddress.phone}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        const clean = raw.length === 12 && raw.startsWith('91') ? raw.slice(2) : raw.slice(0, 10);
+                        setNewAddress({ ...newAddress, phone: clean });
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-13 pr-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500 font-medium text-slate-800 tracking-wider"
+                    />
+                  </div>
                 </div>
               </div>
 

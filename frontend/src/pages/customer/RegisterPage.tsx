@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { User, Mail, Phone, Lock, ArrowRight, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { SEOHead } from '../../components/common/SEOHead';
@@ -14,6 +14,7 @@ export const RegisterPage: React.FC = () => {
   // Customer Form Fields
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -33,6 +34,7 @@ export const RegisterPage: React.FC = () => {
 
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
+    const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
 
     // Validation
     if (cleanName.length < 2) {
@@ -42,6 +44,11 @@ export const RegisterPage: React.FC = () => {
 
     if (!cleanEmail) {
       setErrorMsg('Please enter a valid email address.');
+      return;
+    }
+
+    if (!cleanMobile || cleanMobile.length !== 10 || !/^[6-9]\d{9}$/.test(cleanMobile)) {
+      setErrorMsg('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
       return;
     }
 
@@ -61,6 +68,7 @@ export const RegisterPage: React.FC = () => {
       const res = await api.post('/auth/register', {
         name: cleanName,
         email: cleanEmail,
+        mobile: cleanMobile,
         password,
       });
 
@@ -81,7 +89,7 @@ export const RegisterPage: React.FC = () => {
         }
       } else if (err.response?.status === 409) {
         setAlreadyExists(true);
-        setErrorMsg('An account with this email address already exists.');
+        setErrorMsg('An account with this email or mobile number already exists.');
       } else {
         setErrorMsg('Failed to create account. Please try again.');
       }
@@ -168,6 +176,42 @@ export const RegisterPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Phone Number with default +91 mentioned */}
+          <div>
+            <label className="font-bold text-slate-700 block mb-1">
+              Phone Number <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative flex items-center">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none select-none">
+                <span className="font-extrabold text-slate-700 text-xs bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                  +91
+                </span>
+              </div>
+              <input
+                type="tel"
+                required
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="9876543210"
+                value={mobile}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, '');
+                  if (raw.length === 12 && raw.startsWith('91')) {
+                    setMobile(raw.slice(2));
+                  } else {
+                    setMobile(raw.slice(0, 10));
+                  }
+                }}
+                className="w-full pl-18 pr-10 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-800 text-sm tracking-wider"
+                aria-label="Phone Number"
+              />
+              <Phone className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Enter your 10-digit Indian mobile number for order delivery updates
+            </p>
+          </div>
+
           {/* Password with Eye View/Hide Toggle */}
           <div>
             <label className="font-bold text-slate-700 block mb-1">
@@ -237,7 +281,14 @@ export const RegisterPage: React.FC = () => {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading || !name.trim() || !email.trim() || password.length < 6 || confirmPassword.length < 6}
+            disabled={
+              isLoading ||
+              !name.trim() ||
+              !email.trim() ||
+              mobile.replace(/\D/g, '').length !== 10 ||
+              password.length < 6 ||
+              confirmPassword.length < 6
+            }
             className="w-full bg-[#0c831f] hover:bg-emerald-700 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-700/25 flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
