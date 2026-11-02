@@ -85,8 +85,8 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
 
       if (isLocalArea) {
         const hubSettings = getPersistedDeliverySettings();
-        deliveryLat = Number(hubSettings.hub_latitude || 17.347145);
-        deliveryLng = Number(hubSettings.hub_longitude || 78.512947);
+        deliveryLat = Number(hubSettings.hub_latitude || 17.34457);
+        deliveryLng = Number(hubSettings.hub_longitude || 78.516972);
       } else {
         throw new ValidationError(
           'Delivery address does not have verified geographic coordinates. Please select an exact location on the map.'
@@ -95,7 +95,25 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     }
 
     // 2. Authoritatively evaluate serviceability against configured delivery hub
-    const serviceability = checkServiceability(deliveryLat, deliveryLng);
+    let deliverySettings = getPersistedDeliverySettings();
+    try {
+      const dbSettingsRes = await client.query("SELECT * FROM delivery_settings WHERE id = 'global_delivery_settings' LIMIT 1");
+      if (dbSettingsRes.rows.length > 0) {
+        const row = dbSettingsRes.rows[0];
+        deliverySettings = {
+          ...deliverySettings,
+          hub_latitude: row.hub_latitude ? Number(row.hub_latitude) : 17.34457,
+          hub_longitude: row.hub_longitude ? Number(row.hub_longitude) : 78.516972,
+          delivery_radius_km: row.delivery_radius_km ? Number(row.delivery_radius_km) : 5.0,
+          serviceability_enabled: row.serviceability_enabled !== false,
+          hub_name: row.hub_name || 'Fresh Vegetables Champapet Hub',
+          is_delivery_active: row.is_delivery_active !== false,
+          global_delivery_status: row.global_delivery_status || 'available',
+        };
+      }
+    } catch {}
+
+    const serviceability = checkServiceability(deliveryLat, deliveryLng, deliverySettings);
 
     // 3. Reject order if delivery hub is not configured or serviceability disabled
     if (!serviceability.configured) {
@@ -107,13 +125,11 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     // 4. Reject order if location is outside the service area (> 5 km)
     if (!serviceability.serviceable) {
       throw new ValidationError(
-        serviceability.message ||
-        `Sorry, we are currently unavailable in your area. Your location is ${serviceability.distanceKm} km from our hub, exceeding our ${serviceability.radiusKm} km delivery zone.`
+        `Sorry! Delivery is not available at this location. Your address is ${serviceability.distanceKm} km from our ${serviceability.hubName || 'Champapet hub'} (maximum permitted delivery radius: ${serviceability.radiusKm} KM). Please choose another location within our delivery area.`
       );
     }
 
     // 5. Authoritatively revalidate Global & Zone Delivery Availability
-    const deliverySettings = getPersistedDeliverySettings();
     const globalStatus = deliverySettings.global_delivery_status || (deliverySettings.is_delivery_active !== false ? 'available' : 'paused');
     if (globalStatus === 'paused') {
       throw new ValidationError(deliverySettings.global_pause_reason || 'Express deliveries are temporarily paused. Please try again in a few minutes.');

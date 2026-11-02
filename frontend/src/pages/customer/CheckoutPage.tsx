@@ -197,8 +197,8 @@ export const CheckoutPage: React.FC = () => {
         addrText.includes('karmanghat');
 
       if ((lat === null || lng === null) && isLocalArea) {
-        lat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.347145;
-        lng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.512947;
+        lat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
+        lng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
       }
     }
 
@@ -227,8 +227,8 @@ export const CheckoutPage: React.FC = () => {
       } catch (err: any) {
         // Resilient client-side Haversine verification
         const toRad = (d: number) => (d * Math.PI) / 180;
-        const hubLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.347145;
-        const hubLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.512947;
+        const hubLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
+        const hubLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
         const radius = Number(deliverySettings?.delivery_radius_km) || 5.0;
         const dLat = toRad(Number(lat) - hubLat);
         const dLon = toRad(Number(lng) - hubLng);
@@ -237,7 +237,8 @@ export const CheckoutPage: React.FC = () => {
           Math.cos(toRad(hubLat)) * Math.cos(toRad(Number(lat))) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         const dist = Number((6371 * c).toFixed(2));
-        const inZone = dist <= radius + 0.001;
+        // Strict unrounded comparison: distance <= 5.0 KM
+        const inZone = dist <= radius;
 
         setZoneServiceability({
           checked: true,
@@ -250,7 +251,7 @@ export const CheckoutPage: React.FC = () => {
           estimatedDelivery: (deliverySettings?.estimated_delivery_time && deliverySettings.estimated_delivery_time !== '30–45 mins') ? deliverySettings.estimated_delivery_time : 'Delivery estimate unavailable',
           message: inZone
             ? 'Delivery available at your location.'
-            : `Selected address is ${dist} km from our hub (service zone: ${radius} km).`,
+            : 'Sorry! Delivery is not available at this location.',
         });
       }
     } else {
@@ -606,13 +607,21 @@ export const CheckoutPage: React.FC = () => {
         addrText.includes('karmanghat');
 
       if ((orderLat === null || orderLng === null) && isLocalArea) {
-        orderLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.347145;
-        orderLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.512947;
+        orderLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
+        orderLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
       }
     }
 
     if (!orderLat || !orderLng) {
       setErrorMsg('Selected address does not have verified GPS coordinates. Please update address on map.');
+      return;
+    }
+
+    if (zoneServiceability.checked && !zoneServiceability.serviceable) {
+      setErrorMsg(
+        zoneServiceability.message ||
+        'Sorry! Delivery is not available at this location (outside 5.0 KM delivery radius). Please select another location.'
+      );
       return;
     }
 

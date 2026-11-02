@@ -1,10 +1,10 @@
 import { getPersistedDeliverySettings, StoreDeliverySettings } from './deliverySettings.service';
 
 /**
- * Calculates straight-line distance in kilometres between two geographic coordinates
+ * Calculates raw, unrounded straight-line distance in kilometres between two geographic coordinates
  * using the Haversine formula.
  */
-export function calculateHaversineDistanceKm(
+export function calculateExactHaversineKm(
   lat1: number,
   lon1: number,
   lat2: number,
@@ -21,10 +21,20 @@ export function calculateHaversineDistanceKm(
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c;
+  return R * c;
+}
 
-  // Round to 2 decimal places for consistency and avoid floating point inaccuracies
-  return Number(distance.toFixed(2));
+/**
+ * Calculates straight-line distance in kilometres rounded to 2 decimal places for user display.
+ */
+export function calculateHaversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const rawDistance = calculateExactHaversineKm(lat1, lon1, lat2, lon2);
+  return Number(rawDistance.toFixed(2));
 }
 
 export function isValidCoordinate(latitude: any, longitude: any): boolean {
@@ -49,6 +59,7 @@ export interface ServiceabilityResult {
   configured: boolean;
   serviceable: boolean;
   distanceKm?: number;
+  rawDistanceKm?: number;
   radiusKm: number;
   message: string;
   hubName?: string;
@@ -57,10 +68,11 @@ export interface ServiceabilityResult {
 
 /**
  * Evaluates whether a given delivery coordinate is serviceable based on the configured delivery hub.
- * Follows strict safety rules:
- * - Until valid hub coordinates are configured, fails safely (not serviceable).
- * - Distance <= configured radius: serviceable.
- * - Distance > configured radius: not serviceable.
+ * STRICT PRODUCTION RULES:
+ * - Distance <= 5.0 KM: potentially serviceable, subject to area and delivery availability.
+ * - Distance > 5.0 KM: NOT SERVICEABLE.
+ * - NEVER round distance before comparing with 5.0 KM!
+ * - Never pad with epsilon tolerance.
  */
 export function checkServiceability(
   customerLat: number,
@@ -70,8 +82,13 @@ export function checkServiceability(
   const settings = customSettings || getPersistedDeliverySettings();
   const radiusKm = Number(settings.delivery_radius_km) > 0 ? Number(settings.delivery_radius_km) : 5.0;
 
-  const hubLat = settings.hub_latitude !== undefined && settings.hub_latitude !== null ? Number(settings.hub_latitude) : null;
-  const hubLng = settings.hub_longitude !== undefined && settings.hub_longitude !== null ? Number(settings.hub_longitude) : null;
+  // Authoritative default Champapet hub coordinates if null or undefined
+  const hubLat = settings.hub_latitude !== undefined && settings.hub_latitude !== null
+    ? Number(settings.hub_latitude)
+    : 17.34457;
+  const hubLng = settings.hub_longitude !== undefined && settings.hub_longitude !== null
+    ? Number(settings.hub_longitude)
+    : 78.516972;
   const isEnabled = settings.serviceability_enabled !== false;
 
   // 1. Fail safe if hub coordinates are not configured or serviceability disabled
@@ -81,7 +98,8 @@ export function checkServiceability(
       serviceable: false,
       radiusKm,
       message: 'Delivery availability is being configured. Please try again shortly.',
-      hubName: settings.hub_name || 'Central Delivery Hub',
+      hubName: settings.hub_name || 'Fresh Vegetables Champapet Hub',
+      hubAddress: settings.hub_address || 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
     };
   }
 
@@ -92,25 +110,29 @@ export function checkServiceability(
       serviceable: false,
       radiusKm,
       message: 'Invalid delivery coordinates provided. Please select a valid location.',
-      hubName: settings.hub_name || 'Central Delivery Hub',
+      hubName: settings.hub_name || 'Fresh Vegetables Champapet Hub',
+      hubAddress: settings.hub_address || 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
     };
   }
 
-  // 3. Compute distance using Haversine formula
-  const distanceKm = calculateHaversineDistanceKm(hubLat, hubLng, Number(customerLat), Number(customerLng));
+  // 3. Compute UNROUNDED distance using exact Haversine formula
+  const rawDistance = calculateExactHaversineKm(hubLat, hubLng, Number(customerLat), Number(customerLng));
+  const distanceKm = Number(rawDistance.toFixed(2));
 
-  // Small epsilon (0.001 km / 1 metre) to accommodate boundary float precision (e.g. exactly 5.0 km)
-  const isWithinRadius = distanceKm <= radiusKm + 0.001;
+  // 4. STRICT COMPARISON: Distance must be strictly <= radiusKm (5.0 KM)
+  // Distance > 5.0 KM is ALWAYS NOT SERVICEABLE
+  const isWithinRadius = rawDistance <= radiusKm;
 
   if (isWithinRadius) {
     return {
       configured: true,
       serviceable: true,
       distanceKm,
+      rawDistanceKm: rawDistance,
       radiusKm,
       message: 'Delivery available at your location.',
-      hubName: settings.hub_name || 'Central Delivery Hub',
-      hubAddress: settings.hub_address || '',
+      hubName: settings.hub_name || 'Fresh Vegetables Champapet Hub',
+      hubAddress: settings.hub_address || 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
     };
   }
 
@@ -118,10 +140,10 @@ export function checkServiceability(
     configured: true,
     serviceable: false,
     distanceKm,
+    rawDistanceKm: rawDistance,
     radiusKm,
-    message: 'Sorry, we are currently unavailable in your area. Please choose a different location.',
-    hubName: settings.hub_name || 'Central Delivery Hub',
-    hubAddress: settings.hub_address || '',
+    message: 'Sorry! Delivery is not available at this location.',
+    hubName: settings.hub_name || 'Fresh Vegetables Champapet Hub',
+    hubAddress: settings.hub_address || 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
   };
 }
-

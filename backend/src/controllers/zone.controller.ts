@@ -6,6 +6,7 @@ import { logAuditEvent } from '../services/audit.service';
 import cache from '../services/cache.service';
 import { v4 as uuidv4 } from 'uuid';
 import { getPersistedZones, savePersistedZones } from '../services/zoneStore.service';
+import { checkServiceability } from '../services/serviceability.service';
 
 export async function getActiveDeliveryZones(req: Request, res: Response, next: NextFunction) {
   try {
@@ -13,7 +14,14 @@ export async function getActiveDeliveryZones(req: Request, res: Response, next: 
     if (cached) return sendSuccess(res, 'Active delivery zones (cached)', cached);
 
     const allZones = getPersistedZones();
-    const activeZones = allZones.filter((z: any) => z.status === 'ACTIVE');
+    const activeZones = allZones.filter((z: any) => {
+      if (z.status !== 'ACTIVE') return false;
+      if (z.latitude && z.longitude) {
+        const serv = checkServiceability(Number(z.latitude), Number(z.longitude));
+        return serv.serviceable;
+      }
+      return true;
+    });
     cache.set('zones:active', activeZones, 300);
     sendSuccess(res, 'Active delivery zones', activeZones);
   } catch (error) {
@@ -38,8 +46,19 @@ export async function checkPincodeServiceability(req: Request, res: Response, ne
       return sendSuccess(res, 'Pincode not currently serviceable', {
         serviceable: false,
         pincode: cleanPincode,
-        message: `We do not yet deliver to pincode ${cleanPincode}. We are rapidly expanding across Hyderabad!`,
+        message: 'Sorry! Delivery is not available at this location.',
       });
+    }
+
+    if (matchedZone.latitude && matchedZone.longitude) {
+      const serv = checkServiceability(Number(matchedZone.latitude), Number(matchedZone.longitude));
+      if (!serv.serviceable) {
+        return sendSuccess(res, 'Pincode not currently serviceable', {
+          serviceable: false,
+          pincode: cleanPincode,
+          message: 'Sorry! Delivery is not available at this location.',
+        });
+      }
     }
 
     // Find fulfillment store
@@ -71,6 +90,20 @@ export async function checkLocationCoordinates(req: Request, res: Response, next
 
     const lat = Number(latitude);
     const lng = Number(longitude);
+
+    // Authoritative serviceability check against 5.0 KM Champapet hub
+    const serviceCheckResult = checkServiceability(lat, lng);
+    if (!serviceCheckResult.serviceable) {
+      return sendSuccess(res, 'Coordinates currently outside active delivery radius', {
+        serviceable: false,
+        latitude: lat,
+        longitude: lng,
+        distanceKm: serviceCheckResult.distanceKm,
+        radiusKm: serviceCheckResult.radiusKm,
+        message: 'Sorry! Delivery is not available at this location.',
+      });
+    }
+
     const zones = getPersistedZones().filter((z: any) => z.status === 'ACTIVE');
 
     // Haversine distance formula to check if coordinate falls within zone's delivery_radius_km

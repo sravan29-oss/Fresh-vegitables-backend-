@@ -64,19 +64,6 @@ const DEFAULT_ZONES: DeliveryZone[] = [
     latitude: 17.34457,
     longitude: 78.516972,
   },
-  {
-    id: 'zone-kphb',
-    name: 'Kukatpally & KPHB Zone',
-    pincodes: ['500072', '500085', '500090', '500018', '500038'],
-    delivery_radius_km: 5.0,
-    delivery_fee: 20.0,
-    min_order_amount: 199.0,
-    free_delivery_threshold: 499.0,
-    estimated_delivery_time: '25–35 mins',
-    status: 'ACTIVE',
-    latitude: 17.4938,
-    longitude: 78.3995,
-  },
 ];
 
 const POPULAR_QUICK_COLONIES = [
@@ -136,7 +123,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
     loading: false,
     checked: false,
     configured: true,
-    serviceable: true,
+    serviceable: false,
     radiusKm: deliverySettings?.delivery_radius_km || 5.0,
   });
 
@@ -164,7 +151,8 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       const hubLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
       const radius = Number(deliverySettings?.delivery_radius_km) || 5.0;
       const distance = calculateHaversineDistanceKm(hubLat, hubLng, Number(lat), Number(lng));
-      const inZone = distance <= radius + 0.001;
+      // Strict comparison: unrounded distance <= 5.0 KM
+      const inZone = distance <= radius;
 
       setServiceCheck({
         loading: false,
@@ -175,7 +163,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
         radiusKm: radius,
         message: inZone
           ? 'Delivery available at your location.'
-          : `Selected address is ${distance} km from our hub (service zone: ${radius} km).`,
+          : 'Sorry! Delivery is not available at this location.',
       });
     }
   }, [deliverySettings]);
@@ -289,7 +277,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
 
       const matched = zones.find(
         (z) => z.id === found.zoneId || (Array.isArray(z.pincodes) && z.pincodes.includes(found.pincode))
-      ) || zones[0];
+      ) || null;
 
       setSelectedZone(matched);
       setErrorMsg(null);
@@ -383,14 +371,22 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
     // Recheck with authoritative backend
     const servResult = await checkLocationServiceability(lat, lng);
 
+    // BLOCK COMPLETELY if outside 5.0 KM
+    if (!servResult.serviceable) {
+      setErrorMsg(
+        `Sorry! Delivery is not available at this location. Your location is ${servResult.distanceKm} km away (maximum permitted radius: 5.0 KM). Please select another location within our delivery area.`
+      );
+      return;
+    }
+
     const finalZone = selectedZone || {
-      id: 'zone-custom',
+      id: 'zone-champapet',
       name: selectedColony,
-      pincodes: [pincodeInput || '500072'],
+      pincodes: [pincodeInput || '500059'],
       delivery_radius_km: servResult.radiusKm || 5.0,
-      delivery_fee: 20.0,
-      min_order_amount: 199.0,
-      free_delivery_threshold: 499.0,
+      delivery_fee: 10.0,
+      min_order_amount: 10.0,
+      free_delivery_threshold: 99.0,
       estimated_delivery_time: '25–35 mins',
       status: 'ACTIVE',
       latitude: lat,
@@ -421,11 +417,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       onZoneSelected(finalZone, selectedColony);
     }
 
-    if (servResult.serviceable) {
-      setSuccessMsg(`Delivering to ${selectedColony}!`);
-    } else {
-      setErrorMsg(servResult.message || 'Outside delivery zone');
-    }
+    setSuccessMsg(`Delivering to ${selectedColony}!`);
 
     setTimeout(() => {
       onClose();
@@ -649,64 +641,90 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
                       ? 'Delivery Setup Pending'
                       : serviceCheck.serviceable
                       ? 'Delivery Available at your location'
-                      : 'Sorry, we are currently unavailable in your area'}
+                      : 'Sorry! Delivery is not available at this location.'}
                   </h4>
 
-                  <p className="text-[11px] leading-relaxed opacity-90">
+                  <div className="text-[11px] leading-relaxed opacity-90 space-y-1">
                     {serviceCheck.loading ? (
-                      'Calculating straight-line distance to our delivery hub...'
+                      <p>Calculating straight-line distance to our delivery hub...</p>
                     ) : !serviceCheck.configured ? (
-                      serviceCheck.message || 'Delivery availability is being configured. Please try again shortly.'
+                      <p>{serviceCheck.message || 'Delivery availability is being configured. Please try again shortly.'}</p>
                     ) : serviceCheck.serviceable ? (
-                      <span>
+                      <p>
                         Your selected location is <strong>{serviceCheck.distanceKm} km</strong> from our delivery hub (within our {serviceCheck.radiusKm} km zone).
-                      </span>
+                      </p>
                     ) : (
-                      <span>
-                        Your location is <strong>{serviceCheck.distanceKm} km</strong> away, which exceeds our <strong>5 km delivery zone</strong>. Choose a different location to check availability.
-                      </span>
+                      <>
+                        <p className="font-semibold text-rose-200">
+                          Your location is <strong>{serviceCheck.distanceKm} km</strong> from our delivery hub (maximum permitted delivery radius: <strong>5.0 KM</strong>).
+                        </p>
+                        <p className="text-rose-300 font-bold">
+                          Please select another location within our delivery area.
+                        </p>
+                      </>
                     )}
-                  </p>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Selected Location Card */}
-            <div className="p-3.5 rounded-2xl bg-[#04150c] border border-emerald-500/25 space-y-2">
+            <div className={`p-3.5 rounded-2xl border space-y-2 ${
+              serviceCheck.checked && !serviceCheck.serviceable
+                ? 'bg-[#150608] border-rose-500/40'
+                : 'bg-[#04150c] border-emerald-500/25'
+            }`}>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                <span className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                  serviceCheck.checked && !serviceCheck.serviceable ? 'text-rose-400' : 'text-emerald-400'
+                }`}>
+                  <MapPin className="w-3.5 h-3.5" />
                   Selected Address
                 </span>
-                <span className="text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                  serviceCheck.checked && !serviceCheck.serviceable
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                }`}>
                   {currentCoords[0].toFixed(4)}, {currentCoords[1].toFixed(4)}
                 </span>
               </div>
 
               <div>
                 <h4 className="text-sm font-extrabold text-white leading-snug">
-                  {selectedColony || 'KPHB Colony'}
+                  {selectedColony || 'Champapet'}
                 </h4>
-                <p className="text-xs text-emerald-200/70 mt-0.5 line-clamp-2">
+                <p className="text-xs text-slate-300 mt-0.5 line-clamp-2">
                   {selectedAddress || 'Hyderabad, Telangana'}
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs text-emerald-300 font-bold">
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>25–35 mins</span>
+              {/* Only show ETA and charges when SERVICEABLE */}
+              {serviceCheck.checked && !serviceCheck.serviceable ? (
+                <div className="pt-2 border-t border-rose-500/20 flex items-center justify-between text-xs text-rose-300 font-bold">
+                  <div className="flex items-center gap-1.5 text-rose-400">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Outside 5 KM Delivery Radius</span>
+                  </div>
+                  <span>{serviceCheck.distanceKm} km from hub</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>₹20 Express Delivery</span>
+              ) : (
+                <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs text-emerald-300 font-bold">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>25–35 mins</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>₹20 Express Delivery</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Explanatory Notice */}
             <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-[10.5px] text-slate-400 leading-normal">
-              ℹ️ <strong>Straight-Line Distance:</strong> Our 5 km delivery radius is measured in a direct straight line from our delivery hub to ensure vegetables arrive crisp and farm-fresh.
+              ℹ️ <strong>Straight-Line Distance:</strong> Our 5 km delivery radius is measured in a direct straight line from our Champapet delivery hub to ensure vegetables arrive crisp and farm-fresh.
             </div>
 
             {errorMsg && (
@@ -722,22 +740,30 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
               </p>
             )}
 
-            {/* Primary Confirm CTA Button */}
+            {/* Primary Confirm CTA Button - Strictly disabled if outside 5 KM */}
             <button
               type="button"
+              disabled={!serviceCheck.serviceable || serviceCheck.loading || !serviceCheck.checked}
               onClick={handleConfirmLocation}
-              className={`w-full h-11 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 shadow-md ${
+              className={`w-full h-11 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-md ${
                 serviceCheck.serviceable
-                  ? 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 text-white shadow-emerald-500/25'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600'
+                  ? 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 text-white shadow-emerald-500/25 cursor-pointer active:scale-98'
+                  : 'bg-rose-950/70 border border-rose-700/60 text-rose-300 cursor-not-allowed opacity-80'
               }`}
             >
-              <Check className="w-4 h-4 stroke-[2.5]" />
-              <span>
-                {serviceCheck.serviceable
-                  ? `Confirm & Deliver to ${selectedColony.split(',')[0]}`
-                  : `Select This Location (Unavailable for Ordering)`}
-              </span>
+              {serviceCheck.serviceable ? (
+                <>
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                  <span>Confirm & Deliver to {selectedColony.split(',')[0]}</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="w-4 h-4 stroke-[2.5]" />
+                  <span>
+                    Delivery Not Available ({serviceCheck.distanceKm !== undefined ? `${serviceCheck.distanceKm} KM` : 'Outside'} • Max 5 KM)
+                  </span>
+                </>
+              )}
             </button>
           </div>
         </div>

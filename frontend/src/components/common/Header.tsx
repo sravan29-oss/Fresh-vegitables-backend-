@@ -307,9 +307,9 @@ export const Header: React.FC = () => {
                     </span>
                   )
                 ) : (
-                  <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                    <span>{deliveryEstimate.isPaused ? 'DELIVERY PAUSED' : `${deliveryEstimate.etaText || 'Delivery estimate unavailable'}`}</span>
+                  <span className="text-[9.5px] font-bold uppercase text-slate-500 flex items-center gap-1 tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    <span>CHECKING AREA</span>
                   </span>
                 )}
               </div>
@@ -548,8 +548,8 @@ export const Header: React.FC = () => {
                     </span>
                   )
                 ) : (
-                  <span className="text-[9.5px] bg-emerald-100 text-[#0c831f] font-black px-1.5 py-0.2 rounded-full border border-emerald-200">
-                    5 km Zone
+                  <span className="text-[9.5px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded-full border border-slate-200">
+                    Checking Area
                   </span>
                 )}
               </div>

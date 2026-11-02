@@ -79,7 +79,25 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [serviceability, setServiceability] = useState<ServiceabilityState>(() => {
     try {
       const cached = localStorage.getItem('fresh_delivery_serviceability');
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // Safety guard: If cached coordinates are outside 5.0 km from Champapet hub, mark as unserviceable
+        if (parsed.coordinates?.latitude && parsed.coordinates?.longitude) {
+          const dist = calculateHaversineDistanceKm(17.34457, 78.516972, Number(parsed.coordinates.latitude), Number(parsed.coordinates.longitude));
+          if (dist > 5.0) {
+            return {
+              ...parsed,
+              serviceable: false,
+              is_delivery_active: false,
+              distanceKm: dist,
+              radiusKm: 5.0,
+              eta_text: 'Not Serviceable',
+              message: 'Sorry! Delivery is not available at this location.',
+            };
+          }
+        }
+        return parsed;
+      }
     } catch {}
     return {
       checked: false,
@@ -281,7 +299,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const radiusKm = Number(deliverySettings.delivery_radius_km) || 5.0;
 
       const distanceKm = calculateHaversineDistanceKm(hubLat, hubLng, Number(lat), Number(lng));
-      const isWithinRadius = distanceKm <= radiusKm + 0.001;
+      // Strict comparison: unrounded distance <= radiusKm (5.0 KM)
+      const isWithinRadius = distanceKm <= radiusKm;
 
       const result: ServiceabilityState = {
         checked: true,
@@ -292,7 +311,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         radiusKm,
         message: isWithinRadius
           ? 'Delivery available at your location.'
-          : `Sorry, we are currently unavailable in your area (${distanceKm} km away, max ${radiusKm} km).`,
+          : 'Sorry! Delivery is not available at this location.',
         hubName: deliverySettings.hub_name || 'Fresh Vegetables Champapet Hub',
         hubAddress: deliverySettings.hub_address || 'Champapet, Hyderabad - 500059',
         checking: false,

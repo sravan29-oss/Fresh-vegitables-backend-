@@ -70,7 +70,7 @@ const GOOGLE_TILE_LAYERS = {
 type MapTheme = keyof typeof GOOGLE_TILE_LAYERS;
 
 export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
-  initialCenter = [17.4474, 78.3762], // Hyderabad central IT corridor
+  initialCenter = [17.34457, 78.516972], // Champapet Hub, Hyderabad
   zoom = 14,
   markerPosition,
   onPositionChange,
@@ -103,6 +103,23 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
   // Helper: Find closest or matched zone
   const matchZone = useCallback(
     (lat: number, lng: number, pincode?: string): DeliveryZone | null => {
+      const toRad = (d: number) => (d * Math.PI) / 180;
+      const R = 6371; // km
+
+      // Strict check: Calculate unrounded distance to Champapet Hub (17.34457, 78.516972)
+      const dLatHub = toRad(17.34457 - lat);
+      const dLngHub = toRad(78.516972 - lng);
+      const aHub =
+        Math.sin(dLatHub / 2) ** 2 +
+        Math.cos(toRad(lat)) * Math.cos(toRad(17.34457)) * Math.sin(dLngHub / 2) ** 2;
+      const cHub = 2 * Math.atan2(Math.sqrt(aHub), Math.sqrt(1 - aHub));
+      const distToHub = R * cHub;
+
+      // If outside 5.0 KM radius from Champapet Hub, NEVER match any zone
+      if (distToHub > 5.0) {
+        return null;
+      }
+
       // 1. Match by pincode if available
       if (pincode && zones.length > 0) {
         const found = zones.find(
@@ -112,8 +129,6 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
       }
 
       // 2. Match by geographic distance within zone radius
-      const toRad = (d: number) => (d * Math.PI) / 180;
-      const R = 6371; // km
       let bestZone: DeliveryZone | null = null;
       let minDistance = Infinity;
 
@@ -127,7 +142,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
           const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
           const distance = R * c;
 
-          const radius = Number(z.delivery_radius_km) || 10;
+          const radius = Number(z.delivery_radius_km) || 5.0;
           if (distance <= radius && distance < minDistance) {
             minDistance = distance;
             bestZone = z;
@@ -135,7 +150,8 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
         }
       }
 
-      return bestZone || (zones.length > 0 ? zones[0] : null);
+      // Return bestZone only if within radius; NEVER fall back to zones[0]
+      return bestZone;
     },
     [zones]
   );
@@ -442,6 +458,29 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     if (!mapInstanceRef.current || !zonesLayerGroupRef.current) return;
     const group = zonesLayerGroupRef.current;
     group.clearLayers();
+
+    // 1. Authoritative 5.0 KM Delivery Boundary Circle around Champapet Hub
+    const hubCircle = L.circle([17.34457, 78.516972], {
+      radius: 5000,
+      color: '#059669',
+      weight: 2.5,
+      opacity: 0.9,
+      fillColor: '#10b981',
+      fillOpacity: 0.12,
+      dashArray: '6, 6',
+    }).addTo(group);
+
+    hubCircle.bindTooltip(
+      `<div style="font-family: inherit; font-size: 11px; padding: 2px 4px;">
+        <strong style="color: #ffffff;">Fresh Vegetables Champapet Hub</strong><br/>
+        <span style="color: #34d399;">5.0 KM Maximum Serviceable Radius</span>
+      </div>`,
+      {
+        permanent: false,
+        direction: 'top',
+        className: 'fresh-zone-tooltip',
+      }
+    );
 
     zones.forEach((zone) => {
       if (zone.latitude && zone.longitude) {

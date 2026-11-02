@@ -895,11 +895,29 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
       });
     }
 
-    const result = checkServiceability(lat, lng);
-    const settings = getPersistedDeliverySettings();
+    let settings = getPersistedDeliverySettings();
+    try {
+      const dbSettingsRes = await db.query("SELECT * FROM delivery_settings WHERE id = 'global_delivery_settings' LIMIT 1");
+      if (dbSettingsRes.rows.length > 0) {
+        const row = dbSettingsRes.rows[0];
+        settings = {
+          ...settings,
+          hub_latitude: row.hub_latitude ? Number(row.hub_latitude) : 17.34457,
+          hub_longitude: row.hub_longitude ? Number(row.hub_longitude) : 78.516972,
+          delivery_radius_km: row.delivery_radius_km ? Number(row.delivery_radius_km) : 5.0,
+          serviceability_enabled: row.serviceability_enabled !== false,
+          hub_name: row.hub_name || 'Fresh Vegetables Champapet Hub',
+          hub_address: row.hub_address || 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
+          is_delivery_active: row.is_delivery_active !== false,
+          global_delivery_status: row.global_delivery_status || 'available',
+        };
+      }
+    } catch {}
+
+    const result = checkServiceability(lat, lng, settings);
     const zones = getPersistedZones();
 
-    // 1. If coordinates are outside 5 KM radius of the hub
+    // 1. Strict Enforcement: If coordinates are outside 5.0 KM radius of the hub
     if (!result.serviceable || !result.configured) {
       return res.status(200).json({
         success: true,
@@ -907,11 +925,20 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
         serviceable: false,
         is_delivery_active: false,
         distanceKm: result.distanceKm,
-        radiusKm: result.radiusKm,
+        rawDistanceKm: result.rawDistanceKm,
+        radiusKm: result.radiusKm || 5.0,
         eta_text: 'Not Serviceable',
-        message: result.message || 'Location is outside our 5 km express delivery radius from Champapet hub.',
+        message: 'Sorry! Delivery is not available at this location.',
+        error_description: `Your location is ${result.distanceKm} km from our delivery hub (maximum radius: ${result.radiusKm || 5.0} KM). Please select another location within our delivery area.`,
         hubName: result.hubName,
-        data: result,
+        hubAddress: result.hubAddress,
+        data: {
+          ...result,
+          serviceable: false,
+          is_delivery_active: false,
+          eta_text: 'Not Serviceable',
+          message: 'Sorry! Delivery is not available at this location.',
+        },
       });
     }
 
