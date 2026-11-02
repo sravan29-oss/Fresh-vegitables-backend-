@@ -1,5 +1,5 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, Auth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
@@ -10,20 +10,60 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
 };
 
-export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+let cachedApp: FirebaseApp | null = null;
+let cachedAuth: Auth | null = null;
 
-// Language set to India
-auth.useDeviceLanguage();
+/**
+ * Checks if a valid Firebase Web API key is configured.
+ */
+export function isFirebaseConfigured(): boolean {
+  const key = import.meta.env.VITE_FIREBASE_API_KEY;
+  return typeof key === 'string' && key.trim().length > 10 && !key.includes('your_');
+}
+
+/**
+ * Safely retrieves or initializes the Firebase App instance.
+ * Avoids throwing top-level evaluation errors when environment variables are missing.
+ */
+export function getFirebaseApp(): FirebaseApp {
+  if (cachedApp) return cachedApp;
+  const apps = getApps();
+  if (apps.length > 0) {
+    cachedApp = apps[0];
+    return cachedApp;
+  }
+  if (!isFirebaseConfigured()) {
+    throw new Error('Firebase Web API key is not configured. Please add VITE_FIREBASE_API_KEY to your Vercel Environment Variables.');
+  }
+  cachedApp = initializeApp(firebaseConfig);
+  return cachedApp;
+}
+
+/**
+ * Safely retrieves or initializes Firebase Auth on demand.
+ */
+export function getFirebaseAuth(): Auth {
+  if (cachedAuth) return cachedAuth;
+  const app = getFirebaseApp();
+  cachedAuth = getAuth(app);
+  try {
+    cachedAuth.useDeviceLanguage();
+  } catch {
+    // Ignore fallback
+  }
+  return cachedAuth;
+}
 
 /**
  * Initializes invisible background verification for Firebase Phone Authentication.
- * Attached to an off-screen container with zero visual challenge or user interruption.
+ * Conforms to Google reCAPTCHA terms without DOM CSS suppression.
  */
 export function getInvisibleRecaptcha(containerId = 'recaptcha-invisible-container'): RecaptchaVerifier {
   if (typeof window === 'undefined') {
     throw new Error('RecaptchaVerifier can only be initialized in the browser.');
   }
+
+  const auth = getFirebaseAuth();
 
   // Clear existing verifier if previously rendered
   if ((window as any).recaptchaVerifier) {
@@ -67,9 +107,9 @@ export async function sendFirebasePhoneOtp(rawPhone: string): Promise<Confirmati
   }
   const formattedPhone = `+91${tenDigits}`;
 
+  const auth = getFirebaseAuth();
   const verifier = getInvisibleRecaptcha();
   return await signInWithPhoneNumber(auth, formattedPhone, verifier);
 }
 
 export type { ConfirmationResult };
-
