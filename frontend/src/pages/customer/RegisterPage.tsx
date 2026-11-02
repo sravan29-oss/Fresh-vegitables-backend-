@@ -286,6 +286,12 @@ export const RegisterPage: React.FC = () => {
                 Sign In Here
               </Link>
             </div>
+
+            <p className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-50">
+              This site is protected by reCAPTCHA and the Google{' '}
+              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">Privacy Policy</a> and{' '}
+              <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">Terms of Service</a> apply.
+            </p>
           </>
         )}
       </div>

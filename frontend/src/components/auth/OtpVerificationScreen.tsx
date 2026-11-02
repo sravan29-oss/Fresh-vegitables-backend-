@@ -225,3 +225,4 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
     </div>
   );
 };
+

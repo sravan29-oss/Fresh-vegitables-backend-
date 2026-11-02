@@ -7,6 +7,7 @@ import { AuthRequest, generateTokens } from '../middleware/auth';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { AppError, ConflictError, UnauthorizedError, NotFoundError } from '../utils/appError';
 import { verifyFirebaseToken } from '../config/firebase';
+import cache from '../services/cache.service';
 
 // ===================== CUSTOMER AUTH =====================
 
@@ -326,6 +327,18 @@ export async function checkPhoneRegistered(req: Request, res: Response, next: Ne
   try {
     const { phone } = req.body;
     const { tenDigit, e164 } = normalizePhone(phone);
+
+    // Rate limiting: maximum 20 enumeration attempts per minute per IP
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+    const rateKey = `rate:phone_check:${clientIp}`;
+    const attempts = (cache.get<number>(rateKey) || 0) + 1;
+    cache.set(rateKey, attempts, 60);
+    if (attempts > 20) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many requests. Please wait a minute before trying again.',
+      });
+    }
 
     const result = await db.query(
       `SELECT id, name FROM users WHERE mobile = $1 OR mobile = $2 LIMIT 1`,
