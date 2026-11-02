@@ -98,7 +98,7 @@ export async function autoMigrateAndSeed(): Promise<void> {
     try {
       await client.query(`
         INSERT INTO categories (id, name, slug, description, image, status, display_order)
-        VALUES ('8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Fresh', 'fresh', 'Farm-fresh organic vegetables delivered to your doorstep', '/uploads/categories/fresh-vegetables.jpg', 'active', 1)
+        VALUES ('8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Fresh', 'fresh', 'Farm-fresh organic vegetables delivered to your doorstep', 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=600&auto=format&fit=crop&q=80', 'active', 1)
         ON CONFLICT (slug) DO UPDATE SET
           name = EXCLUDED.name,
           description = EXCLUDED.description,
@@ -109,12 +109,12 @@ export async function autoMigrateAndSeed(): Promise<void> {
       await client.query(`
         INSERT INTO products (id, name, slug, category_id, description, images, unit, mrp, selling_price, stock_quantity, minimum_stock, status, featured, best_seller)
         VALUES
-        ('faf5d663-3868-40a9-8933-ed0560ec4c53', 'Tomato', 'tomato', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Fresh From Market When order reach', ARRAY['/uploads/products/e617cc8b-b81d-4b2c-b622-8c9cc407fd85.webp'], '500grms', 28.00, 25.00, 41, 5, 'active', true, true),
-        ('344f868a-89e0-425c-aeef-8d34533b29f0', 'Lady Finger', 'lady-finger', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Fresh organic tender lady fingers (bhindi)', ARRAY['/uploads/products/3fde6e03-c8c8-495d-9698-94fe1cae6f37.jpg'], '50Grms', 81.00, 71.00, 40, 5, 'active', true, true),
-        ('1a9b98b2-0629-4cac-9318-c2c65107989d', 'Fresh Onion', 'fresh-onion', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Locally grown crisp and flavorful onions', ARRAY['/uploads/products/0d811c27-2289-4ab1-98a9-e244529e039c.jpg'], '1Kg', 50.00, 50.00, 40, 5, 'active', true, false),
-        ('52bf6893-9533-495d-b1db-6621b568f666', 'Organically Grown Coriander Leaves', 'organically-grown-coriander-leaves', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Fresh and aromatic organically grown coriander', ARRAY['/uploads/products/45d16aa7-365d-425f-8180-dc1237bbfe20.jpg'], '100grms', 45.00, 30.00, 40, 5, 'active', true, false),
-        ('378716d3-0609-4c9f-90b1-b5dc2eb6dbc6', 'Potato', 'potato', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Farm-fresh premium quality organic potatoes', ARRAY['/uploads/products/57ba83f7-4556-49cb-9bdf-ff77b63be99a.jpg'], '1kg', 60.00, 55.00, 40, 5, 'active', true, false),
-        ('7720acc5-22d6-4cbb-be3d-334d823dccca', 'Carrot Local', 'carrot-local', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Sweet and crunchy locally harvested carrots', ARRAY['/uploads/products/5a3e8a3b-9bdf-4350-b461-c481dc76e502.jpg'], '250grms', 52.00, 30.00, 40, 5, 'active', true, false)
+        ('faf5d663-3868-40a9-8933-ed0560ec4c53', 'Tomato', 'tomato', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Fresh From Market When order reach', ARRAY['https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80'], '500grms', 28.00, 25.00, 41, 5, 'active', true, true),
+        ('344f868a-89e0-425c-aeef-8d34533b29f0', 'Lady Finger', 'lady-finger', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Fresh organic tender lady fingers (bhindi)', ARRAY['https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=600&auto=format&fit=crop&q=80'], '50Grms', 81.00, 71.00, 40, 5, 'active', true, true),
+        ('1a9b98b2-0629-4cac-9318-c2c65107989d', 'Fresh Onion', 'fresh-onion', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Locally grown crisp and flavorful onions', ARRAY['https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=600&auto=format&fit=crop&q=80'], '1Kg', 50.00, 50.00, 40, 5, 'active', true, false),
+        ('52bf6893-9533-495d-b1db-6621b568f666', 'Organically Grown Coriander Leaves', 'organically-grown-coriander-leaves', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Fresh and aromatic organically grown coriander', ARRAY['https://images.unsplash.com/photo-1588879460618-9249e7d947d1?w=600&auto=format&fit=crop&q=80'], '100grms', 45.00, 30.00, 40, 5, 'active', true, false),
+        ('378716d3-0609-4c9f-90b1-b5dc2eb6dbc6', 'Potato', 'potato', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Farm-fresh premium quality organic potatoes', ARRAY['https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80'], '1kg', 60.00, 55.00, 40, 5, 'active', true, false),
+        ('7720acc5-22d6-4cbb-be3d-334d823dccca', 'Carrot Local', 'carrot-local', '8e8bbc30-1625-4f6b-8b5f-6c33ae7501cd', 'Sweet and crunchy locally harvested carrots', ARRAY['https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80'], '250grms', 52.00, 30.00, 40, 5, 'active', true, false)
         ON CONFLICT (slug) DO UPDATE SET
           category_id = EXCLUDED.category_id,
           selling_price = EXCLUDED.selling_price,

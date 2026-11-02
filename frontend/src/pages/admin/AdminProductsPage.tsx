@@ -16,13 +16,13 @@ export interface VariantInput {
 }
 
 const VEGETABLE_IMAGE_PRESETS = [
-  { name: 'Green Chilli', url: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80', icon: '🌶️' },
-  { name: 'Coriander', url: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80', icon: '🌿' },
-  { name: 'Goruchikkudu', url: 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?w=600&auto=format&fit=crop&q=80', icon: '🫘' },
-  { name: 'Cucumber', url: 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=600&auto=format&fit=crop&q=80', icon: '🥒' },
+  { name: 'Green Chilli', url: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop&q=80', icon: '🌶️' },
+  { name: 'Coriander', url: 'https://images.unsplash.com/photo-1588879460618-9249e7d947d1?w=600&auto=format&fit=crop&q=80', icon: '🌿' },
+  { name: 'Goruchikkudu', url: 'https://images.unsplash.com/photo-1567375698348-5d9d5ae99de0?w=600&auto=format&fit=crop&q=80', icon: '🌱' },
+  { name: 'Cucumber', url: 'https://images.unsplash.com/photo-1449300079323-02e209d9d3a6?w=600&auto=format&fit=crop&q=80', icon: '🥒' },
   { name: 'Milk', url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=600&auto=format&fit=crop&q=80', icon: '🥛' },
-  { name: 'Buffalo Milk', url: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=600&auto=format&fit=crop&q=80', icon: '🥛' },
-  { name: 'Curd', url: 'https://images.unsplash.com/photo-1571212515416-fef01fc43637?w=600&auto=format&fit=crop&q=80', icon: '🥣' },
+  { name: 'Buffalo Milk', url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=600&auto=format&fit=crop&q=80', icon: '🥛' },
+  { name: 'Curd', url: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=600&auto=format&fit=crop&q=80', icon: '🥣' },
   { name: 'Banana', url: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=600&auto=format&fit=crop&q=80', icon: '🍌' },
   { name: 'Tomato', url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80', icon: '🍅' },
   { name: 'Potato', url: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80', icon: '🥔' },
@@ -159,9 +159,27 @@ export const AdminProductsPage: React.FC = () => {
       try {
         const optimized = await compressImageFile(file);
         setImageFile(optimized);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const b64 = event.target?.result;
+          if (b64 && typeof b64 === 'string') {
+            setImageUrl(b64);
+            setImagePreview(b64);
+          }
+        };
+        reader.readAsDataURL(optimized);
       } catch (err) {
         console.warn('Image optimization skipped, using original:', err);
         setImageFile(file);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const b64 = event.target?.result;
+          if (b64 && typeof b64 === 'string') {
+            setImageUrl(b64);
+            setImagePreview(b64);
+          }
+        };
+        reader.readAsDataURL(file);
       }
     }
   };

@@ -53,7 +53,7 @@ const BannerSlider: React.FC<BannerSliderProps> = ({ banners }) => {
         className="w-full h-full object-cover transition-all duration-700 brightness-[0.85] group-hover:scale-102"
         onError={(e) => {
           e.currentTarget.src =
-            'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=1200&auto=format&fit=crop';
+            'https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200&auto=format&fit=crop&q=80';
         }}
       />
       <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/50 to-transparent" />
@@ -203,9 +203,9 @@ export const HomePage: React.FC = () => {
                 <Link
                   key={cat.id}
                   to={`/products?category=${cat.slug}`}
-                  className="group shrink-0 w-36 sm:w-auto p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
+                  className="group shrink-0 w-44 sm:w-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
                 >
-                  <div className="w-24 h-24 sm:w-36 sm:h-36 lg:w-40 lg:h-40 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
+                  <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
                     {cat.image ? (
                       <img
                         src={getProductImageUrl(cat.image, cat.name)}
@@ -571,9 +571,9 @@ export const HomePage: React.FC = () => {
                   <Link
                     key={cat.id}
                     to={`/products?category=${cat.slug}`}
-                    className="group shrink-0 w-36 sm:w-auto p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
+                    className="group shrink-0 w-44 sm:w-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
                   >
-                    <div className="w-24 h-24 sm:w-36 sm:h-36 lg:w-40 lg:h-40 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
+                    <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
                       {cat.image ? (
                         <img
                           src={getProductImageUrl(cat.image, cat.name)}

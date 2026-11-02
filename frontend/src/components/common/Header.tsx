@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   ShoppingBag,
@@ -836,9 +837,15 @@ export const Header: React.FC = () => {
       </div>
 
       {/* ─── Mobile Drawer Menu ─── */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs transition-opacity animate-fade-in flex flex-col justify-end">
-          <div className="bg-white border-t border-slate-200 rounded-t-3xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-2xl text-slate-900">
+      {isMobileMenuOpen && createPortal(
+        <div
+          className="md:hidden fixed inset-0 z-[99999] bg-slate-950/60 backdrop-blur-xs transition-opacity animate-fade-in flex flex-col justify-end"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <div
+            className="bg-white border-t border-slate-200 rounded-t-3xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-2xl text-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-slate-200 pb-4">
               <div className="flex items-center gap-3">
                 <img
@@ -999,7 +1006,8 @@ export const Header: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Location & Delivery Zone Selector Modal */}
