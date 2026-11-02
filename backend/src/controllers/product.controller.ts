@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
 import db from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { sendSuccess, sendPaginated } from '../utils/apiResponse';
@@ -259,14 +260,30 @@ export async function createProduct(req: AuthRequest, res: Response, next: NextF
 
     // Handle uploaded images & image URLs
     const images: string[] = [];
-    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
-      req.files.forEach((file: Express.Multer.File) => {
-        images.push(`/uploads/products/${file.filename}`);
-      });
-    }
 
+    // Prioritize explicit image_url (e.g. Base64 data URL or external CDN URL)
     if (req.body.image_url && typeof req.body.image_url === 'string' && req.body.image_url.trim()) {
       images.push(req.body.image_url.trim());
+    }
+
+    // Convert any uploaded file into a permanent base64 data URL to prevent ephemeral disk wipe on Render
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      req.files.forEach((file: Express.Multer.File) => {
+        try {
+          if (fs.existsSync(file.path)) {
+            const buf = fs.readFileSync(file.path);
+            const base64Str = `data:${file.mimetype};base64,${buf.toString('base64')}`;
+            if (!images.includes(base64Str)) {
+              images.push(base64Str);
+            }
+            fs.unlink(file.path, () => {});
+          } else {
+            images.push(`/uploads/products/${file.filename}`);
+          }
+        } catch {
+          images.push(`/uploads/products/${file.filename}`);
+        }
+      });
     }
 
     if (req.body.images) {
@@ -287,10 +304,33 @@ export async function createProduct(req: AuthRequest, res: Response, next: NextF
     if (images.length === 0) {
       const lower = (name || '').toLowerCase();
       const vegMap: Record<string, string> = {
-        'green chilli': 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop&q=80',
-        chilli: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop&q=80',
-        chili: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop&q=80',
-        mirchi: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop&q=80',
+        'green chilli': 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80',
+        chilli: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80',
+        chili: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80',
+        mirchi: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80',
+        banana: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=600&auto=format&fit=crop&q=80',
+        'buffalo milk': 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=600&auto=format&fit=crop&q=80',
+        milk: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=600&auto=format&fit=crop&q=80',
+        curd: 'https://images.unsplash.com/photo-1571212515416-fef01fc43637?w=600&auto=format&fit=crop&q=80',
+        dahi: 'https://images.unsplash.com/photo-1571212515416-fef01fc43637?w=600&auto=format&fit=crop&q=80',
+        goruchikkudu: 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?w=600&auto=format&fit=crop&q=80',
+        beans: 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?w=600&auto=format&fit=crop&q=80',
+        cucumber: 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=600&auto=format&fit=crop&q=80',
+        kheera: 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=600&auto=format&fit=crop&q=80',
+        coriander: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80',
+        spinach: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80',
+        palak: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80',
+        tomato: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80',
+        tamato: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80',
+        potato: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80',
+        onion: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=600&auto=format&fit=crop&q=80',
+        carrot: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+        'lady finger': 'https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=600&auto=format&fit=crop&q=80',
+        bhindi: 'https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=600&auto=format&fit=crop&q=80',
+        okra: 'https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=600&auto=format&fit=crop&q=80',
+        capsicum: 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=600&auto=format&fit=crop&q=80',
+        cauliflower: 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=600&auto=format&fit=crop&q=80',
+        cabbage: 'https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=600&auto=format&fit=crop&q=80',
         lemon: 'https://images.unsplash.com/photo-1590502593747-42a996133562?w=600&auto=format&fit=crop&q=80',
         lime: 'https://images.unsplash.com/photo-1590502593747-42a996133562?w=600&auto=format&fit=crop&q=80',
         nimbu: 'https://images.unsplash.com/photo-1590502593747-42a996133562?w=600&auto=format&fit=crop&q=80',
@@ -300,32 +340,13 @@ export async function createProduct(req: AuthRequest, res: Response, next: NextF
         chukandar: 'https://images.unsplash.com/photo-1593105544559-ecb03bf76f82?w=600&auto=format&fit=crop&q=80',
         radish: 'https://images.unsplash.com/photo-1590165482129-1b8b27698780?w=600&auto=format&fit=crop&q=80',
         mooli: 'https://images.unsplash.com/photo-1590165482129-1b8b27698780?w=600&auto=format&fit=crop&q=80',
-        beans: 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?w=600&auto=format&fit=crop&q=80',
         peas: 'https://images.unsplash.com/photo-1587735243615-c03f25aaff15?w=600&auto=format&fit=crop&q=80',
         matar: 'https://images.unsplash.com/photo-1587735243615-c03f25aaff15?w=600&auto=format&fit=crop&q=80',
         mushroom: 'https://images.unsplash.com/photo-1504544750208-dc0358e63f7f?w=600&auto=format&fit=crop&q=80',
-        baingan: 'https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=600&auto=format&fit=crop&q=80',
-        methi: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80',
-        fenugreek: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80',
-        tomato: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop',
-        tamato: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop',
-        potato: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&auto=format&fit=crop',
-        onion: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=500&auto=format&fit=crop',
-        carrot: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=500&auto=format&fit=crop',
-        'lady finger': 'https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=500&auto=format&fit=crop',
-        bhindi: 'https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=500&auto=format&fit=crop',
-        okra: 'https://images.unsplash.com/photo-1425543103986-22abb7d7e8d2?w=500&auto=format&fit=crop',
-        coriander: 'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=500&auto=format&fit=crop',
-        spinach: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&auto=format&fit=crop',
-        palak: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&auto=format&fit=crop',
-        capsicum: 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=500&auto=format&fit=crop',
-        cucumber: 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=500&auto=format&fit=crop',
-        cauliflower: 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=500&auto=format&fit=crop',
-        cabbage: 'https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=500&auto=format&fit=crop',
         brinjal: 'https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=600&auto=format&fit=crop&q=80',
         eggplant: 'https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=600&auto=format&fit=crop&q=80',
-        garlic: 'https://images.unsplash.com/photo-1540148426945-6cf22a6b2383?w=500&auto=format&fit=crop',
-        ginger: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=500&auto=format&fit=crop',
+        garlic: 'https://images.unsplash.com/photo-1540148426945-6cf22a6b2383?w=600&auto=format&fit=crop&q=80',
+        ginger: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&auto=format&fit=crop&q=80',
       };
       let match = '';
       for (const [k, v] of Object.entries(vegMap)) {
@@ -334,7 +355,7 @@ export async function createProduct(req: AuthRequest, res: Response, next: NextF
           break;
         }
       }
-      images.push(match || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&auto=format&fit=crop');
+      images.push(match || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80');
     }
 
     const result = await db.query(
@@ -401,11 +422,26 @@ export async function updateProduct(req: AuthRequest, res: Response, next: NextF
 
     // Handle uploaded images and image URLs
     let newImages: string[] = [];
-    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
-      newImages = req.files.map((file: Express.Multer.File) => `/uploads/products/${file.filename}`);
-    } else if (req.body.image_url && typeof req.body.image_url === 'string' && req.body.image_url.trim()) {
+    if (req.body.image_url && typeof req.body.image_url === 'string' && req.body.image_url.trim()) {
       newImages = [req.body.image_url.trim()];
-    } else if (req.body.images) {
+    }
+
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      const uploadedBase64 = req.files.map((file: Express.Multer.File) => {
+        try {
+          if (fs.existsSync(file.path)) {
+            const buf = fs.readFileSync(file.path);
+            const base64Str = `data:${file.mimetype};base64,${buf.toString('base64')}`;
+            fs.unlink(file.path, () => {});
+            return base64Str;
+          }
+          return `/uploads/products/${file.filename}`;
+        } catch {
+          return `/uploads/products/${file.filename}`;
+        }
+      });
+      newImages = [...newImages, ...uploadedBase64];
+    } else if (newImages.length === 0 && req.body.images) {
       if (Array.isArray(req.body.images)) {
         newImages = req.body.images.filter(Boolean);
       } else if (typeof req.body.images === 'string') {

@@ -16,19 +16,25 @@ export interface VariantInput {
 }
 
 const VEGETABLE_IMAGE_PRESETS = [
-  { name: 'Green Chilli', url: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop&q=80', icon: '🌶️' },
+  { name: 'Green Chilli', url: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80', icon: '🌶️' },
+  { name: 'Coriander', url: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80', icon: '🌿' },
+  { name: 'Goruchikkudu', url: 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?w=600&auto=format&fit=crop&q=80', icon: '🫘' },
+  { name: 'Cucumber', url: 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=600&auto=format&fit=crop&q=80', icon: '🥒' },
+  { name: 'Milk', url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=600&auto=format&fit=crop&q=80', icon: '🥛' },
+  { name: 'Buffalo Milk', url: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=600&auto=format&fit=crop&q=80', icon: '🥛' },
+  { name: 'Curd', url: 'https://images.unsplash.com/photo-1571212515416-fef01fc43637?w=600&auto=format&fit=crop&q=80', icon: '🥣' },
+  { name: 'Banana', url: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=600&auto=format&fit=crop&q=80', icon: '🍌' },
+  { name: 'Tomato', url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80', icon: '🍅' },
+  { name: 'Potato', url: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80', icon: '🥔' },
+  { name: 'Onion', url: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=600&auto=format&fit=crop&q=80', icon: '🧅' },
+  { name: 'Carrot', url: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80', icon: '🥕' },
+  { name: 'Spinach', url: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80', icon: '🥬' },
+  { name: 'Capsicum', url: 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=600&auto=format&fit=crop&q=80', icon: '🫑' },
   { name: 'Lemon', url: 'https://images.unsplash.com/photo-1590502593747-42a996133562?w=600&auto=format&fit=crop&q=80', icon: '🍋' },
   { name: 'Mint', url: 'https://images.unsplash.com/photo-1608686207856-001b95cf60ca?w=600&auto=format&fit=crop&q=80', icon: '🌿' },
-  { name: 'Tomato', url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop', icon: '🍅' },
-  { name: 'Potato', url: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&auto=format&fit=crop', icon: '🥔' },
-  { name: 'Onion', url: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=500&auto=format&fit=crop', icon: '🧅' },
-  { name: 'Carrot', url: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=500&auto=format&fit=crop', icon: '🥕' },
-  { name: 'Spinach', url: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&auto=format&fit=crop', icon: '🥬' },
-  { name: 'Capsicum', url: 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=500&auto=format&fit=crop', icon: '🫑' },
-  { name: 'Cucumber', url: 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=500&auto=format&fit=crop', icon: '🥒' },
-  { name: 'Cauliflower', url: 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=500&auto=format&fit=crop', icon: '🥦' },
-  { name: 'Cabbage', url: 'https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=500&auto=format&fit=crop', icon: '🥗' },
-  { name: 'Garlic', url: 'https://images.unsplash.com/photo-1540148426945-6cf22a6b2383?w=500&auto=format&fit=crop', icon: '🧄' },
+  { name: 'Cauliflower', url: 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=600&auto=format&fit=crop&q=80', icon: '🥦' },
+  { name: 'Cabbage', url: 'https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=600&auto=format&fit=crop&q=80', icon: '🥗' },
+  { name: 'Garlic', url: 'https://images.unsplash.com/photo-1540148426945-6cf22a6b2383?w=600&auto=format&fit=crop&q=80', icon: '🧄' },
 ];
 
 export const AdminProductsPage: React.FC = () => {
