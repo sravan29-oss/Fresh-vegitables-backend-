@@ -39,12 +39,6 @@ export function getInvisibleRecaptcha(containerId = 'recaptcha-invisible-contain
   if (!container) {
     container = document.createElement('div');
     container.id = containerId;
-    container.style.position = 'fixed';
-    container.style.bottom = '-9999px';
-    container.style.right = '-9999px';
-    container.style.opacity = '0';
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '-9999';
     document.body.appendChild(container);
   }
 

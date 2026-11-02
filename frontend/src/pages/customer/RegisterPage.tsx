@@ -148,8 +148,8 @@ export const RegisterPage: React.FC = () => {
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
       <SEOHead title="Customer Registration | Fresh Vegetables Organic" noindex={true} />
       <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200/80 shadow-xl p-8 sm:p-10 space-y-6">
-        {/* Invisible container for Firebase background verification */}
-        <div id="recaptcha-invisible-container" style={{ display: 'none' }} />
+        {/* Container for Firebase background verification & Google compliant branding */}
+        <div id="recaptcha-invisible-container" />
 
         {isOtpStep ? (
           <OtpVerificationScreen
