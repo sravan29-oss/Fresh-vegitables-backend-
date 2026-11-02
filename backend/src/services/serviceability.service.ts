@@ -82,13 +82,13 @@ export function checkServiceability(
   const settings = customSettings || getPersistedDeliverySettings();
   const radiusKm = Number(settings.delivery_radius_km) > 0 ? Number(settings.delivery_radius_km) : 5.0;
 
-  // Authoritative default Champapet hub coordinates if null or undefined
-  const hubLat = settings.hub_latitude !== undefined && settings.hub_latitude !== null
-    ? Number(settings.hub_latitude)
-    : 17.34457;
-  const hubLng = settings.hub_longitude !== undefined && settings.hub_longitude !== null
-    ? Number(settings.hub_longitude)
-    : 78.516972;
+  // Authoritative default Champapet hub coordinates if undefined, but respect explicit null as unconfigured
+  const hubLat = settings.hub_latitude === null
+    ? null
+    : (settings.hub_latitude !== undefined ? Number(settings.hub_latitude) : 17.34457);
+  const hubLng = settings.hub_longitude === null
+    ? null
+    : (settings.hub_longitude !== undefined ? Number(settings.hub_longitude) : 78.516972);
   const isEnabled = settings.serviceability_enabled !== false;
 
   // 1. Fail safe if hub coordinates are not configured or serviceability disabled
