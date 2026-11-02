@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
 import db from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { sendSuccess, sendPaginated } from '../utils/apiResponse';
@@ -55,7 +56,20 @@ export async function createCategory(req: AuthRequest, res: Response, next: Next
     const { name, description, status, display_order } = req.body;
     const slug = generateSlug(name);
 
-    let image = req.file ? `/uploads/categories/${req.file.filename}` : null;
+    let image = null;
+    if (req.file) {
+      try {
+        if (fs.existsSync(req.file.path)) {
+          const buf = fs.readFileSync(req.file.path);
+          image = `data:${req.file.mimetype};base64,${buf.toString('base64')}`;
+          fs.unlink(req.file.path, () => {});
+        } else {
+          image = `/uploads/categories/${req.file.filename}`;
+        }
+      } catch {
+        image = `/uploads/categories/${req.file.filename}`;
+      }
+    }
     if (!image && (req.body.image || req.body.image_url)) {
       image = req.body.image || req.body.image_url;
     }
@@ -96,8 +110,16 @@ export async function updateCategory(req: AuthRequest, res: Response, next: Next
     if (display_order !== undefined) { fields.push(`display_order = $${idx++}`); values.push(display_order); }
 
     if (req.file) {
+      let imgData = `/uploads/categories/${req.file.filename}`;
+      try {
+        if (fs.existsSync(req.file.path)) {
+          const buf = fs.readFileSync(req.file.path);
+          imgData = `data:${req.file.mimetype};base64,${buf.toString('base64')}`;
+          fs.unlink(req.file.path, () => {});
+        }
+      } catch {}
       fields.push(`image = $${idx++}`);
-      values.push(`/uploads/categories/${req.file.filename}`);
+      values.push(imgData);
     } else if (req.body.image !== undefined) {
       fields.push(`image = $${idx++}`);
       values.push(req.body.image || null);

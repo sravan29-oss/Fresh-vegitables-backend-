@@ -27,3 +27,17 @@ export const updateProfileSchema = z.object({
   email: z.string().email().optional(),
   mobile: z.string().regex(/^[6-9]\d{9}$/).optional(),
 });
+
+export const firebaseRegisterSchema = z.object({
+  idToken: z.string().min(10, 'Firebase ID token is required'),
+  name: z.string().min(2, 'Full name must be at least 2 characters').max(100),
+  email: z.string().email('Invalid email address').optional().nullable().or(z.literal('')),
+});
+
+export const firebaseLoginSchema = z.object({
+  idToken: z.string().min(10, 'Firebase ID token is required'),
+});
+
+export const checkPhoneSchema = z.object({
+  phone: z.string().min(10, 'Valid mobile number is required'),
+});

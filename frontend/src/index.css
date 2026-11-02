@@ -50,6 +50,14 @@
   display: none;
 }
 
+/* Hide background reCAPTCHA badge to strictly prevent UI interruption */
+.grecaptcha-badge {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  z-index: -9999 !important;
+}
+
 /* ─── Modern Professional Quick-Commerce Design System ──────────────────────── */
 
 /* Solid Clean Card (Replaces blurry glass with crisp Blinkit/Zepto card) */

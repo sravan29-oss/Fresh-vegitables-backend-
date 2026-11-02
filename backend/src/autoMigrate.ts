@@ -42,12 +42,17 @@ export async function autoMigrateAndSeed(): Promise<void> {
     client = await pool.connect();
     console.log('🔄 [AutoMigrate] Connected to PostgreSQL. Verifying schema migrations...');
 
-    // 1. Create tracking table
+    // 1. Create tracking table and ensure Firebase auth columns
     await client.query(`
       CREATE TABLE IF NOT EXISTS _schema_migrations (
         id VARCHAR(255) PRIMARY KEY,
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128) UNIQUE;
+      ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+      ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid);
+      CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile);
     `);
 
     const appliedRes = await client.query('SELECT id FROM _schema_migrations');

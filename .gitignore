@@ -6,6 +6,10 @@ uploads/
 !frontend/public/uploads/
 !frontend/public/uploads/**
 .env
+.env.*
+*.env
+frontend/.env
+backend/.env
 ADMIN_CREDENTIALS.txt
 *.log
 database/pgdata/

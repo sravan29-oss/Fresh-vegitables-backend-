@@ -6,6 +6,7 @@ import { env } from '../config/env';
 import { AuthRequest, generateTokens } from '../middleware/auth';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { AppError, ConflictError, UnauthorizedError, NotFoundError } from '../utils/appError';
+import { verifyFirebaseToken } from '../config/firebase';
 
 // ===================== CUSTOMER AUTH =====================
 
@@ -304,4 +305,205 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
     next(error);
   }
 }
+
+// ===================== FIREBASE PHONE OTP AUTH =====================
+
+/**
+ * Normalizes an Indian phone number to both 10-digit format and E.164 (+91...) format.
+ */
+function normalizePhone(rawPhone: string): { tenDigit: string; e164: string } {
+  const digitsOnly = (rawPhone || '').replace(/\D/g, '');
+  const tenDigit = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+  const e164 = `+91${tenDigit}`;
+  return { tenDigit, e164 };
+}
+
+/**
+ * Pre-check endpoint to see if a phone number is registered.
+ * Allows instant UX feedback before sending SMS OTP.
+ */
+export async function checkPhoneRegistered(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phone } = req.body;
+    const { tenDigit, e164 } = normalizePhone(phone);
+
+    const result = await db.query(
+      `SELECT id, name FROM users WHERE mobile = $1 OR mobile = $2 LIMIT 1`,
+      [tenDigit, e164]
+    );
+
+    const exists = result.rows.length > 0;
+    return sendSuccess(res, exists ? 'Phone number is registered' : 'Phone number is not registered', {
+      exists,
+      phone: e164,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Customer Registration via Firebase Phone OTP.
+ * Authoritatively validates Firebase ID token, extracts verified phone number and UID,
+ * creates customer record in PostgreSQL, and issues authenticated customer session.
+ */
+export async function firebaseRegister(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { idToken, name, email } = req.body;
+
+    if (!name || typeof name !== 'string' || name.trim().length < 2) {
+      throw new AppError('Full Name must be at least 2 characters', 400);
+    }
+
+    // 1. Authoritatively verify Firebase ID token
+    const verified = await verifyFirebaseToken(idToken);
+    const { tenDigit, e164 } = normalizePhone(verified.phoneNumber);
+    const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
+
+    // 2. Check for duplicate phone number
+    const existingPhone = await db.query(
+      `SELECT id, name FROM users WHERE firebase_uid = $1 OR mobile = $2 OR mobile = $3 LIMIT 1`,
+      [verified.uid, tenDigit, e164]
+    );
+
+    if (existingPhone.rows.length > 0) {
+      throw new ConflictError('An account with this mobile number already exists. Please log in instead.');
+    }
+
+    // 3. Check for duplicate email if provided
+    if (cleanEmail) {
+      const existingEmail = await db.query(
+        `SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+        [cleanEmail]
+      );
+      if (existingEmail.rows.length > 0) {
+        throw new ConflictError('This email is already associated with another account.');
+      }
+    }
+
+    // 4. Insert new customer into PostgreSQL
+    const result = await db.query(
+      `INSERT INTO users (name, email, mobile, firebase_uid, status)
+       VALUES ($1, $2, $3, $4, 'active')
+       RETURNING id, name, email, mobile, firebase_uid, status, created_at`,
+      [name.trim(), cleanEmail, tenDigit, verified.uid]
+    );
+
+    const user = result.rows[0];
+
+    // 5. Ensure an active shopping cart is provisioned
+    await db.query(
+      `INSERT INTO carts (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
+      [user.id]
+    ).catch(() => {});
+
+    // 6. Generate authenticated customer JWT session
+    const tokens = generateTokens({
+      id: user.id,
+      email: user.email,
+      mobile: user.mobile,
+      name: user.name,
+      role: 'customer',
+    });
+
+    return sendSuccess(res, 'Registration successful', {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        mobile: user.mobile,
+        status: user.status,
+        role: 'customer',
+      },
+      token: tokens.accessToken,
+      ...tokens,
+    }, 201);
+  } catch (error: any) {
+    if (error.message && error.message.includes('auth/')) {
+      return next(new UnauthorizedError('Invalid or expired Firebase authentication token. Please request a new OTP.'));
+    }
+    next(error);
+  }
+}
+
+/**
+ * Customer Login via Firebase Phone OTP.
+ * Authoritatively validates Firebase ID token, identifies existing customer account,
+ * updates Firebase UID linkage, and issues authenticated customer session.
+ */
+export async function firebaseLogin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { idToken } = req.body;
+
+    // 1. Authoritatively verify Firebase ID token
+    const verified = await verifyFirebaseToken(idToken);
+    const { tenDigit, e164 } = normalizePhone(verified.phoneNumber);
+
+    // 2. Identify customer account in PostgreSQL
+    const result = await db.query(
+      `SELECT * FROM users 
+       WHERE firebase_uid = $1 OR mobile = $2 OR mobile = $3 
+       ORDER BY created_at ASC 
+       LIMIT 1`,
+      [verified.uid, tenDigit, e164]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        code: 'USER_NOT_FOUND',
+        message: 'Account not found. Please register to continue.',
+      });
+    }
+
+    const user = result.rows[0];
+
+    // 3. Verify account status
+    if (user.status && user.status !== 'active') {
+      throw new AppError('Your account is currently inactive or suspended. Please contact support.', 403);
+    }
+
+    // 4. Update / link Firebase UID and mobile if needed
+    if (!user.firebase_uid || user.firebase_uid !== verified.uid || !user.mobile) {
+      await db.query(
+        `UPDATE users SET firebase_uid = $1, mobile = COALESCE(mobile, $2) WHERE id = $3`,
+        [verified.uid, tenDigit, user.id]
+      ).catch(() => {});
+    }
+
+    // 5. Ensure cart exists
+    await db.query(
+      `INSERT INTO carts (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
+      [user.id]
+    ).catch(() => {});
+
+    // 6. Generate authenticated customer JWT session
+    const tokens = generateTokens({
+      id: user.id,
+      email: user.email,
+      mobile: user.mobile,
+      name: user.name,
+      role: 'customer',
+    });
+
+    return sendSuccess(res, 'Login successful', {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        mobile: user.mobile,
+        status: user.status,
+        role: 'customer',
+      },
+      token: tokens.accessToken,
+      ...tokens,
+    });
+  } catch (error: any) {
+    if (error.message && error.message.includes('auth/')) {
+      return next(new UnauthorizedError('Invalid or expired Firebase authentication token. Please request a new OTP.'));
+    }
+    next(error);
+  }
+}
+
 

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
 import db from '../config/database';
 import { memoryStore } from '../config/mockDb';
 import { sendSuccess } from '../utils/apiResponse';
@@ -368,7 +369,17 @@ export async function createBannerAdmin(req: Request, res: Response, next: NextF
     const { title, subtitle, link, badge, display_order, status, section_id } = req.body;
     let image = req.body.image || '';
     if (req.file) {
-      image = `/uploads/banners/${req.file.filename}`;
+      try {
+        if (fs.existsSync(req.file.path)) {
+          const buf = fs.readFileSync(req.file.path);
+          image = `data:${req.file.mimetype};base64,${buf.toString('base64')}`;
+          fs.unlink(req.file.path, () => {});
+        } else {
+          image = `/uploads/banners/${req.file.filename}`;
+        }
+      } catch {
+        image = `/uploads/banners/${req.file.filename}`;
+      }
     }
     let secId = section_id;
     if (!secId || secId === 'sec-hero-01') {
@@ -405,7 +416,17 @@ export async function updateBannerAdmin(req: Request, res: Response, next: NextF
     const { title, subtitle, link, badge, status } = req.body;
     let image = req.body.image;
     if (req.file) {
-      image = `/uploads/banners/${req.file.filename}`;
+      try {
+        if (fs.existsSync(req.file.path)) {
+          const buf = fs.readFileSync(req.file.path);
+          image = `data:${req.file.mimetype};base64,${buf.toString('base64')}`;
+          fs.unlink(req.file.path, () => {});
+        } else {
+          image = `/uploads/banners/${req.file.filename}`;
+        }
+      } catch {
+        image = `/uploads/banners/${req.file.filename}`;
+      }
     }
 
     const currentBnr = await db.query('SELECT image FROM homepage_banners WHERE id = $1', [id]);
