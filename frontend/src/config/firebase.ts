@@ -1,8 +1,11 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, Auth } from 'firebase/auth';
 
+const rawApiKey = import.meta.env.VITE_FIREBASE_API_KEY || '';
+const sanitizedApiKey = typeof rawApiKey === 'string' ? rawApiKey.trim().replace(/^["']|["']$/g, '') : '';
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  apiKey: sanitizedApiKey,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'fresh-vegetables-cfb6d.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'fresh-vegetables-cfb6d',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'fresh-vegetables-cfb6d.appspot.com',
@@ -17,8 +20,7 @@ let cachedAuth: Auth | null = null;
  * Checks if a valid Firebase Web API key is configured.
  */
 export function isFirebaseConfigured(): boolean {
-  const key = import.meta.env.VITE_FIREBASE_API_KEY;
-  return typeof key === 'string' && key.trim().length > 10 && !key.includes('your_');
+  return typeof sanitizedApiKey === 'string' && sanitizedApiKey.length > 10 && !sanitizedApiKey.includes('your_');
 }
 
 /**
