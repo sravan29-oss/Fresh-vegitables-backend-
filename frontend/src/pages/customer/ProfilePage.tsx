@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { User, MapPin, Plus, Trash2, CheckCircle2, Phone, Mail, Navigation, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { User, MapPin, Plus, Trash2, CheckCircle2, Phone, Mail, Navigation, AlertCircle, Loader2, CheckCircle, LogOut, Package, Wallet } from 'lucide-react';
 import api from '../../services/api';
 import { Address } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { SEOHead } from '../../components/common/SEOHead';
 
 export const ProfilePage: React.FC = () => {
-  const { user, updateUser, isLoading: authLoading } = useAuth();
+  const { user, updateUser, logout, showLogoutConfirm, showLogoutSuccess, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -270,6 +270,15 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const handleLogout = () => {
+    showLogoutConfirm(() => {
+      logout();
+      showLogoutSuccess(false, () => {
+        navigate('/');
+      });
+    });
+  };
+
   const handleCreateAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (zoneServiceability.checked && !zoneServiceability.serviceable) {
@@ -345,9 +354,63 @@ export const ProfilePage: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
       <SEOHead title="Account & Addresses | Fresh Vegetables Organic" noindex={true} />
-      <div>
-        <h1 className="text-3xl font-black text-slate-900 tracking-tight">Account & Addresses</h1>
-        <p className="text-xs text-slate-500 mt-1">Manage your personal information and delivery destinations</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Account & Addresses</h1>
+          <p className="text-xs text-slate-500 mt-1">Manage your personal information, orders, and delivery destinations</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/90 text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+          title="Sign Out of Account"
+        >
+          <LogOut className="w-4 h-4 text-rose-500" />
+          <span>Sign Out</span>
+        </button>
+      </div>
+
+      {/* Quick Navigation Cards on Mobile & Tablet */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Link
+          to="/orders"
+          className="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:border-emerald-500 hover:shadow-xs transition-all group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#0c831f] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Package className="w-4.5 h-4.5" />
+          </div>
+          <div className="overflow-hidden">
+            <p className="font-extrabold text-xs text-slate-900 group-hover:text-[#0c831f] transition-colors truncate">My Orders</p>
+            <p className="text-[10px] text-slate-400 font-medium truncate">Track & history</p>
+          </div>
+        </Link>
+
+        <Link
+          to="/wallet"
+          className="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:border-amber-500 hover:shadow-xs transition-all group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Wallet className="w-4.5 h-4.5" />
+          </div>
+          <div className="overflow-hidden">
+            <p className="font-extrabold text-xs text-slate-900 group-hover:text-amber-600 transition-colors truncate">Wallet</p>
+            <p className="text-[10px] text-slate-400 font-medium truncate">Credits & balance</p>
+          </div>
+        </Link>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="col-span-2 sm:col-span-1 flex items-center gap-3 p-3.5 rounded-2xl bg-rose-50/60 hover:bg-rose-50 border border-rose-200/80 shadow-2xs hover:border-rose-400 transition-all text-left cursor-pointer group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <LogOut className="w-4.5 h-4.5" />
+          </div>
+          <div className="overflow-hidden">
+            <p className="font-extrabold text-xs text-rose-600 truncate">Sign Out</p>
+            <p className="text-[10px] text-rose-400 font-medium truncate">End session safely</p>
+          </div>
+        </button>
       </div>
 
       {message && (
@@ -605,6 +668,22 @@ export const ProfilePage: React.FC = () => {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* 3. Account Session & Logout Section */}
+      <div className="bg-slate-50 p-5 sm:p-6 rounded-3xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-black text-slate-900">Signed In Account</p>
+          <p className="text-[11px] text-slate-500 mt-0.5">{user?.name} ({user?.email || user?.mobile || 'Active Customer'})</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Log Out of Account</span>
+        </button>
       </div>
     </div>
   );

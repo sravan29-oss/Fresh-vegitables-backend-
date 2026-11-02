@@ -418,14 +418,15 @@ export const Header: React.FC = () => {
 
             {/* User Profile Avatar / Sign In */}
             {user ? (
-              <Link
-                to="/profile"
-                className="w-9 h-9 rounded-xl bg-[#0c831f] text-white font-black text-xs flex items-center justify-center shadow-xs ring-1 ring-emerald-600/30 shrink-0"
-                title="Profile & Orders"
-                aria-label="Account Profile"
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="w-9 h-9 rounded-xl bg-[#0c831f] active:bg-[#0a701a] text-white font-black text-xs flex items-center justify-center shadow-xs ring-1 ring-emerald-600/30 shrink-0 cursor-pointer"
+                title="Account & Menu"
+                aria-label="Account Profile and Menu"
               >
                 {user.name.charAt(0).toUpperCase()}
-              </Link>
+              </button>
             ) : (
               <Link
                 to="/login"
@@ -930,6 +931,13 @@ export const Header: React.FC = () => {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                    <Link
+                      to="/profile"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-800 border border-slate-200 flex items-center gap-2 col-span-2"
+                    >
+                      <User className="w-4 h-4 text-[#0c831f]" /> Profile &amp; Addresses
+                    </Link>
                     <Link
                       to="/orders"
                       onClick={() => setIsMobileMenuOpen(false)}
