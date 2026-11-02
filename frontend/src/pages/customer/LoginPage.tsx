@@ -65,6 +65,10 @@ export const LoginPage: React.FC = () => {
         if (err.response?.data?.code === 'USER_NOT_FOUND') {
           setAccountNotFound(true);
         }
+      } else if (err.code === 'auth/configuration-not-found') {
+        msg = 'Phone authentication is not enabled in your Firebase Console. Please open Firebase Console > Authentication > Sign-in method, click "Phone" and toggle "Enable".';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        msg = 'Domain not authorized. Please add fresh-vegetables-organic.vercel.app to Firebase Console > Authentication > Settings > Authorized domains.';
       } else if (err.code === 'auth/invalid-phone-number') {
         msg = 'Invalid mobile number. Please enter a valid 10-digit number.';
       } else if (err.code === 'auth/too-many-requests') {

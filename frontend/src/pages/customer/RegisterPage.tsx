@@ -72,7 +72,11 @@ export const RegisterPage: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to send registration OTP:', err);
       let msg = 'Failed to send OTP. Please check your mobile number and try again.';
-      if (err.code === 'auth/invalid-phone-number') {
+      if (err.code === 'auth/configuration-not-found') {
+        msg = 'Phone authentication is not enabled in your Firebase Console. Please open Firebase Console > Authentication > Sign-in method, click "Phone" and toggle "Enable".';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        msg = 'Domain not authorized. Please add fresh-vegetables-organic.vercel.app to Firebase Console > Authentication > Settings > Authorized domains.';
+      } else if (err.code === 'auth/invalid-phone-number') {
         msg = 'Invalid mobile number. Please enter a valid 10-digit number.';
       } else if (err.code === 'auth/too-many-requests') {
         msg = 'Too many attempts. Please wait a few minutes before requesting another OTP.';
