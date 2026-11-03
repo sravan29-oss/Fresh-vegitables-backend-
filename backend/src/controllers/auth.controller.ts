@@ -614,6 +614,7 @@ export async function googleAuth(req: Request, res: Response, next: NextFunction
       ...tokens,
     }, isNewCustomer ? 201 : 200);
   } catch (error: any) {
+    console.error('❌ [Google Auth Backend Error]:', error?.message || error);
     if (error.message && (error.message.includes('auth/') || error.message.includes('Google'))) {
       return next(new UnauthorizedError('Invalid or expired Google authentication token.'));
     }

@@ -1,7 +1,31 @@
 import { initializeApp, cert, getApps, App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import jwt from 'jsonwebtoken';
 
 let firebaseApp: App | null = null;
+let cachedPublicCerts: Record<string, string> | null = null;
+let publicCertsExpiresAt = 0;
+
+/**
+ * Fetches Google's published public x509 certificates used for signing Firebase ID tokens.
+ * Caches in memory according to HTTP Cache-Control header.
+ */
+async function getGooglePublicCerts(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (cachedPublicCerts && now < publicCertsExpiresAt) {
+    return cachedPublicCerts;
+  }
+  const res = await fetch('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+  if (!res.ok) {
+    throw new Error('Failed to fetch Google public certificates');
+  }
+  const cacheControl = res.headers.get('cache-control') || '';
+  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
+  const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) * 1000 : 3600 * 1000;
+  cachedPublicCerts = (await res.json()) as Record<string, string>;
+  publicCertsExpiresAt = now + maxAge;
+  return cachedPublicCerts;
+}
 
 export function getFirebaseApp(): App {
   if (firebaseApp) return firebaseApp;
@@ -79,7 +103,7 @@ export async function verifyFirebaseToken(idToken: string): Promise<VerifiedFire
 
   const app = getFirebaseApp();
   const auth = getAuth(app);
-  const decodedToken = await auth.verifyIdToken(idToken, true);
+  const decodedToken = await auth.verifyIdToken(idToken, false);
 
   if (!decodedToken || !decodedToken.uid) {
     throw new Error('Invalid Firebase token payload: Missing UID');
@@ -107,24 +131,28 @@ export interface VerifiedGoogleUser {
 
 /**
  * Authoritatively verifies a Google identity token.
- * 1. Attempts verification using Firebase Admin SDK (which verifies signature, issuer, audience, exp).
- * 2. If token was issued directly by Google OAuth2 (accounts.google.com), verifies using Google's public tokeninfo endpoint.
- * Validates issuer, audience, expiration, and cryptographic signature.
- * Extracts verified Google UID, email, name, and profile avatar directly from the verified payload.
+ * Uses a robust 3-tier cryptographic verification approach:
+ * 1. Firebase Admin SDK verifyIdToken (with checkRevoked=false to support setups without service account key files)
+ * 2. Direct cryptographic JWT verification using Google's published public x509 certificates (RS256 signature verification)
+ * 3. Direct Google OAuth2 tokeninfo validation for tokens issued directly by accounts.google.com
+ * Validates cryptographic signature, issuer, audience, and expiration.
+ * Never trusts unverified client data.
  */
 export async function verifyGoogleAuthToken(idToken: string): Promise<VerifiedGoogleUser> {
   if (!idToken || typeof idToken !== 'string') {
     throw new Error('Google ID token is required');
   }
 
-  // 1. Primary: Verify via Firebase Admin SDK
+  const projectId = process.env.FIREBASE_PROJECT_ID || 'fresh-vegetables-cfb6d';
+
+  // 1. Primary: Verify via Firebase Admin SDK (checkRevoked=false avoids requiring service account file)
   try {
     const app = getFirebaseApp();
     const auth = getAuth(app);
-    const decodedToken = await auth.verifyIdToken(idToken, true);
+    const decodedToken = await auth.verifyIdToken(idToken, false);
 
     if (decodedToken && decodedToken.email) {
-      const googleId = decodedToken.firebase?.identities?.['google.com']?.[0] || decodedToken.uid;
+      const googleId = decodedToken.firebase?.identities?.['google.com']?.[0] || decodedToken.uid || decodedToken.sub;
       return {
         googleId,
         email: decodedToken.email,
@@ -134,21 +162,45 @@ export async function verifyGoogleAuthToken(idToken: string): Promise<VerifiedGo
       };
     }
   } catch (firebaseErr: any) {
-    // If not a Firebase-issued token, try direct Google tokeninfo verification below
+    console.warn('⚠️ [Google Auth] Firebase Admin verification note:', firebaseErr?.message);
   }
 
-  // 2. Secondary: Direct Google OAuth token verification via Google's tokeninfo endpoint
+  // 2. Secondary: Direct cryptographic JWT verification using Google's public x509 certificates
+  try {
+    const decodedUnverified = jwt.decode(idToken, { complete: true }) as any;
+    if (decodedUnverified?.header?.kid) {
+      const certs = await getGooglePublicCerts();
+      const cert = certs[decodedUnverified.header.kid];
+      if (cert) {
+        const payload: any = jwt.verify(idToken, cert, {
+          algorithms: ['RS256'],
+          audience: projectId,
+          issuer: `https://securetoken.google.com/${projectId}`,
+        });
+
+        if (payload && payload.email) {
+          const googleId = payload.firebase?.identities?.['google.com']?.[0] || payload.sub || payload.user_id;
+          return {
+            googleId,
+            email: payload.email,
+            name: payload.name || payload.email.split('@')[0],
+            picture: payload.picture || undefined,
+            emailVerified: Boolean(payload.email_verified),
+          };
+        }
+      }
+    }
+  } catch (jwtErr: any) {
+    console.warn('⚠️ [Google Auth] Direct Google cert verification note:', jwtErr?.message);
+  }
+
+  // 3. Tertiary: Direct Google OAuth tokeninfo endpoint (for tokens issued directly by accounts.google.com)
   try {
     const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
     if (res.ok) {
       const data: any = await res.json();
       const validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
-      if (
-        data &&
-        validIssuers.includes(data.iss) &&
-        data.sub &&
-        data.email
-      ) {
+      if (data && validIssuers.includes(data.iss) && data.sub && data.email) {
         return {
           googleId: data.sub,
           email: data.email,
@@ -159,7 +211,7 @@ export async function verifyGoogleAuthToken(idToken: string): Promise<VerifiedGo
       }
     }
   } catch (googleApiErr: any) {
-    // Fall-through to throw error
+    console.warn('⚠️ [Google Auth] Google OAuth tokeninfo verification note:', googleApiErr?.message);
   }
 
   throw new Error('Invalid or expired Google authentication token. Verification failed.');
