@@ -202,12 +202,54 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
           setManualLngInput(lng.toString());
 
           // Multi-tier server reverse geocoding with authoritative 5 KM check
-          const res = await api.post('/delivery/reverse-geocode', {
-            latitude: lat,
-            longitude: lng,
-          });
+          let data: any = null;
+          try {
+            const res = await api.post('/delivery/reverse-geocode', {
+              latitude: lat,
+              longitude: lng,
+            });
+            data = res.data?.data;
+          } catch (e) {
+            // Resilient fallback if reverse-geocode route is deploying: check serviceability directly
+            try {
+              const servRes = await api.post('/delivery/check-serviceability', {
+                latitude: lat,
+                longitude: lng,
+              });
+              const servData = servRes.data?.data || servRes.data;
+              data = {
+                colony: 'Detected GPS Location',
+                formatted_address: `Doorstep Location (${lat.toFixed(4)}, ${lng.toFixed(4)}), Hyderabad`,
+                pincode: '',
+                serviceability: {
+                  configured: servData.configured,
+                  serviceable: servData.serviceable,
+                  distanceKm: servData.distanceKm,
+                  radiusKm: servData.radiusKm || 5.0,
+                  message: servData.message,
+                },
+              };
+            } catch (servErr) {
+              // Haversine client-side fallback
+              const dist = calculateHaversineDistanceKm(17.34457, 78.516972, lat, lng);
+              const inZone = dist <= 5.0;
+              data = {
+                colony: 'Detected GPS Location',
+                formatted_address: `Doorstep Location (${lat.toFixed(4)}, ${lng.toFixed(4)}), Hyderabad`,
+                pincode: '',
+                serviceability: {
+                  configured: true,
+                  serviceable: inZone,
+                  distanceKm: dist,
+                  radiusKm: 5.0,
+                  message: inZone
+                    ? 'Great! Delivery is available at your location.'
+                    : 'Sorry! We are not delivering to your location yet.',
+                },
+              };
+            }
+          }
 
-          const data = res.data?.data;
           if (data) {
             setSelectedColony(data.colony || data.area || 'Detected Location');
             setSelectedAddress(data.formatted_address || `${lat}, ${lng}`);
