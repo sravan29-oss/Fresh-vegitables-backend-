@@ -292,8 +292,8 @@ export const CheckoutPage: React.FC = () => {
           deliveryFee: 10,
           estimatedDelivery: (deliverySettings?.estimated_delivery_time && deliverySettings.estimated_delivery_time !== '30–45 mins') ? deliverySettings.estimated_delivery_time : 'Delivery estimate unavailable',
           message: inZone
-            ? 'Delivery available at your location.'
-            : 'Sorry! Delivery is not available at this location.',
+            ? 'Great! Delivery is available at your location.'
+            : 'Sorry! We are not delivering to your location yet.',
         });
       }
     } else {

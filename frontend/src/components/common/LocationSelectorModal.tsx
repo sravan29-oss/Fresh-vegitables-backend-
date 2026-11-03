@@ -91,13 +91,21 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
 
   const [zones, setZones] = useState<DeliveryZone[]>(DEFAULT_ZONES);
   const [selectedZone, setSelectedZone] = useState<DeliveryZone | null>(null);
-  const [selectedColony, setSelectedColony] = useState<string>('Champapet');
-  const [selectedAddress, setSelectedAddress] = useState<string>(
-    'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad - 500059'
-  );
-  const [currentCoords, setCurrentCoords] = useState<[number, number]>([17.34457, 78.516972]);
+  const [selectedColony, setSelectedColony] = useState<string>(() => localStorage.getItem('fresh_delivery_colony') || '');
+  const [selectedAddress, setSelectedAddress] = useState<string>(() => localStorage.getItem('fresh_delivery_address') || '');
+  const [currentCoords, setCurrentCoords] = useState<[number, number]>(() => {
+    try {
+      const saved = localStorage.getItem('fresh_delivery_coords');
+      if (saved) {
+        const p = JSON.parse(saved);
+        if (p.latitude && p.longitude) return [Number(p.latitude), Number(p.longitude)];
+      }
+    } catch {}
+    return [17.34457, 78.516972];
+  });
   const [pincodeInput, setPincodeInput] = useState('');
   const [isCheckingPincode, setIsCheckingPincode] = useState(false);
+  const [isDetectingGps, setIsDetectingGps] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -136,14 +144,15 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
         longitude: lng,
       });
       const data = res.data?.data || res.data;
+      const isServ = Boolean(data.serviceable);
       setServiceCheck({
         loading: false,
         checked: true,
         configured: Boolean(data.configured),
-        serviceable: Boolean(data.serviceable),
+        serviceable: isServ,
         distanceKm: data.distanceKm,
         radiusKm: data.radiusKm || 5.0,
-        message: data.message,
+        message: data.message || (isServ ? 'Great! Delivery is available at your location.' : 'Sorry! We are not delivering to your location yet.'),
       });
     } catch {
       // Resilient client-side Haversine verification
@@ -162,11 +171,93 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
         distanceKm: distance,
         radiusKm: radius,
         message: inZone
-          ? 'Delivery available at your location.'
-          : 'Sorry! Delivery is not available at this location.',
+          ? 'Great! Delivery is available at your location.'
+          : 'Sorry! We are not delivering to your location yet.',
       });
     }
   }, [deliverySettings]);
+
+  // Dedicated Browser GPS Location Detection Handler
+  const handleDetectGps = () => {
+    if (isDetectingGps) return;
+
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation is not supported by your browser. Please search your address manually.');
+      return;
+    }
+
+    setIsDetectingGps(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const lat = Number(latitude.toFixed(6));
+          const lng = Number(longitude.toFixed(6));
+
+          setCurrentCoords([lat, lng]);
+          setManualLatInput(lat.toString());
+          setManualLngInput(lng.toString());
+
+          // Multi-tier server reverse geocoding with authoritative 5 KM check
+          const res = await api.post('/delivery/reverse-geocode', {
+            latitude: lat,
+            longitude: lng,
+          });
+
+          const data = res.data?.data;
+          if (data) {
+            setSelectedColony(data.colony || data.area || 'Detected Location');
+            setSelectedAddress(data.formatted_address || `${lat}, ${lng}`);
+            if (data.pincode) setPincodeInput(data.pincode);
+
+            const serv = data.serviceability || {};
+            setServiceCheck({
+              loading: false,
+              checked: true,
+              configured: serv.configured !== false,
+              serviceable: Boolean(serv.serviceable),
+              distanceKm: serv.distanceKm,
+              radiusKm: serv.radiusKm || 5.0,
+              message: serv.message,
+            });
+
+            if (serv.serviceable) {
+              setSuccessMsg('Great! Delivery is available at your location.');
+            } else {
+              setErrorMsg(
+                `Sorry! We are not delivering to your location yet. Your location is ${serv.distanceKm} km from our delivery hub (maximum radius: 5.0 KM).`
+              );
+            }
+          }
+        } catch (err: any) {
+          console.error('GPS reverse geocode error:', err);
+          setErrorMsg('Unable to retrieve address for detected location. Please search your address manually.');
+        } finally {
+          setIsDetectingGps(false);
+        }
+      },
+      (error) => {
+        setIsDetectingGps(false);
+        let msg = 'Unable to detect your location. Please try again or search manually.';
+        if (error.code === error.PERMISSION_DENIED) {
+          msg = 'Location permission denied. Please enable location permission in browser settings or search your address manually.';
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          msg = 'Location unavailable. Please check your GPS / network signal or search manually.';
+        } else if (error.code === error.TIMEOUT) {
+          msg = 'Location request timed out. Please try again or search manually.';
+        }
+        setErrorMsg(msg);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    );
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -179,12 +270,14 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       const savedCoords = localStorage.getItem('fresh_delivery_coords');
 
       let initCoords: [number, number] = [17.34457, 78.516972];
+      let hasSavedLocation = false;
 
       if (savedCoords) {
         try {
           const parsed = JSON.parse(savedCoords);
           if (parsed.latitude && parsed.longitude) {
             initCoords = [Number(parsed.latitude), Number(parsed.longitude)];
+            hasSavedLocation = true;
           }
         } catch {}
       } else if (savedZone) {
@@ -193,6 +286,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
           setSelectedZone(parsed);
           if (parsed.latitude && parsed.longitude) {
             initCoords = [Number(parsed.latitude), Number(parsed.longitude)];
+            hasSavedLocation = true;
           }
         } catch {}
       }
@@ -201,11 +295,24 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
       setManualLatInput(initCoords[0].toString());
       setManualLngInput(initCoords[1].toString());
 
-      if (savedColony) setSelectedColony(savedColony);
+      if (savedColony) {
+        setSelectedColony(savedColony);
+        hasSavedLocation = true;
+      }
       if (savedAddr) setSelectedAddress(savedAddr);
 
-      // Verify current location
-      verifyServiceability(initCoords[0], initCoords[1]);
+      // Verify current location ONLY if customer previously saved a location
+      if (hasSavedLocation) {
+        verifyServiceability(initCoords[0], initCoords[1]);
+      } else {
+        setServiceCheck({
+          loading: false,
+          checked: false,
+          configured: true,
+          serviceable: false,
+          radiusKm: deliverySettings?.delivery_radius_km || 5.0,
+        });
+      }
 
       // Fetch active delivery zones
       api
@@ -470,6 +577,60 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
           </button>
         </div>
 
+        {/* Dedicated "Detect My Location" Action Banner */}
+        <div className="bg-gradient-to-r from-emerald-950/90 via-[#042011] to-emerald-950/90 border border-emerald-500/40 rounded-2xl p-3 sm:p-4 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform ${
+                isDetectingGps
+                  ? 'bg-emerald-500/20 text-emerald-300 ring-2 ring-emerald-400/40'
+                  : 'bg-gradient-to-br from-emerald-400 to-[#0c831f] text-slate-950 shadow-md shadow-emerald-500/30'
+              }`}
+            >
+              {isDetectingGps ? (
+                <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+              ) : (
+                <Navigation className="w-5 h-5 text-slate-950 fill-slate-950" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-extrabold text-sm sm:text-base text-white">
+                  Detect My Location
+                </h4>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  GPS Auto-Detect
+                </span>
+              </div>
+              <p className="text-xs text-emerald-200/70 mt-0.5">
+                {isDetectingGps
+                  ? 'Acquiring high-accuracy GPS coordinates & checking 5 km delivery zone...'
+                  : 'Get your doorstep address automatically using high-accuracy device GPS'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={isDetectingGps}
+            onClick={handleDetectGps}
+            className="h-10 px-5 rounded-xl font-black text-xs sm:text-sm bg-gradient-to-r from-emerald-400 to-[#0c831f] hover:from-emerald-300 hover:to-[#0a701a] active:scale-98 text-slate-950 shadow-md shadow-emerald-500/30 flex items-center justify-center gap-2 shrink-0 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+            aria-label="Detect My Location"
+          >
+            {isDetectingGps ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Detecting your location...</span>
+              </>
+            ) : (
+              <>
+                <Navigation className="w-4 h-4 fill-slate-950" />
+                <span>Detect My Location</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Saved Addresses Quick Picker (if logged in and has addresses) */}
         {savedAddresses.length > 0 && (
           <div className="space-y-1.5 bg-[#03140b] p-3 rounded-2xl border border-emerald-500/20">
@@ -692,10 +853,10 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
 
               <div>
                 <h4 className="text-sm font-extrabold text-white leading-snug">
-                  {selectedColony || 'Champapet'}
+                  {selectedColony || 'No Location Selected'}
                 </h4>
                 <p className="text-xs text-slate-300 mt-0.5 line-clamp-2">
-                  {selectedAddress || 'Hyderabad, Telangana'}
+                  {selectedAddress || 'Click "Detect My Location" or tap a point on the map to set your address'}
                 </p>
               </div>
 
@@ -708,7 +869,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
                   </div>
                   <span>{serviceCheck.distanceKm} km from hub</span>
                 </div>
-              ) : (
+              ) : selectedColony && serviceCheck.serviceable ? (
                 <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs text-emerald-300 font-bold">
                   <div className="flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-emerald-400" />
@@ -719,7 +880,7 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
                     <span>₹20 Express Delivery</span>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Explanatory Notice */}
@@ -740,21 +901,26 @@ export const LocationSelectorModal: React.FC<LocationModalProps> = ({
               </p>
             )}
 
-            {/* Primary Confirm CTA Button - Strictly disabled if outside 5 KM */}
+            {/* Primary Confirm CTA Button - Strictly disabled if outside 5 KM or no location selected */}
             <button
               type="button"
-              disabled={!serviceCheck.serviceable || serviceCheck.loading || !serviceCheck.checked}
+              disabled={!serviceCheck.serviceable || serviceCheck.loading || !serviceCheck.checked || !selectedColony}
               onClick={handleConfirmLocation}
               className={`w-full h-11 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-md ${
-                serviceCheck.serviceable
+                serviceCheck.serviceable && selectedColony
                   ? 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 text-white shadow-emerald-500/25 cursor-pointer active:scale-98'
                   : 'bg-rose-950/70 border border-rose-700/60 text-rose-300 cursor-not-allowed opacity-80'
               }`}
             >
-              {serviceCheck.serviceable ? (
+              {serviceCheck.serviceable && selectedColony ? (
                 <>
                   <Check className="w-4 h-4 stroke-[2.5]" />
                   <span>Confirm & Deliver to {selectedColony.split(',')[0]}</span>
+                </>
+              ) : !selectedColony ? (
+                <>
+                  <MapPin className="w-4 h-4 stroke-[2.5]" />
+                  <span>Please Detect or Pick Your Location</span>
                 </>
               ) : (
                 <>

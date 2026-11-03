@@ -86,17 +86,7 @@ export const Header: React.FC = () => {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) {}
     }
-    return {
-      id: 'zone-kphb',
-      name: 'Kukatpally & KPHB Zone',
-      pincodes: ['500072'],
-      delivery_radius_km: 8.5,
-      delivery_fee: 20,
-      min_order_amount: 199,
-      free_delivery_threshold: 499,
-      estimated_delivery_time: '25–35 mins',
-      status: 'ACTIVE',
-    };
+    return null;
   });
 
   // Selected Delivery Area or Colony Display Name (Persisted & Synced)
@@ -112,7 +102,7 @@ export const Header: React.FC = () => {
         if (p?.name) return p.name;
       } catch {}
     }
-    return 'KPHB Colony Phase 1';
+    return '';
   });
 
   // Notification state connected to Global NotificationContext
@@ -280,10 +270,10 @@ export const Header: React.FC = () => {
               onClick={() => setIsLocationModalOpen(true)}
               className="flex flex-col text-left justify-center cursor-pointer min-w-0 group"
               title="Change delivery location"
-              aria-label={`Delivery location: ${displayLocationName}`}
+              aria-label={displayLocationName ? `Delivery location: ${displayLocationName}` : 'Select delivery location'}
             >
               <div className="flex items-center gap-1 leading-none">
-                {serviceability.checked ? (
+                {displayLocationName && serviceability.checked ? (
                   serviceability.serviceable ? (
                     deliveryEstimate.isPaused ? (
                       <span className="text-[9.5px] font-black uppercase text-amber-600 flex items-center gap-1 tracking-wider">
@@ -308,15 +298,15 @@ export const Header: React.FC = () => {
                     </span>
                   )
                 ) : (
-                  <span className="text-[9.5px] font-bold uppercase text-slate-500 flex items-center gap-1 tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                    <span>CHECKING AREA</span>
+                  <span className="text-[9.5px] font-black uppercase text-emerald-700 flex items-center gap-1 tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                    <span>SELECT LOCATION</span>
                   </span>
                 )}
               </div>
 
               <span className="text-xs font-black text-slate-900 truncate max-w-[110px] xs:max-w-[150px] flex items-center gap-0.5 mt-0.5 leading-tight group-hover:text-[#0c831f] transition-colors">
-                <span className="truncate">{displayLocationName}</span>
+                <span className="truncate">{displayLocationName || 'Select Location'}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 group-hover:translate-y-0.5 transition-transform" />
               </span>
             </button>
@@ -518,14 +508,16 @@ export const Header: React.FC = () => {
           <button
             onClick={() => setIsLocationModalOpen(true)}
             className={`flex items-center h-10 px-3 rounded-xl border transition-all duration-200 cursor-pointer group text-left shrink-0 ${
-              serviceability.checked && !serviceability.serviceable
+              displayLocationName && serviceability.checked && !serviceability.serviceable
                 ? 'bg-rose-50/70 hover:bg-rose-100/70 border-rose-200 text-rose-950'
+                : !displayLocationName
+                ? 'bg-emerald-50/80 hover:bg-emerald-100/80 border-emerald-300 text-emerald-950'
                 : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/80 text-slate-800'
             }`}
             title="Click to switch delivery zone or address"
           >
             <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mr-2 group-hover:scale-110 transition-transform ${
-              serviceability.checked && !serviceability.serviceable
+              displayLocationName && serviceability.checked && !serviceability.serviceable
                 ? 'bg-rose-100 border border-rose-200 text-rose-600'
                 : 'bg-emerald-100 border border-emerald-200 text-[#0c831f]'
             }`}>
@@ -533,8 +525,10 @@ export const Header: React.FC = () => {
             </div>
             <div className="flex flex-col justify-center leading-tight">
               <div className="flex items-center gap-1.5">
-                <span className="text-[8.5px] font-black uppercase tracking-[0.14em] text-slate-500">DELIVERING TO</span>
-                {serviceability.checked ? (
+                <span className="text-[8.5px] font-black uppercase tracking-[0.14em] text-slate-500">
+                  {displayLocationName ? 'DELIVERING TO' : 'LOCATION'}
+                </span>
+                {displayLocationName && serviceability.checked ? (
                   serviceability.serviceable ? (
                     <span className="text-[9px] bg-emerald-100 text-[#0c831f] font-black px-1.5 py-0.2 rounded-full border border-emerald-200">
                       {serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} km • Available` : 'Inside 5 km'}
@@ -549,20 +543,24 @@ export const Header: React.FC = () => {
                     </span>
                   )
                 ) : (
-                  <span className="text-[9.5px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded-full border border-slate-200">
-                    Checking Area
+                  <span className="text-[9px] bg-emerald-100 text-[#0c831f] font-black px-1.5 py-0.2 rounded-full border border-emerald-200 animate-pulse">
+                    Select Location
                   </span>
                 )}
               </div>
               <div className="font-bold text-slate-900 group-hover:text-[#0c831f] transition-colors text-xs flex items-center gap-1.5 mt-0.5">
-                <span className="truncate max-w-[135px] font-extrabold" title={displayLocationName}>
-                  {displayLocationName}
+                <span className="truncate max-w-[135px] font-extrabold" title={displayLocationName || 'Select Delivery Location'}>
+                  {displayLocationName || 'Select Location'}
                 </span>
-                <span className="text-slate-400">•</span>
-                <span className={`text-[10px] font-semibold flex items-center gap-1 shrink-0 ${deliveryEstimate.isPaused ? 'text-amber-700' : 'text-emerald-700'}`}>
-                  <Clock className={`w-3 h-3 ${deliveryEstimate.isPaused ? 'text-amber-600' : 'text-[#0c831f]'}`} />
-                  {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || 'Delivery estimate unavailable')}
-                </span>
+                {displayLocationName && (
+                  <>
+                    <span className="text-slate-400">•</span>
+                    <span className={`text-[10px] font-semibold flex items-center gap-1 shrink-0 ${deliveryEstimate.isPaused ? 'text-amber-700' : 'text-emerald-700'}`}>
+                      <Clock className={`w-3 h-3 ${deliveryEstimate.isPaused ? 'text-amber-600' : 'text-[#0c831f]'}`} />
+                      {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || 'Delivery estimate unavailable')}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 group-hover:translate-y-0.5 transition-all ml-1.5 shrink-0" />

@@ -928,7 +928,7 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
         rawDistanceKm: result.rawDistanceKm,
         radiusKm: result.radiusKm || 5.0,
         eta_text: 'Not Serviceable',
-        message: 'Sorry! Delivery is not available at this location.',
+        message: 'Sorry! We are not delivering to your location yet.',
         error_description: `Your location is ${result.distanceKm} km from our delivery hub (maximum radius: ${result.radiusKm || 5.0} KM). Please select another location within our delivery area.`,
         hubName: result.hubName,
         hubAddress: result.hubAddress,
@@ -937,7 +937,7 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
           serviceable: false,
           is_delivery_active: false,
           eta_text: 'Not Serviceable',
-          message: 'Sorry! Delivery is not available at this location.',
+          message: 'Sorry! We are not delivering to your location yet.',
         },
       });
     }
@@ -999,7 +999,7 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
       } else {
         isDeliveryActive = true;
         etaText = `${minEta}–${maxEta} MINS`;
-        statusMessage = `Express delivery in ${minEta}–${maxEta} mins.`;
+        statusMessage = 'Great! Delivery is available at your location.';
       }
     }
 
@@ -1026,6 +1026,152 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
         zone: matchedZone,
         eta_text: etaText,
         is_delivery_active: isDeliveryActive,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Multi-tier Reverse Geocoding with Authoritative 5 KM Serviceability
+ * Converts GPS coordinates into an accurate, readable address with locality, area, city, and pincode.
+ * Evaluates delivery serviceability from the Champapet hub.
+ */
+export async function reverseGeocodeCoordinates(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawLat = req.query.latitude ?? req.query.lat ?? req.body?.latitude ?? req.body?.lat;
+    const rawLng = req.query.longitude ?? req.query.lng ?? req.body?.longitude ?? req.body?.lng;
+
+    if (rawLat === undefined || rawLng === undefined || rawLat === null || rawLng === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required for reverse geocoding.',
+      });
+    }
+
+    const lat = Number(rawLat);
+    const lng = Number(rawLng);
+
+    if (isNaN(lat) || isNaN(lng) || !isValidCoordinate(lat, lng)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coordinates provided. Latitude must be between -90 and 90, longitude between -180 and 180.',
+      });
+    }
+
+    const roundedLat = Number(lat.toFixed(6));
+    const roundedLng = Number(lng.toFixed(6));
+
+    let colony = '';
+    let area = '';
+    let city = 'Hyderabad';
+    let state = 'Telangana';
+    let pincode = '';
+    let formattedAddress = '';
+
+    // 1. Primary: OpenStreetMap Nominatim with official User-Agent
+    try {
+      const nomRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${roundedLat}&lon=${roundedLng}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'FreshVegetablesOrganicBackend/1.0 (support@freshvegetables.org)',
+            'Accept-Language': 'en',
+          },
+          signal: AbortSignal.timeout(6000),
+        }
+      );
+      if (nomRes.ok) {
+        const nomData: any = await nomRes.json();
+        if (nomData?.address) {
+          const a = nomData.address;
+          colony = a.neighbourhood || a.suburb || a.residential || a.quarter || a.road || '';
+          area = a.suburb || a.city_district || a.county || a.city || '';
+          city = a.city || a.town || a.county || 'Hyderabad';
+          state = a.state || 'Telangana';
+          pincode = a.postcode || '';
+
+          const parts = [a.road, a.neighbourhood, a.suburb, a.city, a.postcode].filter(Boolean);
+          formattedAddress = parts.length > 0 ? parts.join(', ') : nomData.display_name;
+        }
+      }
+    } catch (e: any) {
+      console.warn('⚠️ [Reverse Geocode] Nominatim failed, falling back to BigDataCloud:', e?.message);
+    }
+
+    // 2. Secondary: BigDataCloud Free Reverse Geocode Client API
+    if (!formattedAddress) {
+      try {
+        const bdcRes = await fetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${roundedLat}&longitude=${roundedLng}&localityLanguage=en`,
+          { signal: AbortSignal.timeout(6000) }
+        );
+        if (bdcRes.ok) {
+          const bdcData: any = await bdcRes.json();
+          colony = bdcData.locality || bdcData.city || 'Hyderabad';
+          area = bdcData.city || bdcData.principalSubdivision || 'Hyderabad';
+          city = bdcData.city || 'Hyderabad';
+          state = bdcData.principalSubdivision || 'Telangana';
+          pincode = bdcData.postcode || '';
+          formattedAddress = [bdcData.locality, bdcData.city, bdcData.principalSubdivision].filter(Boolean).join(', ');
+        }
+      } catch (e: any) {
+        console.warn('⚠️ [Reverse Geocode] BigDataCloud fallback failed:', e?.message);
+      }
+    }
+
+    // 3. Fallback: Clean coordinate reference if external services are unreachable
+    if (!formattedAddress) {
+      colony = 'Detected Location';
+      area = 'Hyderabad';
+      city = 'Hyderabad';
+      formattedAddress = `Location (${roundedLat.toFixed(4)}, ${roundedLng.toFixed(4)}), Hyderabad`;
+    }
+
+    // Authoritative serviceability check against 5.0 KM delivery radius from Champapet Hub
+    let settings = getPersistedDeliverySettings();
+    try {
+      const dbSettingsRes = await db.query("SELECT * FROM delivery_settings WHERE id = 'global_delivery_settings' LIMIT 1");
+      if (dbSettingsRes.rows.length > 0) {
+        const row = dbSettingsRes.rows[0];
+        settings = {
+          ...settings,
+          hub_latitude: row.hub_latitude ? Number(row.hub_latitude) : 17.34457,
+          hub_longitude: row.hub_longitude ? Number(row.hub_longitude) : 78.516972,
+          delivery_radius_km: row.delivery_radius_km ? Number(row.delivery_radius_km) : 5.0,
+          serviceability_enabled: row.serviceability_enabled !== false,
+          hub_name: row.hub_name || 'Fresh Vegetables Champapet Hub',
+          hub_address: row.hub_address || 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
+          is_delivery_active: row.is_delivery_active !== false,
+          global_delivery_status: row.global_delivery_status || 'available',
+        };
+      }
+    } catch {}
+
+    const serv = checkServiceability(roundedLat, roundedLng, settings);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        latitude: roundedLat,
+        longitude: roundedLng,
+        colony: colony || area || 'Detected Location',
+        area: area || colony || 'Hyderabad',
+        city,
+        state,
+        pincode,
+        formatted_address: formattedAddress,
+        serviceability: {
+          configured: serv.configured,
+          serviceable: serv.serviceable,
+          distanceKm: serv.distanceKm,
+          rawDistanceKm: serv.rawDistanceKm,
+          radiusKm: serv.radiusKm || 5.0,
+          message: serv.serviceable
+            ? 'Great! Delivery is available at your location.'
+            : 'Sorry! We are not delivering to your location yet.',
+        },
       },
     });
   } catch (error) {

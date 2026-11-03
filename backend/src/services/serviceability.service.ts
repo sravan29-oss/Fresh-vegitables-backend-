@@ -130,7 +130,7 @@ export function checkServiceability(
       distanceKm,
       rawDistanceKm: rawDistance,
       radiusKm,
-      message: 'Delivery available at your location.',
+      message: 'Great! Delivery is available at your location.',
       hubName: settings.hub_name || 'Fresh Vegetables Champapet Hub',
       hubAddress: settings.hub_address || 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
     };
@@ -142,7 +142,7 @@ export function checkServiceability(
     distanceKm,
     rawDistanceKm: rawDistance,
     radiusKm,
-    message: 'Sorry! Delivery is not available at this location.',
+    message: 'Sorry! We are not delivering to your location yet.',
     hubName: settings.hub_name || 'Fresh Vegetables Champapet Hub',
     hubAddress: settings.hub_address || 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet, Hyderabad, Telangana - 500059',
   };

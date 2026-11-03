@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { DeliveryZone } from '../../types';
 import { HYDERABAD_COLONIES, HyderabadArea } from '../../data/hyderabadColonies';
+import api from '../../services/api';
 
 export interface AddressDetails {
   colony?: string;
@@ -156,68 +157,39 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     [zones]
   );
 
-  // Reverse Geocoding: Tries Google Geocoding (if key enabled) -> OSM Nominatim -> Local Colony Directory
+  // Multi-tier Reverse Geocoding with Authoritative 5 KM Serviceability
   const reverseGeocode = useCallback(
     async (lat: number, lng: number) => {
       const roundedLat = Number(lat.toFixed(6));
       const roundedLng = Number(lng.toFixed(6));
 
-      // 1. Attempt Google Geocoding API if key configured
-      const googleApiKey =
-        import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
-        import.meta.env.GOOGLE_MAPS_API_KEY;
-
-      if (googleApiKey) {
-        try {
-          const gRes = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${roundedLat},${roundedLng}&key=${googleApiKey}`
-          );
-          const gData = await gRes.json();
-          if (gData.status === 'OK' && gData.results && gData.results.length > 0) {
-            const first = gData.results[0];
-            let colony = '';
-            let area = 'Hyderabad';
-            let pincode = '';
-
-            for (const comp of first.address_components) {
-              if (
-                comp.types.includes('sublocality') ||
-                comp.types.includes('neighborhood') ||
-                comp.types.includes('sublocality_level_1')
-              ) {
-                colony = comp.long_name;
-              }
-              if (comp.types.includes('locality') || comp.types.includes('administrative_area_level_2')) {
-                area = comp.long_name;
-              }
-              if (comp.types.includes('postal_code')) {
-                pincode = comp.long_name;
-              }
-            }
-
-            if (!colony) colony = first.address_components[0]?.long_name || 'Hyderabad Colony';
-            const full = first.formatted_address || `${colony}, ${area}`;
-
-            const matched = matchZone(roundedLat, roundedLng, pincode);
-            const details: AddressDetails = {
-              colony,
-              area,
-              pincode,
-              fullAddress: full,
-              latitude: roundedLat,
-              longitude: roundedLng,
-              matchedZone: matched,
-            };
-            setResolvedAddress(full);
-            onPositionChange(roundedLat, roundedLng, details);
-            return;
-          }
-        } catch (e) {
-          // Google API failed or denied billing, seamlessly fallback to Nominatim
+      // 1. Primary: Secure Backend Multi-Tier Reverse Geocoding & 5 KM Serviceability
+      try {
+        const res = await api.post('/delivery/reverse-geocode', {
+          latitude: roundedLat,
+          longitude: roundedLng,
+        });
+        const d = res.data?.data;
+        if (d && d.formatted_address) {
+          const matched = matchZone(roundedLat, roundedLng, d.pincode);
+          const details: AddressDetails = {
+            colony: d.colony,
+            area: d.area,
+            pincode: d.pincode,
+            fullAddress: d.formatted_address,
+            latitude: roundedLat,
+            longitude: roundedLng,
+            matchedZone: matched,
+          };
+          setResolvedAddress(d.formatted_address);
+          onPositionChange(roundedLat, roundedLng, details);
+          return;
         }
+      } catch (e) {
+        // Backend reverse geocode fallback
       }
 
-      // 2. High-precision OpenStreetMap Nominatim reverse geocode
+      // 2. High-precision OpenStreetMap Nominatim reverse geocode fallback
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=json&lat=${roundedLat}&lon=${roundedLng}&zoom=18&addressdetails=1`,
@@ -255,27 +227,16 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
           return;
         }
       } catch (e) {
-        // Fallback to local directory
+        // Fallback to coordinates
       }
 
-      // 3. Fallback: Match nearest named reference in Hyderabad directory
-      let closestColony = HYDERABAD_COLONIES[0];
-      let minDistance = Infinity;
-
-      for (const col of HYDERABAD_COLONIES) {
-        const dist = Math.hypot(col.lat - roundedLat, col.lng - roundedLng);
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestColony = col;
-        }
-      }
-
-      const matched = matchZone(roundedLat, roundedLng, closestColony.pincode);
+      // 3. Fallback: Clean coordinates reference without silently defaulting to Champapet
+      const matched = matchZone(roundedLat, roundedLng);
       const details: AddressDetails = {
-        colony: closestColony.colony,
-        area: closestColony.name,
-        pincode: closestColony.pincode,
-        fullAddress: `${closestColony.colony}, Hyderabad - ${closestColony.pincode}`,
+        colony: 'Detected Coordinates',
+        area: 'Hyderabad',
+        pincode: '',
+        fullAddress: `Selected Location (${roundedLat.toFixed(4)}, ${roundedLng.toFixed(4)}), Hyderabad`,
         latitude: roundedLat,
         longitude: roundedLng,
         matchedZone: matched,
@@ -636,7 +597,7 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
       () => {
         setIsDetectingLocation(false);
       },
-      { timeout: 10000, enableHighAccuracy: true }
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 

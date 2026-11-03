@@ -12,6 +12,7 @@ import {
   getDeliverySettings,
   updateDeliverySettings,
   checkDeliveryServiceability,
+  reverseGeocodeCoordinates,
 } from '../controllers/delivery.controller';
 import { getActiveDeliveryZones } from '../controllers/zone.controller';
 import { authenticateAdmin } from '../middleware/auth';
@@ -22,6 +23,8 @@ const router = Router();
 router.get('/settings', getDeliverySettings);
 router.get('/zones', getActiveDeliveryZones);
 router.post('/check-serviceability', checkDeliveryServiceability);
+router.get('/reverse-geocode', reverseGeocodeCoordinates);
+router.post('/reverse-geocode', reverseGeocodeCoordinates);
 router.get('/tracking/:id', getOrderTracking);
 router.post('/location', updateDriverLocation);
 

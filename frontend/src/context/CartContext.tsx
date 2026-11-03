@@ -92,7 +92,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               distanceKm: dist,
               radiusKm: 5.0,
               eta_text: 'Not Serviceable',
-              message: 'Sorry! Delivery is not available at this location.',
+              message: 'Sorry! We are not delivering to your location yet.',
             };
           }
         }
@@ -310,8 +310,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         distanceKm,
         radiusKm,
         message: isWithinRadius
-          ? 'Delivery available at your location.'
-          : 'Sorry! Delivery is not available at this location.',
+          ? 'Great! Delivery is available at your location.'
+          : 'Sorry! We are not delivering to your location yet.',
         hubName: deliverySettings.hub_name || 'Fresh Vegetables Champapet Hub',
         hubAddress: deliverySettings.hub_address || 'Champapet, Hyderabad - 500059',
         checking: false,

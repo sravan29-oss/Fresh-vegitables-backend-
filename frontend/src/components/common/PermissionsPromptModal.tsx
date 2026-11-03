@@ -81,69 +81,18 @@ export const PermissionsPromptModal: React.FC<PermissionsPromptModalProps> = ({
         const roundedLng = Number(longitude.toFixed(6));
 
         try {
-          // Attempt reverse geocoding via OpenStreetMap Nominatim
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${roundedLat}&lon=${roundedLng}&zoom=18&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' } }
-          );
-          const data = await res.json();
-          let colony = 'KPHB Phase 1';
-          let area = 'Hyderabad';
-          let fullAddress = 'Hyderabad, Telangana';
+          // Authoritative backend multi-tier reverse geocoding with 5 KM delivery check
+          const res = await api.post('/delivery/reverse-geocode', {
+            latitude: roundedLat,
+            longitude: roundedLng,
+          });
+          const d = res.data?.data;
+          const colony = d?.colony || d?.area || 'Detected Location';
+          const fullAddress = d?.formatted_address || `Location (${roundedLat}, ${roundedLng})`;
+          const isServiceable = Boolean(d?.serviceability?.serviceable);
+          const distanceKm = d?.serviceability?.distanceKm;
 
-          if (data?.address) {
-            colony =
-              data.address.suburb ||
-              data.address.neighbourhood ||
-              data.address.residential ||
-              data.address.road ||
-              'Hyderabad Colony';
-            area = data.address.city_district || data.address.city || 'Hyderabad';
-            fullAddress = data.display_name
-              ? data.display_name.split(',').slice(0, 3).join(', ')
-              : `${colony}, ${area}`;
-          } else {
-            // Fallback match with Hyderabad directory
-            let closest = HYDERABAD_COLONIES[0];
-            let minDistance = Infinity;
-            for (const c of HYDERABAD_COLONIES) {
-              const d = Math.hypot(c.lat - roundedLat, c.lng - roundedLng);
-              if (d < minDistance) {
-                minDistance = d;
-                closest = c;
-              }
-            }
-            colony = closest.colony;
-            area = closest.name;
-            fullAddress = `${closest.colony}, Hyderabad - ${closest.pincode}`;
-          }
-
-          // Check authoritative backend serviceability for 5 km delivery zone
-          let servData: any = null;
-          try {
-            const servRes = await api.post('/delivery/check-serviceability', {
-              latitude: roundedLat,
-              longitude: roundedLng,
-            });
-            servData = servRes.data?.data || servRes.data;
-          } catch (servErr) {
-            // Client-side Haversine fallback if backend endpoint is unavailable
-            const toRad = (d: number) => (d * Math.PI) / 180;
-            const dLat = toRad(roundedLat - 17.34457);
-            const dLon = toRad(roundedLng - 78.516972);
-            const a =
-              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(toRad(17.34457)) * Math.cos(toRad(roundedLat)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            const dist = Number((6371 * c).toFixed(2));
-            servData = {
-              serviceable: dist <= 5.001,
-              distanceKm: dist,
-              radiusKm: 5.0,
-            };
-          }
-
-          // Fetch active zones to match
+          // Fetch active zones
           let matchedZone: DeliveryZone | null = null;
           try {
             const zRes = await api.get('/zones/active');
@@ -155,9 +104,9 @@ export const PermissionsPromptModal: React.FC<PermissionsPromptModalProps> = ({
           if (!matchedZone) {
             matchedZone = {
               id: 'zone-champapet',
-              name: colony || 'Champapet & Hyderabad Zone',
-              pincodes: ['500059'],
-              delivery_radius_km: servData?.radiusKm || 5.0,
+              name: colony,
+              pincodes: [d?.pincode || '500059'],
+              delivery_radius_km: 5.0,
               delivery_fee: 10,
               min_order_amount: 10,
               free_delivery_threshold: 99,
@@ -168,49 +117,66 @@ export const PermissionsPromptModal: React.FC<PermissionsPromptModalProps> = ({
             };
           }
 
-          // Persist user location & coordinates
-          localStorage.setItem('fresh_delivery_colony', colony);
-          localStorage.setItem('fresh_delivery_address', fullAddress);
-          localStorage.setItem('fresh_delivery_zone', JSON.stringify(matchedZone));
-          localStorage.setItem('fresh_delivery_coords', JSON.stringify({ latitude: roundedLat, longitude: roundedLng }));
-          localStorage.setItem('fresh_permissions_prompted', 'true');
+          if (isServiceable) {
+            // Persist user location & coordinates
+            localStorage.setItem('fresh_delivery_colony', colony);
+            localStorage.setItem('fresh_delivery_address', fullAddress);
+            localStorage.setItem('fresh_delivery_zone', JSON.stringify(matchedZone));
+            localStorage.setItem('fresh_delivery_coords', JSON.stringify({ latitude: roundedLat, longitude: roundedLng }));
+            localStorage.setItem('fresh_delivery_serviceability', JSON.stringify({
+              checked: true,
+              configured: true,
+              serviceable: true,
+              distanceKm,
+              radiusKm: 5.0,
+              message: 'Great! Delivery is available at your location.',
+            }));
+            localStorage.setItem('fresh_permissions_prompted', 'true');
 
-          // Notify whole app (Header, Checkout, Product Cards, etc.)
-          window.dispatchEvent(
-            new CustomEvent('fresh_delivery_location_changed', {
-              detail: {
-                zone: matchedZone,
-                colony,
-                address: fullAddress,
-                latitude: roundedLat,
-                longitude: roundedLng,
-                serviceable: servData?.serviceable,
-                distanceKm: servData?.distanceKm,
-              },
-            })
-          );
+            // Notify whole app (Header, Checkout, Product Cards, etc.)
+            window.dispatchEvent(
+              new CustomEvent('fresh_delivery_location_changed', {
+                detail: {
+                  zone: matchedZone,
+                  colony,
+                  address: fullAddress,
+                  latitude: roundedLat,
+                  longitude: roundedLng,
+                  serviceable: true,
+                  distanceKm,
+                },
+              })
+            );
 
-          if (servData?.serviceable === false) {
-            setStatusMessage(`Location detected (${servData.distanceKm} km). Outside 5 km delivery zone.`);
+            setStatusMessage(`Great! Delivery is available at your location (${distanceKm} km).`);
+            setTimeout(() => {
+              setIsProcessing(false);
+              setIsOpen(false);
+            }, 800);
           } else {
-            setStatusMessage(`Delivering to ${colony}!`);
+            // Outside 5 KM: Do not silently save as serviceable!
+            localStorage.setItem('fresh_permissions_prompted', 'true');
+            setStatusMessage(`Sorry! We are not delivering to your location yet. (${distanceKm} km from hub, max 5 km)`);
+            setTimeout(() => {
+              setIsProcessing(false);
+              setIsOpen(false);
+              handleManualPick();
+            }, 1200);
           }
-          setTimeout(() => {
-            setIsProcessing(false);
-            setIsOpen(false);
-          }, 800);
         } catch (err) {
           localStorage.setItem('fresh_permissions_prompted', 'true');
           setIsProcessing(false);
           setIsOpen(false);
+          handleManualPick();
         }
       },
       (err) => {
-        // Geolocation denied or timed out
+        // Geolocation denied or timed out: Never default to Champapet
         setIsProcessing(false);
+        localStorage.setItem('fresh_permissions_prompted', 'true');
         handleManualPick();
       },
-      { timeout: 10000, enableHighAccuracy: true }
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 
