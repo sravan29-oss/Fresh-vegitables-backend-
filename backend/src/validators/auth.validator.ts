@@ -41,3 +41,7 @@ export const firebaseLoginSchema = z.object({
 export const checkPhoneSchema = z.object({
   phone: z.string().min(10, 'Valid mobile number is required'),
 });
+
+export const googleAuthSchema = z.object({
+  idToken: z.string().min(10, 'Google ID token is required'),
+});

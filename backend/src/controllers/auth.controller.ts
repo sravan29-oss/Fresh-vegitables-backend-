@@ -6,7 +6,7 @@ import { env } from '../config/env';
 import { AuthRequest, generateTokens } from '../middleware/auth';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { AppError, ConflictError, UnauthorizedError, NotFoundError } from '../utils/appError';
-import { verifyFirebaseToken } from '../config/firebase';
+import { verifyFirebaseToken, verifyGoogleAuthToken } from '../config/firebase';
 import cache from '../services/cache.service';
 
 // ===================== CUSTOMER AUTH =====================
@@ -518,5 +518,108 @@ export async function firebaseLogin(req: Request, res: Response, next: NextFunct
     next(error);
   }
 }
+
+/**
+ * Customer Google Authentication (Unified Sign-Up + Login)
+ * Authoritatively verifies Google ID token, finds or auto-creates customer account,
+ * links existing accounts by email, provisions cart, and returns customer JWT session.
+ */
+export async function googleAuth(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { idToken } = req.body;
+
+    // 1. Authoritatively verify Google ID token
+    const verified = await verifyGoogleAuthToken(idToken);
+    const { googleId, email, name, picture, emailVerified } = verified;
+    const cleanEmail = email.toLowerCase().trim();
+
+    if (!emailVerified) {
+      throw new UnauthorizedError('Your Google email address is not verified by Google.');
+    }
+
+    // 2. Search for existing customer by google_id or by email
+    let result = await db.query(
+      `SELECT * FROM users WHERE google_id = $1 OR LOWER(email) = $2 LIMIT 1`,
+      [googleId, cleanEmail]
+    );
+
+    let user: any = null;
+    let isNewCustomer = false;
+
+    if (result.rows.length > 0) {
+      user = result.rows[0];
+
+      // Verify active status
+      if (user.status && user.status !== 'active') {
+        throw new AppError('Your account is currently inactive or suspended. Please contact support.', 403);
+      }
+
+      // Existing Account Linking:
+      // If customer was registered with email/password previously, link google_id and avatar
+      const needsGoogleIdLink = !user.google_id || user.google_id !== googleId;
+      const needsAvatarUpdate = !user.avatar && picture;
+
+      if (needsGoogleIdLink || needsAvatarUpdate) {
+        const updateRes = await db.query(
+          `UPDATE users 
+           SET google_id = COALESCE(google_id, $1),
+               avatar = COALESCE(avatar, $2),
+               updated_at = NOW() 
+           WHERE id = $3 
+           RETURNING id, name, email, mobile, google_id, avatar, status, created_at`,
+          [googleId, picture || null, user.id]
+        );
+        if (updateRes.rows.length > 0) {
+          user = updateRes.rows[0];
+        }
+      }
+    } else {
+      // 3. New Customer Auto-Registration (Password-less Google Customer)
+      isNewCustomer = true;
+      const insertRes = await db.query(
+        `INSERT INTO users (name, email, google_id, avatar, status)
+         VALUES ($1, $2, $3, $4, 'active')
+         RETURNING id, name, email, mobile, google_id, avatar, status, created_at`,
+        [name.trim(), cleanEmail, googleId, picture || null]
+      );
+      user = insertRes.rows[0];
+    }
+
+    // 4. Ensure customer has an active shopping cart
+    await db.query(
+      `INSERT INTO carts (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
+      [user.id]
+    ).catch(() => {});
+
+    // 5. Generate authenticated customer JWT session
+    const tokens = generateTokens({
+      id: user.id,
+      email: user.email,
+      mobile: user.mobile,
+      name: user.name,
+      role: 'customer',
+    });
+
+    return sendSuccess(res, isNewCustomer ? 'Registration successful' : 'Login successful', {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        mobile: user.mobile,
+        avatar: user.avatar,
+        status: user.status,
+        role: 'customer',
+      },
+      token: tokens.accessToken,
+      ...tokens,
+    }, isNewCustomer ? 201 : 200);
+  } catch (error: any) {
+    if (error.message && (error.message.includes('auth/') || error.message.includes('Google'))) {
+      return next(new UnauthorizedError('Invalid or expired Google authentication token.'));
+    }
+    next(error);
+  }
+}
+
 
 

@@ -49,9 +49,11 @@ export async function autoMigrateAndSeed(): Promise<void> {
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128) UNIQUE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
       ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
       ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid);
+      CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
       CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile);
     `);
 

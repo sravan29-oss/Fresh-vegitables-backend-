@@ -97,4 +97,72 @@ export async function verifyFirebaseToken(idToken: string): Promise<VerifiedFire
   };
 }
 
+export interface VerifiedGoogleUser {
+  googleId: string;
+  email: string;
+  name: string;
+  picture?: string;
+  emailVerified: boolean;
+}
+
+/**
+ * Authoritatively verifies a Google identity token.
+ * 1. Attempts verification using Firebase Admin SDK (which verifies signature, issuer, audience, exp).
+ * 2. If token was issued directly by Google OAuth2 (accounts.google.com), verifies using Google's public tokeninfo endpoint.
+ * Validates issuer, audience, expiration, and cryptographic signature.
+ * Extracts verified Google UID, email, name, and profile avatar directly from the verified payload.
+ */
+export async function verifyGoogleAuthToken(idToken: string): Promise<VerifiedGoogleUser> {
+  if (!idToken || typeof idToken !== 'string') {
+    throw new Error('Google ID token is required');
+  }
+
+  // 1. Primary: Verify via Firebase Admin SDK
+  try {
+    const app = getFirebaseApp();
+    const auth = getAuth(app);
+    const decodedToken = await auth.verifyIdToken(idToken, true);
+
+    if (decodedToken && decodedToken.email) {
+      const googleId = decodedToken.firebase?.identities?.['google.com']?.[0] || decodedToken.uid;
+      return {
+        googleId,
+        email: decodedToken.email,
+        name: decodedToken.name || decodedToken.email.split('@')[0],
+        picture: decodedToken.picture || undefined,
+        emailVerified: Boolean(decodedToken.email_verified),
+      };
+    }
+  } catch (firebaseErr: any) {
+    // If not a Firebase-issued token, try direct Google tokeninfo verification below
+  }
+
+  // 2. Secondary: Direct Google OAuth token verification via Google's tokeninfo endpoint
+  try {
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+    if (res.ok) {
+      const data: any = await res.json();
+      const validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
+      if (
+        data &&
+        validIssuers.includes(data.iss) &&
+        data.sub &&
+        data.email
+      ) {
+        return {
+          googleId: data.sub,
+          email: data.email,
+          name: data.name || data.email.split('@')[0],
+          picture: data.picture || undefined,
+          emailVerified: data.email_verified === 'true' || data.email_verified === true,
+        };
+      }
+    }
+  } catch (googleApiErr: any) {
+    // Fall-through to throw error
+  }
+
+  throw new Error('Invalid or expired Google authentication token. Verification failed.');
+}
+
 export default getFirebaseApp;

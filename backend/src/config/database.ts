@@ -33,6 +33,9 @@ let lastWarnTime = 0;
 async function ensureSchemaAlignment() {
   try {
     await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
+      ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
       ALTER TABLE orders ALTER COLUMN payment_status TYPE VARCHAR(50);
       ALTER TABLE payments ALTER COLUMN status TYPE VARCHAR(50);
       ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
@@ -305,9 +308,19 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
       return { rows: [{ count: memoryStore.users.length, total: memoryStore.users.length }] };
     }
     if (params[0]) {
-      const u = memoryStore.users.find(
-        (user) => user.email.toLowerCase() === params[0].toLowerCase() || user.id === params[0]
-      );
+      const p0 = String(params[0]).toLowerCase();
+      const p1 = params[1] ? String(params[1]).toLowerCase() : null;
+      const u = memoryStore.users.find((user: any) => {
+        const uEmail = user.email ? user.email.toLowerCase() : '';
+        const uGoogleId = user.google_id ? String(user.google_id).toLowerCase() : '';
+        const uId = user.id ? String(user.id).toLowerCase() : '';
+        return (
+          uEmail === p0 ||
+          uGoogleId === p0 ||
+          uId === p0 ||
+          (p1 && (uEmail === p1 || uGoogleId === p1))
+        );
+      });
       return { rows: u ? [u] : [] };
     }
     return {
@@ -328,18 +341,34 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
   }
 
   if (lower.startsWith('insert into users')) {
+    const isGoogle = lower.includes('google_id');
     const newUser = {
       id: uuidv4(),
       name: params[0],
       email: params[1],
-      mobile: params[2],
-      password: params[3],
+      mobile: isGoogle ? null : params[2],
+      password: isGoogle ? null : params[3],
+      google_id: isGoogle ? params[2] : null,
+      avatar: isGoogle ? params[3] : null,
       role: 'customer',
       status: 'active',
       created_at: new Date().toISOString(),
     };
     memoryStore.users.push(newUser);
     return { rows: [newUser] };
+  }
+
+  if (lower.startsWith('update users')) {
+    const userId = params[params.length - 1];
+    const uIndex = memoryStore.users.findIndex((user: any) => user.id === userId);
+    if (uIndex !== -1) {
+      if (lower.includes('google_id')) {
+        (memoryStore.users[uIndex] as any).google_id = (memoryStore.users[uIndex] as any).google_id || params[0];
+        (memoryStore.users[uIndex] as any).avatar = (memoryStore.users[uIndex] as any).avatar || params[1];
+      }
+      return { rows: [memoryStore.users[uIndex]] };
+    }
+    return { rows: [] };
   }
 
   // 5. CARTS & CART ITEMS

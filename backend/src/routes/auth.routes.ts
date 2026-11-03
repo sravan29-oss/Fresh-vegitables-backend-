@@ -9,6 +9,7 @@ import {
   firebaseRegister,
   firebaseLogin,
   checkPhoneRegistered,
+  googleAuth,
 } from '../controllers/auth.controller';
 import { authenticateCustomer, authenticateAdmin } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -20,9 +21,13 @@ import {
   firebaseRegisterSchema,
   firebaseLoginSchema,
   checkPhoneSchema,
+  googleAuthSchema,
 } from '../validators/auth.validator';
 
 const router = Router();
+
+// Customer Google Authentication (Sign-up + Login)
+router.post('/google', validate(googleAuthSchema), googleAuth);
 
 // Customer Firebase Phone OTP Auth
 router.post('/firebase/register', validate(firebaseRegisterSchema), firebaseRegister);

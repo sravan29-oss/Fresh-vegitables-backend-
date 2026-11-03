@@ -1,5 +1,13 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, Auth } from 'firebase/auth';
+import {
+  getAuth,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult,
+  Auth,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from 'firebase/auth';
 
 const rawApiKey = import.meta.env.VITE_FIREBASE_API_KEY || '';
 const sanitizedApiKey = typeof rawApiKey === 'string' ? rawApiKey.trim().replace(/^["']|["']$/g, '') : '';
@@ -112,6 +120,26 @@ export async function sendFirebasePhoneOtp(rawPhone: string): Promise<Confirmati
   const auth = getFirebaseAuth();
   const verifier = getInvisibleRecaptcha();
   return await signInWithPhoneNumber(auth, formattedPhone, verifier);
+}
+
+/**
+ * Initiates Google Sign-In popup using Firebase Authentication.
+ * Requests account selection and returns the cryptographically signed Firebase ID token.
+ */
+export async function signInWithGooglePopup(): Promise<string> {
+  const auth = getFirebaseAuth();
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({
+    prompt: 'select_account',
+  });
+
+  const result = await signInWithPopup(auth, provider);
+  if (!result || !result.user) {
+    throw new Error('Google sign-in was not completed.');
+  }
+
+  const idToken = await result.user.getIdToken(true);
+  return idToken;
 }
 
 export type { ConfirmationResult };
