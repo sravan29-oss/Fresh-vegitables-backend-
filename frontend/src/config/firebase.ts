@@ -9,11 +9,15 @@ import {
   signInWithPopup,
 } from 'firebase/auth';
 
+const DEFAULT_FIREBASE_API_KEY = 'AIzaSyBGuVXyFLH_Kjn6_-EkqlLkvy_0HjYzMEY';
 const rawApiKey = import.meta.env.VITE_FIREBASE_API_KEY || '';
 const sanitizedApiKey = typeof rawApiKey === 'string' ? rawApiKey.trim().replace(/^["']|["']$/g, '') : '';
+const activeApiKey = sanitizedApiKey && sanitizedApiKey.length > 10 && !sanitizedApiKey.includes('your_')
+  ? sanitizedApiKey
+  : DEFAULT_FIREBASE_API_KEY;
 
 const firebaseConfig = {
-  apiKey: sanitizedApiKey,
+  apiKey: activeApiKey,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'fresh-vegetables-cfb6d.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'fresh-vegetables-cfb6d',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'fresh-vegetables-cfb6d.appspot.com',
@@ -28,7 +32,7 @@ let cachedAuth: Auth | null = null;
  * Checks if a valid Firebase Web API key is configured.
  */
 export function isFirebaseConfigured(): boolean {
-  return typeof sanitizedApiKey === 'string' && sanitizedApiKey.length > 10 && !sanitizedApiKey.includes('your_');
+  return typeof activeApiKey === 'string' && activeApiKey.length > 10;
 }
 
 /**

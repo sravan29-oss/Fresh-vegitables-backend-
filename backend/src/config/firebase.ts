@@ -131,10 +131,11 @@ export interface VerifiedGoogleUser {
 
 /**
  * Authoritatively verifies a Google identity token.
- * Uses a robust 3-tier cryptographic verification approach:
- * 1. Firebase Admin SDK verifyIdToken (with checkRevoked=false to support setups without service account key files)
- * 2. Direct cryptographic JWT verification using Google's published public x509 certificates (RS256 signature verification)
- * 3. Direct Google OAuth2 tokeninfo validation for tokens issued directly by accounts.google.com
+ * Uses a robust 4-tier cryptographic verification approach:
+ * 1. Direct authoritative Google Identity Toolkit accounts:lookup REST API verification using Firebase Web API key
+ * 2. Firebase Admin SDK verifyIdToken (with checkRevoked=false to support setups without service account key files)
+ * 3. Direct cryptographic JWT verification using Google's published public x509 certificates (RS256 signature verification)
+ * 4. Direct Google OAuth2 tokeninfo validation for tokens issued directly by accounts.google.com
  * Validates cryptographic signature, issuer, audience, and expiration.
  * Never trusts unverified client data.
  */
@@ -144,8 +145,49 @@ export async function verifyGoogleAuthToken(idToken: string): Promise<VerifiedGo
   }
 
   const projectId = process.env.FIREBASE_PROJECT_ID || 'fresh-vegetables-cfb6d';
+  const webApiKey =
+    process.env.FIREBASE_API_KEY ||
+    process.env.FIREBASE_WEB_API_KEY ||
+    process.env.VITE_FIREBASE_API_KEY ||
+    'AIzaSyBGuVXyFLH_Kjn6_-EkqlLkvy_0HjYzMEY';
 
-  // 1. Primary: Verify via Firebase Admin SDK (checkRevoked=false avoids requiring service account file)
+  // 1. Authoritative Tier: Google Identity Toolkit accounts:lookup REST API
+  // Verifies the token directly against Google Identity servers using the verified Web API key.
+  // Independent of local certificate cache, clock drift, or service account file requirements.
+  if (webApiKey) {
+    try {
+      const lookupRes = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(webApiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken }),
+        }
+      );
+
+      if (lookupRes.ok) {
+        const data: any = await lookupRes.json();
+        const userInfo = data?.users?.[0];
+        if (userInfo && userInfo.email) {
+          const googleProvider = userInfo.providerUserInfo?.find(
+            (p: any) => p.providerId === 'google.com'
+          );
+          const googleId = googleProvider?.rawId || userInfo.localId;
+          return {
+            googleId,
+            email: userInfo.email,
+            name: userInfo.displayName || googleProvider?.displayName || userInfo.email.split('@')[0],
+            picture: userInfo.photoUrl || googleProvider?.photoUrl || undefined,
+            emailVerified: Boolean(userInfo.emailVerified),
+          };
+        }
+      }
+    } catch (lookupErr: any) {
+      console.warn('⚠️ [Google Auth] Google Identity Toolkit lookup note:', lookupErr?.message);
+    }
+  }
+
+  // 2. Firebase Admin SDK (checkRevoked=false avoids requiring service account file)
   try {
     const app = getFirebaseApp();
     const auth = getAuth(app);
@@ -165,7 +207,7 @@ export async function verifyGoogleAuthToken(idToken: string): Promise<VerifiedGo
     console.warn('⚠️ [Google Auth] Firebase Admin verification note:', firebaseErr?.message);
   }
 
-  // 2. Secondary: Direct cryptographic JWT verification using Google's public x509 certificates
+  // 3. Direct cryptographic JWT verification using Google's public x509 certificates
   try {
     const decodedUnverified = jwt.decode(idToken, { complete: true }) as any;
     if (decodedUnverified?.header?.kid) {
@@ -176,6 +218,7 @@ export async function verifyGoogleAuthToken(idToken: string): Promise<VerifiedGo
           algorithms: ['RS256'],
           audience: projectId,
           issuer: `https://securetoken.google.com/${projectId}`,
+          clockTolerance: 120, // 2 minutes clock tolerance for drift
         });
 
         if (payload && payload.email) {
@@ -194,7 +237,7 @@ export async function verifyGoogleAuthToken(idToken: string): Promise<VerifiedGo
     console.warn('⚠️ [Google Auth] Direct Google cert verification note:', jwtErr?.message);
   }
 
-  // 3. Tertiary: Direct Google OAuth tokeninfo endpoint (for tokens issued directly by accounts.google.com)
+  // 4. Direct Google OAuth tokeninfo endpoint (for tokens issued directly by accounts.google.com)
   try {
     const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
     if (res.ok) {
