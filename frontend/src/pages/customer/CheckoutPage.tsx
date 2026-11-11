@@ -207,6 +207,7 @@ export const CheckoutPage: React.FC = () => {
     isDeliveryActive?: boolean;
     isPaused?: boolean;
     message?: string;
+    min_order_amount?: number;
   }>({ checked: false, serviceable: true, radiusKm: 5.0 });
 
   const checkAddressCoordsServiceability = useCallback(async (addr: Address) => {
@@ -265,6 +266,7 @@ export const CheckoutPage: React.FC = () => {
           isDeliveryActive: !isPaused,
           isPaused,
           message: data.message,
+          min_order_amount: data.min_order_amount !== undefined ? Number(data.min_order_amount) : (deliverySettings?.min_order_amount ? Number(deliverySettings.min_order_amount) : 10),
         });
       } catch (err: any) {
         // Resilient client-side Haversine verification
@@ -294,6 +296,7 @@ export const CheckoutPage: React.FC = () => {
           message: inZone
             ? 'Great! Delivery is available at your location.'
             : 'Sorry! We are not delivering to your location yet.',
+          min_order_amount: deliverySettings?.min_order_amount ? Number(deliverySettings.min_order_amount) : 10,
         });
       }
     } else {
@@ -673,8 +676,13 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
-    if (deliverySettings?.min_order_amount > 0 && (cart.subtotal || 0) < deliverySettings.min_order_amount) {
-      setErrorMsg(`Minimum order amount for delivery is ₹${deliverySettings.min_order_amount}. Please add ₹${(deliverySettings.min_order_amount - (cart.subtotal || 0)).toFixed(0)} more of fresh produce.`);
+    const effectiveMinOrder =
+      zoneServiceability?.min_order_amount !== undefined && Number(zoneServiceability.min_order_amount) >= 0
+        ? Number(zoneServiceability.min_order_amount)
+        : Number(deliverySettings?.min_order_amount || 0);
+
+    if (effectiveMinOrder > 0 && (cart.subtotal || 0) < effectiveMinOrder) {
+      setErrorMsg(`Minimum order amount for delivery is ₹${effectiveMinOrder}. Please add ₹${(effectiveMinOrder - (cart.subtotal || 0)).toFixed(0)} more of fresh produce.`);
       return;
     }
 

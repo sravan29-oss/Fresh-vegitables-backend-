@@ -276,7 +276,12 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     if (matchedZone) {
       if (matchedZone.delivery_fee !== undefined) applicableDeliveryFee = Number(matchedZone.delivery_fee);
       if (matchedZone.free_delivery_threshold !== undefined) freeThreshold = Number(matchedZone.free_delivery_threshold);
-      if (matchedZone.min_order_amount !== undefined) minOrderAmount = Number(matchedZone.min_order_amount);
+      if (matchedZone.min_order_amount !== undefined && Number(matchedZone.min_order_amount) >= 0) {
+        // Respect admin's configured global minimum order amount if set
+        const zoneMin = Number(matchedZone.min_order_amount);
+        const globalMin = Number(settings.min_order_amount);
+        minOrderAmount = !isNaN(globalMin) && globalMin >= 0 ? Math.min(zoneMin, globalMin) : zoneMin;
+      }
     }
 
     if (minOrderAmount > 0 && subtotal < minOrderAmount) {

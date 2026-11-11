@@ -1020,7 +1020,10 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
       priority: matchedZone?.priority || 'normal',
       delivery_fee: matchedZone?.delivery_fee ?? settings.default_delivery_charge,
       free_delivery_threshold: matchedZone?.free_delivery_threshold ?? settings.free_delivery_threshold,
-      min_order_amount: matchedZone?.min_order_amount ?? settings.min_order_amount,
+      min_order_amount:
+        matchedZone?.min_order_amount !== undefined && !isNaN(Number(matchedZone.min_order_amount))
+          ? Math.min(Number(matchedZone.min_order_amount), Number(settings.min_order_amount))
+          : Number(settings.min_order_amount),
       data: {
         ...result,
         zone: matchedZone,
