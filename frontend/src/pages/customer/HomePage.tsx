@@ -202,7 +202,7 @@ export const HomePage: React.FC = () => {
               {catList.map((cat: Category) => (
                 <Link
                   key={cat.id}
-                  to={`/products?category=${cat.slug}`}
+                  to={`/categories/${cat.slug}`}
                   className="group shrink-0 w-44 sm:w-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
                 >
                   <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
@@ -570,7 +570,7 @@ export const HomePage: React.FC = () => {
                 {fallbackCategories.map((cat: Category) => (
                   <Link
                     key={cat.id}
-                    to={`/products?category=${cat.slug}`}
+                    to={`/categories/${cat.slug}`}
                     className="group shrink-0 w-44 sm:w-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
                   >
                     <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">

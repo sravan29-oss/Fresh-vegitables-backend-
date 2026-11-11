@@ -124,11 +124,11 @@ export const Footer: React.FC = () => {
           <div>
             <h4 className="text-white font-semibold text-sm mb-4">Popular Categories</h4>
             <ul className="space-y-2 text-xs text-slate-400">
-              <li><Link to="/products?category=leafy-greens" className="hover:text-brand-400 transition-colors">Leafy Greens &amp; Herbs</Link></li>
-              <li><Link to="/products?category=daily-essentials" className="hover:text-brand-400 transition-colors">Daily Essentials (Potatoes, Onions)</Link></li>
-              <li><Link to="/products?category=exotic-veggies" className="hover:text-brand-400 transition-colors">Exotics &amp; Salads</Link></li>
-              <li><Link to="/products?category=root-vegetables" className="hover:text-brand-400 transition-colors">Roots &amp; Gourds</Link></li>
-              <li><Link to="/products?category=organic-certified" className="hover:text-brand-400 transition-colors">Certified Organic</Link></li>
+              <li><Link to="/categories/fresh" className="hover:text-brand-400 transition-colors">Daily Fresh Produce</Link></li>
+              <li><Link to="/categories/leafy-vegetables" className="hover:text-brand-400 transition-colors">Leafy Greens &amp; Herbs</Link></li>
+              <li><Link to="/categories/coriander-others" className="hover:text-brand-400 transition-colors">Coriander, Mint &amp; Essentials</Link></li>
+              <li><Link to="/categories/dairy" className="hover:text-brand-400 transition-colors">Farm Fresh Dairy</Link></li>
+              <li><Link to="/products" className="hover:text-brand-400 transition-colors">All Organic Vegetables</Link></li>
             </ul>
           </div>
 

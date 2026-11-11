@@ -257,7 +257,7 @@ export const ProductDetailPage: React.FC = () => {
         '@type': 'ListItem',
         position: 3,
         name: product.category_name || 'Category',
-        item: `https://fresh-vegetables-organic.vercel.app/products?category=${product.category_slug}`,
+        item: `https://fresh-vegetables-organic.vercel.app/categories/${product.category_slug}`,
       }] : []),
       {
         '@type': 'ListItem',
@@ -289,7 +289,7 @@ export const ProductDetailPage: React.FC = () => {
         <span>/</span>
         {product.category_slug ? (
           <Link
-            to={`/products?category=${product.category_slug}`}
+            to={`/categories/${product.category_slug}`}
             className="text-slate-500 hover:text-brand-600 transition-colors"
           >
             {product.category_name || 'Produce'}

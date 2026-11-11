@@ -803,11 +803,11 @@ export const Header: React.FC = () => {
           </Link>
 
           {categories.map((cat) => {
-            const isCatActive = location.search.includes(`category=${cat.slug}`);
+            const isCatActive = location.pathname.includes(`/categories/${cat.slug}`) || location.search.includes(`category=${cat.slug}`);
             return (
               <Link
                 key={cat.id}
-                to={`/products?category=${cat.slug}`}
+                to={`/categories/${cat.slug}`}
                 className={`px-3 py-1.5 rounded-lg transition-all duration-200 whitespace-nowrap ${
                   isCatActive
                     ? 'bg-emerald-50 text-[#0c831f] border border-emerald-200 font-bold'
@@ -912,7 +912,7 @@ export const Header: React.FC = () => {
                 {categories.map((cat) => (
                   <Link
                     key={cat.id}
-                    to={`/products?category=${cat.slug}`}
+                    to={`/categories/${cat.slug}`}
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="p-3 bg-slate-50 text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors truncate"
                   >

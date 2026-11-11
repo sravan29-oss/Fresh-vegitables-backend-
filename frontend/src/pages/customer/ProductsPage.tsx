@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, useParams, Link } from 'react-router-dom';
 import {
   ArrowUpDown,
   CheckCircle2,
@@ -52,6 +52,24 @@ const CATEGORY_SEO_DATA: Record<string, { title: string; description: string; h1
     h1: 'Organically Grown Vegetables',
     intro: 'Discover select organically grown vegetables cultivated with care by trusted regional farm partners.',
   },
+  dairy: {
+    title: 'Farm-Fresh Dairy Products Online | Fresh Vegetables Organic',
+    description: 'Order pure, farm-fresh milk, organic curd, and dairy products online with doorstep delivery within our 5 km service zone in Hyderabad.',
+    h1: 'Farm-Fresh Dairy & Milk',
+    intro: 'Wholesome dairy sourced directly from trusted local farms. Delivered cold and fresh every morning.',
+  },
+  'coriander-others': {
+    title: 'Fresh Coriander, Mint & Culinary Herbs | Fresh Vegetables Organic',
+    description: 'Shop aromatic coriander leaves, fresh pudina, green chillies, and culinary herbs with daily morning harvest delivery in Hyderabad.',
+    h1: 'Fresh Coriander & Kitchen Greens',
+    intro: 'Handpicked fresh herbs and fragrant garnishes harvested daily to bring authentic aroma to your daily recipes.',
+  },
+  'leafy-vegetables': {
+    title: 'Fresh Leafy Vegetables Online | Fresh Vegetables Organic',
+    description: 'Buy fresh palakura, gongura, thotakura, and nutritious greens online with 30-45 mins delivery within our 5 km service zone in Hyderabad.',
+    h1: 'Daily Fresh Leafy Greens',
+    intro: 'Rich in iron and essential minerals, our leafy greens are picked at sunrise for peak crispness and nutrient density.',
+  },
 };
 
 export const ProductsPage: React.FC = () => {
@@ -64,8 +82,9 @@ export const ProductsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [serverError, setServerError] = useState(false);
 
-  // Filter states synced with searchParams
-  const currentCategory = searchParams.get('category') || '';
+  const { categorySlug } = useParams<{ categorySlug?: string }>();
+  // Filter states synced with route param or searchParams
+  const currentCategory = categorySlug || searchParams.get('category') || '';
   const currentSearch = searchParams.get('search') || '';
   const currentSort = searchParams.get('sort') || 'popular';
   const currentInStock = searchParams.get('in_stock') === 'true';
@@ -189,7 +208,7 @@ export const ProductsPage: React.FC = () => {
     : 'Daily morning harvest • Delivered fresh to your doorstep within our 5 km service zone in Hyderabad.';
 
   const canonicalUrl = currentCategory
-    ? `https://fresh-vegetables-organic.vercel.app/products?category=${currentCategory}`
+    ? `https://fresh-vegetables-organic.vercel.app/categories/${currentCategory}`
     : 'https://fresh-vegetables-organic.vercel.app/products';
 
   const breadcrumbsList = [
@@ -212,7 +231,7 @@ export const ProductsPage: React.FC = () => {
       '@type': 'ListItem',
       position: 3,
       name: activeCategoryObj.name,
-      item: `https://fresh-vegetables-organic.vercel.app/products?category=${currentCategory}`,
+      item: `https://fresh-vegetables-organic.vercel.app/categories/${currentCategory}`,
     });
   }
 
@@ -347,7 +366,7 @@ export const ProductsPage: React.FC = () => {
             {categories.map((c) => (
               <Link
                 key={c.id}
-                to={`/products?category=${c.slug}`}
+                to={`/categories/${c.slug}`}
                 className={`h-7 px-3 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 flex items-center ${
                   currentCategory === c.slug
                     ? 'bg-[#0c831f] text-white shadow-xs'

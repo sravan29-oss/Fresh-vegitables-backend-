@@ -5,6 +5,8 @@ User-agent: *
 Allow: /
 Allow: /products
 Allow: /products/*
+Allow: /categories
+Allow: /categories/*
 
 # Ensure image bots & favicon crawlers have immediate access to brand icons
 User-agent: Googlebot-Image
