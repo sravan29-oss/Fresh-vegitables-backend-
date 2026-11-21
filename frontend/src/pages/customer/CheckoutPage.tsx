@@ -33,6 +33,7 @@ import { useAuth } from '../../context/AuthContext';
 import { SEOHead } from '../../components/common/SEOHead';
 import { getRealtimeDeliverySlots } from '../../utils/deliverySlots';
 import { InteractiveLocationMap, AddressDetails } from '../../components/common/InteractiveLocationMap';
+import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
 
 export const CheckoutPage: React.FC = () => {
   const { cart, fetchCart, deliverySettings, deliveryEstimate } = useCart();
@@ -780,48 +781,55 @@ export const CheckoutPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 pb-28 md:pb-12 animate-fade-in">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-28 md:pb-16 animate-fade-in font-sans space-y-6">
       <SEOHead title="Secure Checkout | Fresh Vegetables Organic" noindex={true} />
 
-      <div className="mb-6 sm:mb-8">
-        <span className="text-xs uppercase tracking-widest font-black text-forest-700 bg-sage-100 px-3 py-1 rounded-full border border-leaf-500/20">
-          Doorstep Delivery
-        </span>
-        <h1 className="font-serif font-black text-2xl sm:text-3xl text-ink-900 tracking-tight mt-2">
-          Secure Organic Checkout
-        </h1>
-        <p className="text-xs sm:text-sm text-ink-500 mt-1">
-          Two-Hub Fulfillment • Dispatched fresh within 5 km of our Champapet and KPHB hubs
-        </p>
-      </div>
+      <header className="bg-white rounded-3xl border border-line p-5 sm:p-7 shadow-soft flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="inline-flex items-center gap-1.5 bg-cream-100 text-forest-800 text-xs font-semibold px-3 py-1 rounded-full border border-line">
+            <Sparkles className="w-3.5 h-3.5 text-leaf-600" />
+            <span>Two-Hub Hyperlocal Express Delivery</span>
+          </div>
+          <h1 className="font-heading font-bold text-2xl sm:text-3xl text-ink-900 tracking-tight">
+            Secure Organic Checkout
+          </h1>
+          <p className="text-xs sm:text-sm text-ink-500 font-sans">
+            Express farm harvest fulfillment dispatched within 5 KM of our Champapet and KPHB hubs
+          </p>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-auto bg-cream-50 px-3.5 py-2 rounded-2xl border border-line text-xs font-semibold text-forest-800">
+          <ShieldCheck className="w-4 h-4 text-forest-700" />
+          <span>100% Encrypted &amp; Verified</span>
+        </div>
+      </header>
 
       {errorMsg && (
-        <div className="mb-6 p-4 rounded-2xl bg-tomato-50 border border-tomato-200 text-tomato-900 text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-xs">
+        <div className="p-4 rounded-2xl bg-tomato-50 border border-tomato-200 text-tomato-900 text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-soft">
           <AlertCircle className="w-5 h-5 text-tomato-600 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
         {/* Left Column: Address, Slot, Confirmation Email, Payment */}
         <div className="lg:col-span-8 space-y-6 sm:space-y-8">
           {/* 1. Delivery Address Card */}
-          <div className="bg-surface p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
+          <div className="bg-white p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-line">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-800 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-cream-100 text-forest-800 border border-line flex items-center justify-center">
                   <MapPin className="w-4 h-4 text-forest-700" />
                 </div>
                 <div>
-                  <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900">
+                  <h3 className="font-heading font-bold text-base sm:text-lg text-ink-900">
                     1. Delivery Address
                   </h3>
-                  <span className="text-[11px] text-ink-500">Requires verified GPS pin within 5 km</span>
+                  <span className="text-[11px] text-ink-500">Requires verified GPS pin within 5 KM of hubs</span>
                 </div>
               </div>
               <button
                 onClick={handleOpenAddAddressModal}
-                className="text-xs font-bold text-forest-800 hover:text-forest-950 bg-cream-100 hover:bg-cream-200 px-3 py-1.5 rounded-xl border border-line flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="text-xs font-bold text-forest-800 hover:text-forest-950 bg-cream-100 hover:bg-cream-200 px-3.5 py-2 rounded-xl border border-line flex items-center gap-1.5 cursor-pointer transition-colors min-h-[38px]"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Address</span>
@@ -966,14 +974,14 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           {/* 2. Delivery Slot Card */}
-          <div className="bg-surface p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
+          <div className="bg-white p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
             <div className="flex items-center gap-2.5 pb-3 border-b border-line">
-              <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-800 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-cream-100 text-forest-800 border border-line flex items-center justify-center">
                 <Truck className="w-4 h-4 text-forest-700" />
               </div>
               <div>
-                <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900">
-                  2. Delivery Preference
+                <h3 className="font-heading font-bold text-base sm:text-lg text-ink-900">
+                  2. Delivery Preference &amp; Slot
                 </h3>
                 <span className="text-[11px] text-ink-500">Fresh morning, express, and evening harvest dispatches</span>
               </div>
@@ -996,7 +1004,7 @@ export const CheckoutPage: React.FC = () => {
                       !isAvailable
                         ? 'opacity-60 bg-cream-100/60 border-line cursor-not-allowed select-none'
                         : isSelected
-                        ? 'border-forest-700 bg-sage-50/70 font-bold text-forest-900 shadow-soft ring-1 ring-leaf-500 cursor-pointer'
+                        ? 'border-forest-900 bg-forest-900 text-white font-bold shadow-soft cursor-pointer'
                         : 'border-line text-ink-700 hover:bg-cream-50 cursor-pointer'
                     }`}
                   >
@@ -1004,42 +1012,74 @@ export const CheckoutPage: React.FC = () => {
                       <p className="font-bold text-xs">{slot.title}</p>
                       {slot.tag && (
                         <span
-                          className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            slot.badgeColor || 'bg-cream-100 text-ink-600'
+                          className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            isSelected
+                              ? 'bg-white/20 text-white'
+                              : slot.badgeColor || 'bg-cream-100 text-ink-600'
                           }`}
                         >
                           {slot.tag}
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-ink-500">{slot.sub}</p>
+                    <p className={`text-[11px] ${isSelected ? 'text-cream-100' : 'text-ink-500'}`}>{slot.sub}</p>
                   </div>
                 );
               })}
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1.5">
-                Delivery Instructions (Optional):
-              </label>
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-ink-700 font-sans">
+                  Delivery Instructions (Optional):
+                </label>
+              </div>
+
+              {/* Quick Instruction Chips */}
+              <div className="flex flex-wrap gap-1.5 pb-1">
+                {[
+                  'Call before delivery',
+                  'Leave at security gate',
+                  'Contact me on arrival',
+                  'Ring doorbell twice',
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => {
+                      setOrderNotes((prev) =>
+                        prev ? (prev.includes(chip) ? prev : `${prev}, ${chip}`) : chip
+                      );
+                    }}
+                    className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors cursor-pointer ${
+                      orderNotes.includes(chip)
+                        ? 'bg-forest-900 text-white border-forest-900'
+                        : 'bg-cream-50 hover:bg-cream-100 text-ink-700 border-line'
+                    }`}
+                  >
+                    + {chip}
+                  </button>
+                ))}
+              </div>
+
               <input
                 type="text"
-                placeholder="e.g. Ring the doorbell twice, leave with security gate"
+                placeholder="e.g. Ring doorbell twice, leave with security gate"
                 value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
-                className="w-full text-xs bg-cream-50 border border-line rounded-xl px-3.5 py-2.5 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
+                className="w-full text-xs bg-cream-50 border border-line rounded-xl px-3.5 py-2.5 focus:bg-white focus:outline-none focus:border-forest-700 text-ink-900 font-sans"
               />
             </div>
           </div>
 
           {/* 3. Order Confirmation & Receipt Email Card */}
-          <div className="bg-surface p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-3">
+          <div className="bg-white p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-3">
             <div className="flex items-center gap-2.5 pb-3 border-b border-line">
-              <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-800 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-cream-100 text-forest-800 border border-line flex items-center justify-center">
                 <Mail className="w-4 h-4 text-forest-700" />
               </div>
               <div>
-                <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900">
+                <h3 className="font-heading font-bold text-base sm:text-lg text-ink-900">
                   3. Order Confirmation Receipt Email
                 </h3>
                 <span className="text-[11px] text-ink-500">Itemized bill, order updates, and live dispatch link</span>
@@ -1079,14 +1119,14 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           {/* 4. Payment Mode Card */}
-          <div className="bg-surface p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
+          <div className="bg-white p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-line">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-800 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-cream-100 text-forest-800 border border-line flex items-center justify-center">
                   <Banknote className="w-4 h-4 text-forest-700" />
                 </div>
                 <div>
-                  <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900">
+                  <h3 className="font-heading font-bold text-base sm:text-lg text-ink-900">
                     4. Payment Mode
                   </h3>
                   <span className="text-[11px] text-ink-500">Cash on Delivery, UPI QR, or Secure Online</span>
@@ -1221,26 +1261,26 @@ export const CheckoutPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Order Summary & Promotions */}
+        {/* Right Column: Order Review & Breakdown */}
         <div className="lg:col-span-4 space-y-6">
           {/* Coupon Code Card */}
-          <div className="bg-surface p-5 sm:p-6 rounded-3xl border border-line shadow-soft space-y-3">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-line shadow-soft space-y-3">
             <div className="flex items-center gap-2 pb-2 border-b border-line">
               <Tag className="w-4 h-4 text-forest-700" />
-              <h4 className="font-serif font-bold text-sm text-ink-900">Apply Organic Promo</h4>
+              <h4 className="font-heading font-bold text-sm text-ink-900">Apply Organic Promo</h4>
             </div>
 
             {appliedCoupon ? (
-              <div className="p-3 rounded-2xl bg-sage-100 border border-leaf-500/30 flex items-center justify-between text-xs">
+              <div className="p-3 rounded-2xl bg-cream-100 border border-line flex items-center justify-between text-xs">
                 <div>
-                  <p className="font-bold text-forest-900 flex items-center gap-1">
+                  <p className="font-bold text-forest-900 flex items-center gap-1 font-sans">
                     <Check className="w-4 h-4 text-leaf-600" /> {appliedCoupon.coupon.code} Applied!
                   </p>
                   <p className="text-[11px] text-forest-700 mt-0.5">{appliedCoupon.savings_message}</p>
                 </div>
                 <button
                   onClick={handleRemoveCoupon}
-                  className="p-1 rounded-lg hover:bg-sage-200 text-forest-800 cursor-pointer"
+                  className="p-1 rounded-lg hover:bg-cream-200 text-ink-600 cursor-pointer"
                   title="Remove coupon"
                 >
                   <X className="w-4 h-4" />
@@ -1254,24 +1294,24 @@ export const CheckoutPage: React.FC = () => {
                     placeholder="e.g. WELCOME50"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    className="flex-1 uppercase font-bold text-xs bg-cream-50 border border-line rounded-xl px-3 py-2.5 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
+                    className="flex-1 uppercase font-bold text-xs bg-cream-50 border border-line rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-forest-700 text-ink-900 font-mono"
                   />
                   <button
                     onClick={() => handleApplyCoupon()}
                     disabled={couponLoading || !couponCode.trim()}
-                    className="bg-forest-900 hover:bg-forest-800 disabled:bg-cream-200 disabled:text-ink-400 text-cream-50 font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-soft"
+                    className="bg-forest-900 hover:bg-forest-850 disabled:bg-cream-200 disabled:text-ink-400 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-soft min-h-[40px]"
                   >
                     {couponLoading ? '...' : 'APPLY'}
                   </button>
                 </div>
 
                 {couponError && (
-                  <p className="text-[11px] font-semibold text-tomato-700">{couponError}</p>
+                  <p className="text-[11px] font-semibold text-tomato-600 font-sans">{couponError}</p>
                 )}
 
                 {/* Available Suggestions */}
-                <div className="pt-2">
-                  <p className="text-[10px] uppercase font-bold tracking-wider text-ink-400 mb-1.5">
+                <div className="pt-1.5">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-ink-400 mb-1.5 font-sans">
                     Available Offers:
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -1281,8 +1321,9 @@ export const CheckoutPage: React.FC = () => {
                     ].map((c) => (
                       <button
                         key={c.code}
+                        type="button"
                         onClick={() => handleApplyCoupon(c.code)}
-                        className="text-[11px] font-bold bg-cream-100 hover:bg-cream-200 border border-line text-ink-700 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                        className="text-[11px] font-bold bg-cream-50 hover:bg-cream-100 border border-line text-ink-700 px-2.5 py-1 rounded-lg transition-all cursor-pointer font-mono"
                       >
                         {c.code}
                       </button>
@@ -1293,88 +1334,106 @@ export const CheckoutPage: React.FC = () => {
             )}
           </div>
 
-          {/* Order Summary Card */}
-          <div className="bg-surface p-5 sm:p-6 rounded-3xl border border-line shadow-soft space-y-5 sticky top-24">
+          {/* Order Review & Summary Card */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-line shadow-soft space-y-5 sticky top-24">
             <div className="flex items-center justify-between border-b border-line pb-3">
-              <h3 className="font-serif font-black text-lg text-ink-900">
-                Order Summary
+              <h3 className="font-heading font-bold text-lg text-ink-900 tracking-tight">
+                Order Review
               </h3>
-              <span className="text-xs bg-sage-100 text-forest-800 font-bold px-2 py-0.5 rounded-full border border-leaf-500/20">
+              <span className="text-xs bg-cream-100 text-forest-800 font-bold px-2.5 py-0.5 rounded-full border border-line font-sans">
                 {cart.items.length} {cart.items.length === 1 ? 'item' : 'items'}
               </span>
             </div>
 
-            {/* Produce item list */}
-            <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+            {/* Produce item list with authentic thumbnails */}
+            <div className="space-y-3 max-h-56 overflow-y-auto pr-1 divide-y divide-line/60">
               {cart.items.map((item) => (
-                <div key={item.id} className="flex justify-between items-center text-xs">
-                  <div className="truncate max-w-[190px]">
-                    <span className="font-bold text-ink-900">{item.name}</span>
-                    <span className="text-ink-400 block text-[11px]">
-                      {item.quantity} × {item.variant_name || item.unit}
-                    </span>
+                <div key={item.id} className="pt-2.5 first:pt-0 flex justify-between items-center text-xs gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <img
+                      src={getProductImageUrl(item.image, item.name)}
+                      alt={item.name}
+                      className="w-8 h-8 rounded-lg object-contain bg-cream-50 border border-line p-0.5 shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.src = getFallbackImageUrl(item.name);
+                      }}
+                    />
+                    <div className="truncate min-w-0">
+                      <span className="font-bold text-ink-900 block truncate">{item.name}</span>
+                      <span className="text-ink-400 block text-[11px] font-sans">
+                        {item.quantity} × {item.variant_name || item.unit}
+                      </span>
+                    </div>
                   </div>
-                  <span className="font-bold text-ink-900">₹{item.item_total}</span>
+                  <span className="font-bold text-ink-900 font-mono whitespace-nowrap">₹{item.item_total}</span>
                 </div>
               ))}
             </div>
 
+            {/* Selected Payment Method Indicator */}
+            <div className="p-2.5 rounded-xl bg-cream-50 border border-line text-xs flex items-center justify-between">
+              <span className="text-ink-600 font-medium font-sans">Payment Method:</span>
+              <span className="font-bold text-forest-900 uppercase text-[11px] font-sans">
+                {paymentMethod === 'cod' ? 'Cash on Delivery' : paymentMethod.toUpperCase()}
+              </span>
+            </div>
+
             {/* Cost Breakdown */}
-            <div className="space-y-2 text-xs border-t border-line pt-4 text-ink-600">
+            <div className="space-y-2 text-xs border-t border-line pt-4 text-ink-600 font-sans">
               <div className="flex justify-between">
                 <span>Produce Subtotal</span>
-                <span className="font-semibold text-ink-900">₹{cart.subtotal}</span>
+                <span className="font-semibold text-ink-900 font-mono">₹{cart.subtotal}</span>
               </div>
               {cart.discount > 0 && (
-                <div className="flex justify-between text-forest-700 font-semibold">
+                <div className="flex justify-between text-leaf-700 font-semibold">
                   <span>Farm Savings</span>
-                  <span>-₹{cart.discount}</span>
+                  <span className="font-mono">-₹{cart.discount}</span>
                 </div>
               )}
               {appliedCoupon && (
-                <div className="flex justify-between text-forest-700 font-bold">
+                <div className="flex justify-between text-leaf-700 font-bold">
                   <span>Coupon Discount ({appliedCoupon.coupon.code})</span>
-                  <span>-₹{appliedCoupon.discount_amount}</span>
+                  <span className="font-mono">-₹{appliedCoupon.discount_amount}</span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span>Express Delivery</span>
                 <span>
                   {cart.delivery_charge === 0 ? (
-                    <span className="font-bold text-forest-700 bg-sage-100 px-1.5 py-0.5 rounded border border-leaf-500/20">
+                    <span className="font-bold text-leaf-600 bg-cream-100 px-1.5 py-0.5 rounded border border-line text-[11px]">
                       FREE
                     </span>
                   ) : (
-                    `₹${cart.delivery_charge}`
+                    <span className="font-mono">₹{cart.delivery_charge}</span>
                   )}
                 </span>
               </div>
               {paymentMethod === 'cod' && paymentSettings.cod_fee > 0 && (
-                <div className="flex justify-between text-marigold-800 font-bold">
+                <div className="flex justify-between text-amber-800 font-bold">
                   <span>COD Handling Fee</span>
-                  <span>+₹{paymentSettings.cod_fee}</span>
+                  <span className="font-mono">+₹{paymentSettings.cod_fee}</span>
                 </div>
               )}
-              <div className="flex justify-between font-serif font-black text-base text-ink-900 border-t border-line pt-3">
-                <span>Payable Amount</span>
-                <span className="text-forest-900">₹{finalPayableTotal}</span>
+              <div className="flex justify-between font-heading font-bold text-base text-ink-900 border-t border-line pt-3 items-baseline">
+                <span>Total Payable</span>
+                <span className="text-2xl text-forest-900 font-mono">₹{finalPayableTotal}</span>
               </div>
             </div>
 
             {/* Outside 5 km Service Area Guard */}
             {zoneServiceability.checked && !zoneServiceability.serviceable && (
-              <div className="p-3.5 rounded-2xl bg-tomato-50 border border-tomato-200 text-tomato-950 space-y-2">
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 space-y-2">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-tomato-600 shrink-0" />
-                  <h4 className="font-bold text-xs">Address Outside 5.0 KM Radius</h4>
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <h4 className="font-heading font-bold text-xs">Address Outside 5.0 KM Radius</h4>
                 </div>
-                <p className="text-[11px] text-tomato-800 leading-relaxed">
+                <p className="text-[11px] text-amber-800 leading-relaxed font-sans">
                   Your selected address is {zoneServiceability.distanceKm ? `${zoneServiceability.distanceKm} km away` : 'outside our service boundary'}. Delivery is available within 5.0 KM from our Champapet and KPHB hubs.
                 </p>
                 <button
                   type="button"
                   onClick={handleOpenAddAddressModal}
-                  className="w-full py-2 bg-tomato-700 hover:bg-tomato-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                  className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer min-h-[40px]"
                 >
                   Choose a Serviceable Location
                 </button>
@@ -1383,12 +1442,12 @@ export const CheckoutPage: React.FC = () => {
 
             {/* Deliveries Paused Alert */}
             {(deliveryEstimate.isPaused || zoneServiceability.isPaused || zoneServiceability.isDeliveryActive === false) && (
-              <div className="p-4 bg-marigold-50 border border-marigold-300 rounded-2xl space-y-2 text-marigold-900 animate-in fade-in">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-2 text-amber-900 animate-in fade-in">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-marigold-600 shrink-0" />
-                  <h4 className="font-bold text-xs">Deliveries Paused for Selected Area</h4>
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <h4 className="font-heading font-bold text-xs">Deliveries Paused for Selected Area</h4>
                 </div>
-                <p className="text-[11px] text-marigold-800 leading-relaxed">
+                <p className="text-[11px] text-amber-800 leading-relaxed font-sans">
                   {deliveryEstimate.pauseReason || zoneServiceability.message || 'Express deliveries in this area are temporarily paused. Orders will resume shortly.'}
                 </p>
               </div>
@@ -1405,11 +1464,11 @@ export const CheckoutPage: React.FC = () => {
                 zoneServiceability.isPaused ||
                 zoneServiceability.isDeliveryActive === false
               }
-              className="w-full bg-forest-900 hover:bg-forest-800 active:scale-98 disabled:bg-cream-200 disabled:text-ink-400 disabled:cursor-not-allowed text-cream-50 font-bold py-3.5 px-6 rounded-2xl shadow-soft disabled:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full bg-forest-900 hover:bg-forest-850 active:scale-98 disabled:bg-cream-200 disabled:text-ink-400 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-full shadow-soft hover:shadow-card-hover disabled:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer min-h-[48px]"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-cream-50" />
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
                   <span>Placing Order...</span>
                 </>
               ) : !paymentSettings.cod_enabled && !paymentSettings.online_enabled ? (
@@ -1421,14 +1480,14 @@ export const CheckoutPage: React.FC = () => {
               ) : (
                 <>
                   <span>
-                    {paymentMethod === 'cod' ? 'Confirm COD Order' : `Pay ₹${finalPayableTotal} & Place Order`}
+                    {paymentMethod === 'cod' ? 'Confirm Cash on Delivery Order' : `Pay ₹${finalPayableTotal} & Place Order`}
                   </span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
 
-            <div className="flex items-center justify-center gap-2 text-[11px] text-ink-500 font-medium pt-1">
+            <div className="flex items-center justify-center gap-2 text-[11px] text-ink-500 font-medium pt-1 font-sans">
               <ShieldCheck className="w-4 h-4 text-forest-700" />
               <span>Two-Hub Certified Organic Delivery Guarantee</span>
             </div>
