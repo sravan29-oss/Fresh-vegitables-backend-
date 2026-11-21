@@ -12,7 +12,6 @@ import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { subscribeLiveUpdates } from '../../services/liveSync';
 import { SEOHead } from '../../components/common/SEOHead';
 import { ProductReviewsSection } from '../../components/product/ProductReviewsSection';
-import { ProductViewer } from '../../components/3d/ProductViewer';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -112,7 +111,7 @@ export const ProductDetailPage: React.FC = () => {
         const p = res.data.data;
         setProduct(p);
         setServerError(false);
-        if (p.images && p.images.length > 0 && !activeImage) {
+        if (p.images && p.images.length > 0) {
           setActiveImage(p.images[0]);
         }
 
@@ -335,39 +334,64 @@ export const ProductDetailPage: React.FC = () => {
 
       {/* Main Product Showcase */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 bg-surface p-4 sm:p-8 lg:p-10 rounded-2xl sm:rounded-3xl border border-line shadow-soft">
-        {/* Left Column: 3D Interactive Studio & Gallery */}
+        {/* Left Column: Image Gallery */}
         <div className="lg:col-span-5 space-y-4">
-          <ProductViewer
-            productName={product.name}
-            categorySlug={product.category_slug}
-            slug={product.slug}
-            productId={product.id}
-            imageUrl={activeImage || product.images?.[0]}
-          />
+          <div className="aspect-square bg-cream-50/70 rounded-2xl sm:rounded-3xl border border-line flex items-center justify-center overflow-hidden relative p-4 sm:p-8 shadow-soft group">
+            {activeImage || (product.images && product.images[0]) ? (
+              <img
+                src={getProductImageUrl(activeImage || product.images[0], product.name)}
+                alt={`Fresh ${product.name} - 100% Organic Produce`}
+                className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105 select-none"
+                onError={(e) => {
+                  e.currentTarget.src = getFallbackImageUrl(product.name);
+                }}
+              />
+            ) : (
+              <span className="text-8xl sm:text-9xl select-none">🥦</span>
+            )}
+
+            {/* Discount Badge */}
+            {discount > 0 && (
+              <div className="absolute top-3.5 left-3.5 bg-amber-500 text-slate-950 font-black text-xs px-3 py-1 rounded-full shadow-md z-10 font-sans tracking-wide">
+                {discount}% OFF
+              </div>
+            )}
+
+            {/* 100% Organic Certification Pill */}
+            <div className="absolute top-3.5 right-3.5 bg-surface/95 backdrop-blur-md text-forest-800 text-[10.5px] font-bold px-2.5 py-1 rounded-full border border-line shadow-soft flex items-center gap-1.5 font-sans">
+              <span className="w-1.5 h-1.5 rounded-full bg-forest-600 animate-pulse" />
+              <span>100% Organic</span>
+            </div>
+          </div>
 
           {/* Thumbnail row if multiple images exist */}
           {product.images && product.images.length > 1 && (
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              {product.images.map((img, i) => (
-                <button
-                  type="button"
-                  key={i}
-                  onClick={() => setActiveImage(img)}
-                  className={`w-16 h-16 rounded-xl border-2 overflow-hidden shrink-0 transition-all cursor-pointer ${
-                    activeImage === img ? 'border-forest-900 shadow-soft' : 'border-line opacity-70 hover:opacity-100'
-                  }`}
-                  aria-label={`View image ${i + 1}`}
-                >
-                  <img
-                    src={getProductImageUrl(img, product.name)}
-                    alt={`${product.name} thumbnail ${i + 1}`}
-                    className="w-full h-full object-contain p-1"
-                    onError={(e) => {
-                      e.currentTarget.src = getFallbackImageUrl(product.name);
-                    }}
-                  />
-                </button>
-              ))}
+            <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
+              {product.images.map((img, i) => {
+                const isSelected = (activeImage || product.images[0]) === img;
+                return (
+                  <button
+                    type="button"
+                    key={i}
+                    onClick={() => setActiveImage(img)}
+                    className={`w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl border-2 overflow-hidden shrink-0 transition-all cursor-pointer bg-cream-50/50 p-1.5 ${
+                      isSelected
+                        ? 'border-forest-900 shadow-soft ring-2 ring-forest-900/15'
+                        : 'border-line opacity-75 hover:opacity-100 hover:border-forest-600'
+                    }`}
+                    aria-label={`View image ${i + 1}`}
+                  >
+                    <img
+                      src={getProductImageUrl(img, product.name)}
+                      alt={`${product.name} thumbnail ${i + 1}`}
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        e.currentTarget.src = getFallbackImageUrl(product.name);
+                      }}
+                    />
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

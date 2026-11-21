@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Minus, Check, Clock, Ban, AlertTriangle, AlertCircle, ChevronDown, X, Star, Rotate3d } from 'lucide-react';
+import { Plus, Minus, Check, Clock, Ban, AlertTriangle, AlertCircle, ChevronDown, X, Star } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Product, ProductVariant } from '../../types';
 import { useCart } from '../../context/CartContext';
@@ -230,17 +230,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </span>
           )}
 
-          {/* Top Right: 3D Studio Ready Badge */}
-          <div className="flex items-center gap-1.5">
-            <span className="bg-forest-900/90 text-leaf-300 text-[8.5px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 backdrop-blur-md border border-leaf-500/30 opacity-70 group-hover:opacity-100 transition-opacity">
-              <Rotate3d className="w-2.5 h-2.5 text-leaf-400" /> 3D
-            </span>
-            <div
-              className="w-3.5 h-3.5 rounded-[3px] border border-forest-700 p-[1px] flex items-center justify-center bg-surface shadow-soft shrink-0"
-              title="Fresh Organic Veg"
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-forest-700" />
-            </div>
+          {/* Top Right: Pure Vegetarian/Organic Symbol */}
+          <div
+            className="w-3.5 h-3.5 rounded-[3px] border border-forest-700 p-[1px] flex items-center justify-center bg-surface shadow-soft shrink-0"
+            title="Fresh Organic Veg"
+          >
+            <div className="w-1.5 h-1.5 rounded-full bg-forest-700" />
           </div>
         </div>
 
