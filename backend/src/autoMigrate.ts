@@ -69,6 +69,35 @@ export async function autoMigrateAndSeed(): Promise<void> {
       DELETE FROM _schema_migrations WHERE id LIKE '%rollback%';
     `);
 
+    // Verify whether critical tables exist. If any were dropped by previous rollbacks,
+    // remove them from _schema_migrations so that the migration loop immediately re-applies them!
+    const tableChecks = [
+      { table: 'delivery_hubs', migration: '011_multi_hub_delivery.sql' },
+      { table: 'hub_inventory', migration: '012_hub_inventory_and_advanced_coupons.sql' },
+      { table: 'delivery_locations', migration: '013_delivery_management_and_tracking.sql' },
+      { table: 'store_settings', migration: '014_homepage_cms_and_store_settings.sql' },
+      { table: 'product_reviews', migration: '017_product_reviews.sql' },
+      { table: 'review_reports', migration: '017_product_reviews.sql' },
+    ];
+
+    for (const check of tableChecks) {
+      try {
+        const existsRes = await client.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' AND table_name = $1
+          ) as exists;
+        `, [check.table]);
+
+        if (!existsRes.rows[0]?.exists) {
+          console.log(`⚠️ [AutoMigrate] Required table "${check.table}" is missing. Triggering re-application of ${check.migration}...`);
+          await client.query('DELETE FROM _schema_migrations WHERE id = $1', [check.migration]);
+        }
+      } catch (err: any) {
+        console.warn(`[AutoMigrate] Table check note for ${check.table}:`, err.message);
+      }
+    }
+
     const appliedRes = await client.query('SELECT id FROM _schema_migrations');
     const appliedSet = new Set(appliedRes.rows.map((r: any) => r.id));
 
