@@ -176,15 +176,21 @@ async function sendViaResend(options: {
   subject: string;
   html: string;
   text: string;
+  idempotencyKey?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const fromAddress = options.from || 'Fresh Vegetables <onboarding@resend.dev>';
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${options.apiKey}`,
+      'Content-Type': 'application/json',
+    };
+    if (options.idempotencyKey) {
+      headers['Idempotency-Key'] = options.idempotencyKey;
+    }
+
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${options.apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         from: fromAddress,
         to: [options.to],
@@ -192,6 +198,7 @@ async function sendViaResend(options: {
         html: options.html,
         text: options.text,
       }),
+      signal: AbortSignal.timeout(8000),
     });
 
     const data: any = await res.json();
@@ -233,6 +240,7 @@ async function sendViaBrevo(options: {
         htmlContent: options.html,
         textContent: options.text,
       }),
+      signal: AbortSignal.timeout(8000),
     });
 
     const data: any = await res.json();
@@ -268,6 +276,7 @@ async function sendViaGoogleRelay(options: {
         text: options.text,
       }),
       redirect: 'follow',
+      signal: AbortSignal.timeout(8000),
     });
 
     const text = await res.text();
@@ -327,6 +336,7 @@ async function dispatchEmail(payload: {
   subject: string;
   html: string;
   text: string;
+  idempotencyKey?: string;
 }): Promise<{
   success: boolean;
   messageId?: string;
@@ -343,6 +353,7 @@ async function dispatchEmail(payload: {
       subject: payload.subject,
       html: payload.html,
       text: payload.text,
+      idempotencyKey: payload.idempotencyKey,
     });
     if (result.success) {
       return { success: true, messageId: result.messageId, provider: 'resend' };
@@ -482,7 +493,7 @@ export async function sendNewOrderAdminEmail(orderId: string, forceRetry = false
       `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, updated_at)
        VALUES ($1, $2, $3, 'pending', 1, NOW())
        ON CONFLICT (order_id, notification_type)
-       DO UPDATE SET attempts = order_notifications.attempts + 1, updated_at = NOW()`,
+       DO UPDATE SET status = 'pending', attempts = order_notifications.attempts + 1, updated_at = NOW()`,
       [orderId, notificationType, recipient]
     );
 
@@ -836,6 +847,7 @@ Fresh Vegetables Organic Delivery Service
       subject,
       text: plainTextContent,
       html: htmlContent,
+      idempotencyKey: forceRetry ? `${orderId}_${notificationType}_${Date.now()}` : `${orderId}_${notificationType}`,
     });
 
     if (!dispatchResult.success) {
@@ -965,7 +977,7 @@ export async function sendCustomerOrderConfirmedEmail(
       `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, updated_at)
        VALUES ($1, $2, $3, 'pending', 1, NOW())
        ON CONFLICT (order_id, notification_type)
-       DO UPDATE SET attempts = order_notifications.attempts + 1, updated_at = NOW()`,
+       DO UPDATE SET status = 'pending', attempts = order_notifications.attempts + 1, updated_at = NOW()`,
       [orderId, notificationType, customerEmail]
     );
 
@@ -1307,6 +1319,7 @@ Customer Support: +91 8106970384 | freshvegitables29@gmail.com
       subject,
       html: htmlContent,
       text: textContent,
+      idempotencyKey: forceRetry ? `${orderId}_${notificationType}_${Date.now()}` : `${orderId}_${notificationType}`,
     });
 
     if (!dispatchResult.success) {
@@ -1422,7 +1435,7 @@ export async function sendCustomerOrderCancelledEmail(
       `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, updated_at)
        VALUES ($1, $2, $3, 'pending', 1, NOW())
        ON CONFLICT (order_id, notification_type)
-       DO UPDATE SET attempts = order_notifications.attempts + 1, updated_at = NOW()`,
+       DO UPDATE SET status = 'pending', attempts = order_notifications.attempts + 1, updated_at = NOW()`,
       [orderId, notificationType, customerEmail]
     );
 
@@ -1597,6 +1610,7 @@ Fresh Vegetables Organic, Hyderabad, Telangana
       subject,
       html: htmlContent,
       text: textContent,
+      idempotencyKey: forceRetry ? `${orderId}_${notificationType}_${Date.now()}` : `${orderId}_${notificationType}`,
     });
 
     if (!dispatchResult.success) {
@@ -1696,7 +1710,7 @@ export async function sendCustomerOrderDeliveredEmail(
       `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, updated_at)
        VALUES ($1, $2, $3, 'pending', 1, NOW())
        ON CONFLICT (order_id, notification_type)
-       DO UPDATE SET attempts = order_notifications.attempts + 1, updated_at = NOW()`,
+       DO UPDATE SET status = 'pending', attempts = order_notifications.attempts + 1, updated_at = NOW()`,
       [orderId, notificationType, customerEmail]
     );
 
@@ -1853,6 +1867,7 @@ Fresh Vegetables Organic, Hyderabad, Telangana
       subject,
       html: htmlContent,
       text: textContent,
+      idempotencyKey: forceRetry ? `${orderId}_${notificationType}_${Date.now()}` : `${orderId}_${notificationType}`,
     });
 
     if (!dispatchResult.success) {
@@ -1885,15 +1900,269 @@ Fresh Vegetables Organic, Hyderabad, Telangana
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
+ * 3.5. CUSTOMER PAYMENT STATUS UPDATE / RECEIPT EMAIL
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Sends a transactional payment receipt email to the customer when payment (e.g. COD)
+ * has been collected and verified by the admin.
+ */
+export async function sendCustomerPaymentCollectedEmail(
+  orderId: string,
+  metadata?: { amount?: number; notes?: string; forceRetry?: boolean }
+): Promise<{ success: boolean; message: string; skipped?: boolean }> {
+  const notificationType = 'customer_payment_collected';
+  const forceRetry = metadata?.forceRetry || false;
+
+  try {
+    const orderRes = await db.query(
+      `SELECT o.*, 
+              COALESCE(NULLIF(o.customer_email, ''), NULLIF(u.email, '')) as customer_email,
+              COALESCE(u.name, o.address_snapshot->>'full_name', 'Customer') as customer_name,
+              COALESCE(u.mobile, o.address_snapshot->>'phone', '') as customer_phone
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.id
+       WHERE o.id = $1`,
+      [orderId]
+    );
+
+    if (orderRes.rows.length === 0) {
+      return { success: false, message: 'Order not found' };
+    }
+
+    const order = orderRes.rows[0];
+
+    let addressSnapshot = order.address_snapshot;
+    if (typeof addressSnapshot === 'string') {
+      try { addressSnapshot = JSON.parse(addressSnapshot); } catch {}
+    }
+
+    const customerEmail = extractCustomerEmail(order, addressSnapshot);
+    const orderNumber = order.order_number || order.id.slice(0, 8).toUpperCase();
+
+    if (!customerEmail) {
+      console.warn(`[OrderEmailService] No valid email address found for order #${orderNumber} payment email.`);
+      return { success: false, skipped: true, message: 'No valid customer email address on file' };
+    }
+
+    // Idempotency check: Don't send duplicate payment collection emails unless forceRetry
+    if (!forceRetry) {
+      const existingNotifRes = await db.query(
+        `SELECT id, status, sent_at FROM order_notifications
+         WHERE order_id = $1 AND notification_type = $2`,
+        [orderId, notificationType]
+      );
+
+      if (existingNotifRes.rows.length > 0 && existingNotifRes.rows[0].status === 'sent') {
+        console.log(`[OrderEmailService] Payment email for order #${orderNumber} already sent at ${existingNotifRes.rows[0].sent_at}. Skipping duplicate.`);
+        return { success: true, message: 'Already sent', skipped: true };
+      }
+    }
+
+    // Record pending in outbox
+    await db.query(
+      `INSERT INTO order_notifications (order_id, notification_type, recipient, status, attempts, updated_at)
+       VALUES ($1, $2, $3, 'pending', 1, NOW())
+       ON CONFLICT (order_id, notification_type)
+       DO UPDATE SET status = 'pending', attempts = order_notifications.attempts + 1, updated_at = NOW()`,
+      [orderId, notificationType, customerEmail]
+    );
+
+    const paidAmount = metadata?.amount !== undefined ? Number(metadata.amount) : Number(order.total || 0);
+    const formattedPaymentDate = formatOrderDateTime(new Date());
+    const customerName = addressSnapshot?.full_name || order.customer_name || 'Valued Customer';
+    const totalOrderAmount = Number(order.total || 0).toFixed(2);
+    const formattedPaidAmount = paidAmount.toFixed(2);
+    const paymentMethodUpper = (order.payment_method || 'cod').toUpperCase();
+
+    const frontendBaseUrl = (env.FRONTEND_URL || 'https://fresh-vegitables-frontend.vercel.app').replace(/\/$/, '');
+    const trackingUrl = `${frontendBaseUrl}/orders/${order.id}/track`;
+
+    const subject = `Payment Confirmed: ₹${formattedPaidAmount} for Order #${orderNumber} — Fresh Vegetables Organic`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 620px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;" cellspacing="0" cellpadding="0">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%); padding: 28px; text-align: left;">
+              <span style="display: inline-block; background-color: rgba(255,255,255,0.22); color: #ffffff; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">
+                💵 Payment Receipt
+              </span>
+              <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 900; letter-spacing: -0.02em;">
+                Fresh Vegetables Organic
+              </h1>
+              <p style="margin: 4px 0 0; color: #ccfbf1; font-size: 13.5px; font-weight: 500;">
+                Official Payment Confirmation
+              </p>
+            </td>
+          </tr>
+
+          <!-- Message -->
+          <tr>
+            <td style="padding: 24px 28px 12px;">
+              <h2 style="margin: 0 0 8px; font-size: 18px; font-weight: 800; color: #0f172a;">
+                Hi ${escapeHtml(customerName)},
+              </h2>
+              <p style="margin: 0; font-size: 13.5px; line-height: 1.6; color: #334155;">
+                We have received and verified your payment of <strong>₹${formattedPaidAmount}</strong> for Fresh Vegetables order <strong>#${escapeHtml(orderNumber)}</strong>. Thank you for your prompt settlement!
+              </p>
+            </td>
+          </tr>
+
+          <!-- Payment Summary Card -->
+          <tr>
+            <td style="padding: 12px 28px;">
+              <table width="100%" style="background-color: #f0fdfa; border: 1px solid #99f6e4; border-radius: 14px; padding: 16px;" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #115e59;">
+                    <strong>Amount Received:</strong><br>
+                    <span style="font-size: 18px; font-weight: 900; color: #0f766e;">₹${formattedPaidAmount}</span>
+                  </td>
+                  <td width="50%" style="padding: 4px 8px; font-size: 12px; color: #115e59;">
+                    <strong>Payment Method:</strong><br>
+                    <span style="font-size: 14px; font-weight: 700; color: #0f172a;">${paymentMethodUpper} (Cash/UPI Confirmed)</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 8px 4px; font-size: 12px; color: #115e59;">
+                    <strong>Payment Timestamp:</strong><br>
+                    <span style="font-size: 13px; font-weight: 600; color: #0f172a;">${escapeHtml(formattedPaymentDate)}</span>
+                  </td>
+                  <td style="padding: 10px 8px 4px; font-size: 12px; color: #115e59;">
+                    <strong>Order Total:</strong><br>
+                    <span style="font-size: 13px; font-weight: 600; color: #0f172a;">₹${totalOrderAmount}</span>
+                  </td>
+                </tr>
+                ${metadata?.notes ? `
+                <tr>
+                  <td colspan="2" style="padding: 10px 8px 4px; font-size: 12px; color: #115e59;">
+                    <strong>Admin Note:</strong><br>
+                    <span style="font-size: 12.5px; font-style: italic; color: #334155;">${escapeHtml(metadata.notes)}</span>
+                  </td>
+                </tr>` : ''}
+              </table>
+            </td>
+          </tr>
+
+          <!-- CTA to View Order / Invoice -->
+          <tr>
+            <td align="center" style="padding: 16px 28px 24px;">
+              <a href="${trackingUrl}" target="_blank" style="display: inline-block; background-color: #0d9488; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 800; padding: 13px 28px; border-radius: 12px; box-shadow: 0 4px 14px rgba(13,148,136,0.25);">
+                View Order &amp; Invoice →
+              </a>
+            </td>
+          </tr>
+
+          <!-- Support & Guarantee Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 28px; text-align: center;">
+              <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #334155;">
+                Need assistance regarding your payment or invoice?
+              </p>
+              <p style="margin: 0; font-size: 11.5px; color: #64748b;">
+                Customer Support: <a href="tel:+918106970384" style="color: #0d9488; font-weight: 700; text-decoration: none;">+91 8106970384</a> • 
+                <a href="mailto:freshvegitables29@gmail.com" style="color: #0d9488; font-weight: 700; text-decoration: none;">freshvegitables29@gmail.com</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    const textContent = `
+PAYMENT CONFIRMATION — FRESH VEGETABLES ORGANIC
+Order #${orderNumber}
+==================================================
+
+Hi ${customerName},
+
+We have received and verified your payment of ₹${formattedPaidAmount} for Fresh Vegetables order #${orderNumber} on ${formattedPaymentDate}.
+
+Payment Method: ${paymentMethodUpper}
+Total Order Amount: ₹${totalOrderAmount}
+Amount Received: ₹${formattedPaidAmount}
+${metadata?.notes ? `Admin Note: ${metadata.notes}\n` : ''}
+View order details & invoice: ${trackingUrl}
+
+Thank you for choosing Fresh Vegetables Organic!
+Customer Support: +91 8106970384 | freshvegitables29@gmail.com
+    `.trim();
+
+    const dispatchResult = await dispatchEmail({
+      to: customerEmail,
+      subject,
+      html: htmlContent,
+      text: textContent,
+      idempotencyKey: forceRetry ? `${orderId}_${notificationType}_${Date.now()}` : `${orderId}_${notificationType}`,
+    });
+
+    if (!dispatchResult.success) {
+      throw new Error(dispatchResult.error || 'Failed to dispatch customer payment email');
+    }
+
+    console.log(`[OrderEmailService] ✅ Customer payment email sent to ${customerEmail} via ${dispatchResult.provider} for Order #${orderNumber}`);
+
+    await db.query(
+      `UPDATE order_notifications
+       SET status = 'sent', sent_at = NOW(), error_message = NULL, updated_at = NOW()
+       WHERE order_id = $1 AND notification_type = $2`,
+      [orderId, notificationType]
+    );
+
+    await db.query(
+      `UPDATE orders
+       SET payment_email_sent = TRUE, payment_email_sent_at = NOW(), payment_email_error = NULL
+       WHERE id = $1`,
+      [orderId]
+    );
+
+    return { success: true, message: 'Payment collection email sent successfully' };
+  } catch (error: any) {
+    const errorMsg = error?.message || 'Unknown payment email error';
+    console.error(`[OrderEmailService] ❌ Failed to send payment email for ${orderId}:`, errorMsg);
+    try {
+      await db.query(
+        `UPDATE order_notifications
+         SET status = 'failed', error_message = $1, updated_at = NOW()
+         WHERE order_id = $2 AND notification_type = $3`,
+        [errorMsg, orderId, notificationType]
+      );
+      await db.query(
+        `UPDATE orders SET payment_email_error = $1 WHERE id = $2`,
+        [errorMsg, orderId]
+      );
+    } catch {}
+    return { success: false, message: errorMsg };
+  }
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
  * 4. CENTRAL EVENT DISPATCHER FOR ORDER NOTIFICATIONS
  * ─────────────────────────────────────────────────────────────────────────────
- * Central event handler for ORDER_CREATED, ORDER_CANCELLED, and ORDER_DELIVERED.
+ * Central event handler for ORDER_CREATED, ORDER_CANCELLED, ORDER_DELIVERED,
+ * and PAYMENT_COLLECTED.
  * Dispatches both admin alert and customer transactional emails asynchronously.
  */
 export async function handleOrderNotificationEvent(
-  event: 'ORDER_CREATED' | 'ORDER_CANCELLED' | 'ORDER_DELIVERED',
+  event: 'ORDER_CREATED' | 'ORDER_CANCELLED' | 'ORDER_DELIVERED' | 'PAYMENT_COLLECTED',
   orderId: string,
-  metadata?: { reason?: string; forceRetry?: boolean }
+  metadata?: { reason?: string; forceRetry?: boolean; amount?: number; notes?: string }
 ): Promise<void> {
   console.log(`[OrderNotificationEvent] 📨 Received event "${event}" for Order ID: ${orderId}`);
   try {
@@ -1933,6 +2202,13 @@ export async function handleOrderNotificationEvent(
             console.error(`[OrderNotificationEvent] Admin delivery alert failed for ${orderId}:`, err.message);
           });
         }
+        break;
+
+      case 'PAYMENT_COLLECTED':
+        // Asynchronously send customer payment receipt email
+        sendCustomerPaymentCollectedEmail(orderId, metadata).catch((err) => {
+          console.error(`[OrderNotificationEvent] Customer payment email failed for ${orderId}:`, err.message);
+        });
         break;
 
       default:

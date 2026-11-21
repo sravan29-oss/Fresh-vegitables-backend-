@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import db from '../config/database';
+import { memoryStore } from '../config/mockDb';
 import { AuthRequest } from '../middleware/auth';
 import { sendSuccess } from '../utils/apiResponse';
 import { AppError, NotFoundError, ValidationError } from '../utils/appError';
@@ -267,6 +268,16 @@ export async function verifyPayment(req: AuthRequest, res: Response, next: NextF
     const { payment_id, gateway_payment_id, status = 'PAID' } = req.body;
     if (!payment_id) throw new ValidationError('payment_id is required');
 
+    // SECURITY ENFORCEMENT:
+    // Eliminate client-side simulated online payments that mark orders as PAID.
+    // Client-side requests cannot arbitrarily set payment_status to 'paid'.
+    // Online payments require cryptographic signature verification via authentic gateway webhooks.
+    if (status === 'PAID') {
+      throw new ValidationError(
+        'Client-side payment verification is disabled for security. Online orders require verified payment gateway webhook confirmation. Cash on Delivery is the active confirmed order payment method.'
+      );
+    }
+
     const payRes = await db.query('SELECT * FROM payments WHERE id = $1', [payment_id]);
     if (payRes.rows.length === 0) throw new NotFoundError('Payment record not found');
     const payment = payRes.rows[0];
@@ -274,50 +285,13 @@ export async function verifyPayment(req: AuthRequest, res: Response, next: NextF
     const orderRes = await db.query('SELECT * FROM orders WHERE id = $1', [payment.order_id]);
     const order = orderRes.rows[0] || {};
 
-    // Update payment
+    // Update payment as FAILED / CANCELLED
     const updatedPay = await db.query(
       'UPDATE payments SET status = $1, gateway_payment_id = $2 WHERE id = $3 RETURNING *',
-      [status, gateway_payment_id || payment.gateway_payment_id, payment_id]
+      ['FAILED', gateway_payment_id || payment.gateway_payment_id, payment_id]
     );
 
-    // Update corresponding order
-    if (status === 'PAID') {
-      await db.query(
-        "UPDATE orders SET payment_status = 'paid', order_status = 'confirmed' WHERE id = $1",
-        [payment.order_id]
-      );
-
-      // Record transaction log
-      await logPaymentTransaction(
-        payment.order_id,
-        payment.payment_method || 'online',
-        Number(payment.amount),
-        order.payment_status || 'pending',
-        'paid',
-        'PAYMENT_GATEWAY_VERIFIED',
-        gateway_payment_id || payment.gateway_payment_id,
-        'Online payment verified successfully'
-      );
-
-      // Create Customer Notification
-      await db.query(
-        `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [order.user_id || null, 'Payment Received! 💳', `Your payment of ₹${payment.amount} has been verified successfully.`, 'ORDER_UPDATE', 'order', payment.order_id]
-      );
-
-      // Create Admin Real-Time Notification
-      await createAdminNotification(
-        'PAYMENT_SUCCESS',
-        'Online Payment Verified 💳',
-        `Payment of ₹${payment.amount} verified for order #${order.order_number || payment.order_id.slice(0, 8)}.`,
-        payment.order_id,
-        { amount: payment.amount, payment_id: payment.id, gateway_id: gateway_payment_id }
-      );
-
-      // Dispatch order emails
-      handleOrderNotificationEvent('ORDER_CREATED', payment.order_id).catch(() => {});
-    } else if (status === 'FAILED') {
+    if (status === 'FAILED') {
       await db.query(
         "UPDATE orders SET payment_status = 'failed' WHERE id = $1",
         [payment.order_id]
@@ -331,7 +305,7 @@ export async function verifyPayment(req: AuthRequest, res: Response, next: NextF
         'failed',
         'PAYMENT_GATEWAY_FAILED',
         gateway_payment_id,
-        'Payment gateway returned failure'
+        'Payment gateway returned failure or customer cancelled'
       );
 
       await createAdminNotification(
@@ -356,67 +330,209 @@ export async function recordCodCollection(req: AuthRequest, res: Response, next:
     const { order_id, notes, amount } = req.body;
     if (!order_id) throw new ValidationError('order_id is required');
 
-    const orderRes = await db.query('SELECT * FROM orders WHERE id = $1 OR order_number = $1', [order_id]);
-    if (orderRes.rows.length === 0) throw new NotFoundError('Order not found');
-    const order = orderRes.rows[0];
-
-    if (order.payment_status === 'cod_collected' || order.payment_status === 'paid') {
-      throw new ValidationError('This order payment has already been marked as collected/paid.');
+    // 1. Fetch order
+    let order: any = null;
+    try {
+      const orderRes = await db.query('SELECT * FROM orders WHERE id = $1 OR order_number = $1', [order_id]);
+      if (orderRes.rows.length > 0) order = orderRes.rows[0];
+    } catch {
+      order = memoryStore.orders.find((o) => o.id === order_id || o.order_number === order_id);
     }
 
-    const collectedAmount = amount !== undefined && !isNaN(Number(amount)) ? Number(amount) : Number(order.total);
+    if (!order) throw new NotFoundError('Order not found');
+
+    // 2. Validate payment method (Must be COD)
+    if (order.payment_method !== 'cod') {
+      throw new ValidationError(
+        `This order was placed using "${order.payment_method?.toUpperCase() || 'ONLINE'}" payment mode. Only Cash on Delivery (COD) orders can be confirmed via COD collection.`
+      );
+    }
+
+    // 3. Repeated / Duplicate request idempotency:
+    // Repeated requests must not create duplicate payment transactions.
+    if (order.payment_status === 'cod_collected' || order.payment_status === 'paid') {
+      return sendSuccess(res, 'COD payment has already been collected and recorded for this order', {
+        order_id: order.id,
+        order_number: order.order_number,
+        amount: Number(order.total),
+        payment_status: order.payment_status,
+        already_collected: true,
+      });
+    }
+
+    if (order.order_status === 'cancelled') {
+      throw new ValidationError('Cannot record COD collection for a cancelled order.');
+    }
+
+    // 3.5. Calculate net outstanding balance (order.total incorporates subtotal, delivery fees, and discounts; subtract any refunds)
+    let refundsSum = 0;
+    try {
+      const refRes = await db.query(
+        "SELECT COALESCE(SUM(amount), 0) AS total_refunded FROM refunds WHERE order_id = $1 AND status = 'COMPLETED'",
+        [order.id]
+      );
+      if (refRes.rows.length > 0) {
+        refundsSum = Number(refRes.rows[0].total_refunded || 0);
+      }
+    } catch {}
+
+    const outstandingBalance = Math.max(0, Number((Number(order.total) - refundsSum).toFixed(2)));
+
+    // 3.6. Rule 6: A fully refunded order has zero outstanding COD balance and cannot be collected
+    if (outstandingBalance <= 0) {
+      throw new ValidationError(
+        'This order has zero outstanding COD balance due to completed refunds. No COD collection is permitted.'
+      );
+    }
+
+    // 4. Validate entered amount
+    if (amount === undefined || amount === null || String(amount).trim() === '') {
+      throw new ValidationError('Actual amount received is required to confirm COD collection');
+    }
+
+    const numericAmount = Number(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      throw new ValidationError('Actual amount received must be a positive number');
+    }
+
+    const receivedAmount = Number(numericAmount.toFixed(2));
+    const expectedTotal = outstandingBalance;
+
+    if (Math.abs(receivedAmount - expectedTotal) > 0.01) {
+      throw new ValidationError(
+        `Collected amount (₹${receivedAmount.toFixed(2)}) does not match outstanding COD total (₹${expectedTotal.toFixed(2)}). Exact order total is required for collection.`
+      );
+    }
+
     const collectorName = req.user?.name || req.user?.email || 'Admin';
 
-    // 1. Update order status
-    await db.query(
-      "UPDATE orders SET payment_status = 'cod_collected', updated_at = NOW() WHERE id = $1",
-      [order.id]
-    );
-
-    // 2. Record COD collection entry
+    // 5. Atomic database transaction with row locking
+    let client: any = null;
+    let inTx = false;
     try {
-      await db.query(
-        `INSERT INTO cod_collections (order_id, amount, collected_by, notes)
-         VALUES ($1, $2, $3, $4)`,
-        [order.id, collectedAmount, collectorName, notes || 'COD Cash/UPI collected by fulfillment staff']
+      client = await db.getClient();
+      await client.query('BEGIN');
+      inTx = true;
+
+      // Lock row to prevent duplicate concurrent collection
+      const lockedRes = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [order.id]);
+      if (
+        lockedRes.rows.length > 0 &&
+        (lockedRes.rows[0].payment_status === 'cod_collected' || lockedRes.rows[0].payment_status === 'paid')
+      ) {
+        await client.query('ROLLBACK');
+        inTx = false;
+        return sendSuccess(res, 'COD payment has already been collected and recorded for this order', {
+          order_id: order.id,
+          order_number: order.order_number,
+          amount: Number(order.total),
+          payment_status: lockedRes.rows[0].payment_status,
+          already_collected: true,
+        });
+      }
+
+      // Check if cod_collections already has a recorded transaction inside row lock
+      try {
+        const existingColl = await client.query('SELECT id FROM cod_collections WHERE order_id = $1', [order.id]);
+        if (existingColl.rows.length > 0) {
+          await client.query('ROLLBACK');
+          inTx = false;
+          return sendSuccess(res, 'COD payment has already been collected and recorded for this order', {
+            order_id: order.id,
+            order_number: order.order_number,
+            amount: Number(order.total),
+            payment_status: lockedRes.rows[0]?.payment_status || 'cod_collected',
+            already_collected: true,
+          });
+        }
+      } catch {}
+
+      // Atomically update order payment status
+      await client.query(
+        "UPDATE orders SET payment_status = 'cod_collected', updated_at = NOW() WHERE id = $1",
+        [order.id]
       );
-    } catch (collErr) {
-      console.warn('Could not insert cod_collections entry:', collErr);
+
+      // Record in cod_collections table
+      try {
+        await client.query(
+          `INSERT INTO cod_collections (order_id, amount, collected_by, notes)
+           VALUES ($1, $2, $3, $4)`,
+          [order.id, receivedAmount, collectorName, notes || 'COD Cash/UPI confirmed by admin']
+        );
+      } catch (collErr) {
+        console.warn('[PaymentController] Non-fatal cod_collections insert:', collErr);
+      }
+
+      // Update payments table if record exists
+      try {
+        await client.query(
+          "UPDATE payments SET status = 'paid', updated_at = NOW() WHERE order_id = $1",
+          [order.id]
+        );
+      } catch {}
+
+      await client.query('COMMIT');
+      inTx = false;
+      order.payment_status = 'cod_collected';
+    } catch (dbErr: any) {
+      if (inTx && client) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {}
+      }
+      throw dbErr;
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
 
-    // 3. Record in payment transaction log
-    await logPaymentTransaction(
-      order.id,
-      'cod',
-      collectedAmount,
-      order.payment_status,
-      'cod_collected',
-      collectorName,
-      `COD-REC-${Date.now()}`,
-      notes || 'COD collection confirmed'
-    );
+    // Ensure memoryStore is directly synchronized
+    const memOrder = memoryStore.orders.find((o) => o.id === order.id);
+    if (memOrder) memOrder.payment_status = 'cod_collected';
 
-    // 4. Create admin notification
-    await createAdminNotification(
-      'PAYMENT_SUCCESS',
-      'COD Payment Collected 💵',
-      `₹${collectedAmount} collected for order #${order.order_number} by ${collectorName}.`,
-      order.id,
-      { amount: collectedAmount, collected_by: collectorName, notes }
-    );
-
-    // 5. Update payments table if record exists
+    // 6. Log payment transaction safely (idempotent, single transaction)
     try {
-      await db.query(
-        "UPDATE payments SET status = 'paid', updated_at = NOW() WHERE order_id = $1",
-        [order.id]
+      await logPaymentTransaction(
+        order.id,
+        'cod',
+        receivedAmount,
+        'awaiting_cod_collection',
+        'cod_collected',
+        collectorName,
+        `COD-REC-${order.id.slice(0, 8)}-${Date.now()}`,
+        notes || 'COD cash collection explicitly confirmed by admin'
+      );
+    } catch (logErr: any) {
+      console.warn('[PaymentController] Could not log payment transaction:', logErr?.message);
+    }
+
+    // 7. Create admin notification
+    try {
+      await createAdminNotification(
+        'PAYMENT_SUCCESS',
+        'COD Payment Collected 💵',
+        `₹${receivedAmount} collected for order #${order.order_number} by ${collectorName}.`,
+        order.id,
+        { amount: receivedAmount, collected_by: collectorName, notes }
       );
     } catch {}
 
-    sendSuccess(res, 'COD collection successfully recorded', {
+    // 8. Trigger customer payment receipt email notification
+    try {
+      handleOrderNotificationEvent('PAYMENT_COLLECTED', order.id, {
+        amount: receivedAmount,
+        notes,
+      }).catch((err) => {
+        console.error('[PaymentController] Customer payment email notification error:', err?.message);
+      });
+    } catch {}
+
+    sendSuccess(res, 'COD collection successfully confirmed and recorded', {
       order_id: order.id,
       order_number: order.order_number,
-      amount: collectedAmount,
+      amount: receivedAmount,
       payment_status: 'cod_collected',
       collected_by: collectorName,
     });
@@ -617,6 +733,70 @@ export async function getAdminPayments(req: AuthRequest, res: Response, next: Ne
 }
 
 export async function paymentWebhook(req: Request, res: Response) {
-  const { event, payload } = req.body;
-  res.json({ received: true, event });
+  try {
+    const { event, payload } = req.body || {};
+
+    // Handle legitimate gateway payment success webhook events
+    if (
+      event === 'payment.captured' ||
+      event === 'order.paid' ||
+      payload?.payment?.entity?.status === 'captured'
+    ) {
+      const orderId =
+        payload?.payment?.entity?.notes?.order_id ||
+        payload?.order_id ||
+        payload?.notes?.order_id;
+      const gatewayPaymentId =
+        payload?.payment?.entity?.id ||
+        payload?.payment_id ||
+        payload?.id;
+      const rawAmount =
+        payload?.payment?.entity?.amount !== undefined
+          ? Number(payload.payment.entity.amount) / 100
+          : payload?.amount;
+
+      if (orderId) {
+        const orderRes = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+        if (orderRes.rows.length > 0) {
+          const order = orderRes.rows[0];
+
+          await db.query(
+            "UPDATE orders SET payment_status = 'paid', order_status = 'confirmed', updated_at = NOW() WHERE id = $1",
+            [orderId]
+          );
+
+          await db.query(
+            "UPDATE payments SET status = 'PAID', gateway_payment_id = $1, updated_at = NOW() WHERE order_id = $2",
+            [gatewayPaymentId || null, orderId]
+          );
+
+          await logPaymentTransaction(
+            orderId,
+            order.payment_method || 'online',
+            Number(rawAmount || order.total),
+            order.payment_status || 'pending',
+            'paid',
+            'GATEWAY_WEBHOOK_VERIFIED',
+            gatewayPaymentId,
+            `Verified via authoritative gateway webhook (${event})`
+          );
+
+          await createAdminNotification(
+            'PAYMENT_SUCCESS',
+            'Online Payment Verified 💳',
+            `Payment of ₹${rawAmount || order.total} verified via gateway webhook for order #${order.order_number || orderId.slice(0, 8)}.`,
+            orderId,
+            { amount: rawAmount || order.total, gateway_id: gatewayPaymentId, event }
+          );
+
+          handleOrderNotificationEvent('ORDER_CREATED', orderId).catch(() => {});
+        }
+      }
+    }
+
+    res.json({ received: true, event });
+  } catch (err: any) {
+    console.error('Webhook error:', err);
+    res.status(500).json({ error: 'Webhook processing error' });
+  }
 }

@@ -83,6 +83,10 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
   const [isSavingHub, setIsSavingHub] = useState(false);
   const [isLocatingHub, setIsLocatingHub] = useState(false);
 
+  // Two-Hub Multi-Facility State
+  const [deliveryHubs, setDeliveryHubs] = useState<any[]>([]);
+  const [isTogglingHub, setIsTogglingHub] = useState<string | null>(null);
+
   // Serviceability Test Simulator State
   const [testLat, setTestLat] = useState<string>('17.4938');
   const [testLng, setTestLng] = useState<string>('78.3995');
@@ -299,14 +303,16 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [zonesRes, storesRes, settingsRes] = await Promise.all([
+      const [zonesRes, storesRes, settingsRes, hubsRes] = await Promise.all([
         api.get('/zones/admin').catch(() => null),
         api.get('/zones/stores').catch(() => null),
         api.get('/delivery/settings').catch(() => null),
+        api.get('/delivery/admin/hubs').catch(() => null),
       ]);
 
       if (zonesRes?.data?.data) setZones(zonesRes.data.data);
       if (storesRes?.data?.data) setStores(storesRes.data.data);
+      if (hubsRes?.data?.data) setDeliveryHubs(hubsRes.data.data);
       if (settingsRes?.data?.data) {
         const s = settingsRes.data.data;
         const normalized: DeliverySettings = {
@@ -566,6 +572,24 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
       showToast(err.response?.data?.message || 'Failed to clear hub coordinates', 'error');
     } finally {
       setIsSavingHub(false);
+    }
+  };
+
+  const handleToggleHubPause = async (hubId: string, currentPaused: boolean) => {
+    try {
+      setIsTogglingHub(hubId);
+      const res = await api.put(`/delivery/admin/hubs/${hubId}/pause`, {
+        is_paused: !currentPaused,
+        pause_reason: !currentPaused ? 'Temporarily paused for replenishment / maintenance' : '',
+      });
+      if (res.data?.success) {
+        showToast(`Hub ${!currentPaused ? 'paused' : 'resumed'} successfully`);
+        fetchData();
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to update hub status', 'error');
+    } finally {
+      setIsTogglingHub(null);
     }
   };
 
@@ -1096,6 +1120,152 @@ export const AdminZonesPage: React.FC<AdminZonesPageProps> = ({ initialTab = 'se
                 </p>
               </div>
             )}
+          </div>
+
+          {/* Two-Hub Fulfillment Facilities Overview */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-wider text-brand-400 flex items-center gap-1.5">
+                  <Radio className="w-3.5 h-3.5 text-brand-400" />
+                  <span>Multi-Facility Dispatch Network</span>
+                </div>
+                <h3 className="text-base font-extrabold text-white mt-0.5">
+                  Two-Hub Fulfillment Operations (5.0 KM Geofence Per Hub)
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Each customer is automatically assigned to their nearest active hub within a strict 5.0 KM radius.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-brand-500/10 border border-brand-500/20 text-brand-300">
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>2 Active Hubs</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Hub 1: Champapet */}
+              {(() => {
+                const champapetHub = deliveryHubs.find((h) => h.hub_code === 'hub-champapet') || {
+                  id: 'hub-champapet',
+                  hub_code: 'hub-champapet',
+                  name: 'Fresh Vegetables Champapet Hub',
+                  address: 'Flat/House 9-153/4, Raji Reddy Nagar Colony, Champapet, Hyderabad, Telangana - 500059',
+                  latitude: 17.344570,
+                  longitude: 78.516972,
+                  delivery_radius_km: 5.0,
+                  is_paused: false,
+                  operating_hours_start: '06:00',
+                  operating_hours_end: '22:00',
+                };
+                const isPaused = Boolean(champapetHub.is_paused);
+                return (
+                  <div className={`p-4 rounded-2xl border transition-all ${isPaused ? 'bg-amber-950/20 border-amber-800/40' : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Building className="w-4 h-4 text-emerald-400" />
+                          <h4 className="text-sm font-extrabold text-white">{champapetHub.name}</h4>
+                        </div>
+                        <p className="text-[11px] text-brand-300 font-semibold">South &amp; East Hyderabad Dispatch Center</p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide uppercase ${isPaused ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+                        {isPaused ? 'Paused' : 'Active'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 mt-2.5 line-clamp-2">
+                      📍 {champapetHub.address}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800/80 text-[11px]">
+                      <div>
+                        <span className="text-slate-500 block">Coordinates:</span>
+                        <span className="text-slate-300 font-mono font-medium">{Number(champapetHub.latitude).toFixed(6)}, {Number(champapetHub.longitude).toFixed(6)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Max Geofence:</span>
+                        <span className="text-emerald-400 font-bold font-mono">5.0 KM Straight-Line</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60 text-[11px]">
+                      <span className="text-slate-400">Hours: <strong className="text-slate-200">{champapetHub.operating_hours_start || '06:00'} – {champapetHub.operating_hours_end || '22:00'}</strong></span>
+                      <button
+                        type="button"
+                        disabled={isTogglingHub === champapetHub.id}
+                        onClick={() => handleToggleHubPause(champapetHub.id, isPaused)}
+                        className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-all ${isPaused ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-600/40'}`}
+                      >
+                        {isTogglingHub === champapetHub.id ? 'Updating...' : isPaused ? 'Resume Hub' : 'Pause Hub'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Hub 2: KPHB */}
+              {(() => {
+                const kphbHub = deliveryHubs.find((h) => h.hub_code === 'hub-kphb') || {
+                  id: 'hub-kphb',
+                  hub_code: 'hub-kphb',
+                  name: 'Fresh Vegetables KPHB Hub',
+                  address: 'Road Number 3, Phase 3, KPHB Colony, Hyderabad, Telangana - 500072',
+                  latitude: 17.489420,
+                  longitude: 78.397227,
+                  delivery_radius_km: 5.0,
+                  is_paused: false,
+                  operating_hours_start: '06:00',
+                  operating_hours_end: '22:00',
+                };
+                const isPaused = Boolean(kphbHub.is_paused);
+                return (
+                  <div className={`p-4 rounded-2xl border transition-all ${isPaused ? 'bg-amber-950/20 border-amber-800/40' : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Building className="w-4 h-4 text-emerald-400" />
+                          <h4 className="text-sm font-extrabold text-white">{kphbHub.name}</h4>
+                        </div>
+                        <p className="text-[11px] text-brand-300 font-semibold">North-West Hyderabad &amp; IT Corridor Dispatch</p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide uppercase ${isPaused ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+                        {isPaused ? 'Paused' : 'Active'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 mt-2.5 line-clamp-2">
+                      📍 {kphbHub.address}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800/80 text-[11px]">
+                      <div>
+                        <span className="text-slate-500 block">Coordinates:</span>
+                        <span className="text-slate-300 font-mono font-medium">{Number(kphbHub.latitude).toFixed(6)}, {Number(kphbHub.longitude).toFixed(6)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Max Geofence:</span>
+                        <span className="text-emerald-400 font-bold font-mono">5.0 KM Straight-Line</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60 text-[11px]">
+                      <span className="text-slate-400">Hours: <strong className="text-slate-200">{kphbHub.operating_hours_start || '06:00'} – {kphbHub.operating_hours_end || '22:00'}</strong></span>
+                      <button
+                        type="button"
+                        disabled={isTogglingHub === kphbHub.id}
+                        onClick={() => handleToggleHubPause(kphbHub.id, isPaused)}
+                        className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-all ${isPaused ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-600/40'}`}
+                      >
+                        {isTogglingHub === kphbHub.id ? 'Updating...' : isPaused ? 'Resume Hub' : 'Pause Hub'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
           {/* Form and Interactive Map Grid */}

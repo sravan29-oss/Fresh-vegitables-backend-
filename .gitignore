@@ -15,4 +15,5 @@ ADMIN_CREDENTIALS.txt
 database/pgdata/
 database/pgsql/
 !database/backups/*.sql
+claude-ui-review-*.md
 

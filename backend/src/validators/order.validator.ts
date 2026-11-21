@@ -10,8 +10,17 @@ export const createOrderSchema = z.object({
 
 export const updateOrderStatusSchema = z.object({
   order_status: z.enum([
-    'pending', 'confirmed', 'preparing', 'packed',
-    'out_for_delivery', 'delivered', 'cancelled'
+    'pending',
+    'confirmed',
+    'preparing',
+    'ready_for_delivery',
+    'packed',
+    'out_for_delivery',
+    'delivered',
+    'cancelled',
   ]),
-  payment_status: z.enum(['pending', 'paid', 'failed', 'refunded']).optional(),
+  payment_status: z.enum(['pending', 'paid', 'failed', 'refunded', 'cod_collected', 'awaiting_cod_collection']).optional(),
+  cancellation_reason: z.string().max(500).optional(),
+  notes: z.string().max(1000).optional(),
+  delivery_notes: z.string().max(1000).optional(),
 });

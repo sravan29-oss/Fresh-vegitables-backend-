@@ -13,6 +13,7 @@ import {
 } from '../controllers/auth.controller';
 import { authenticateCustomer, authenticateAdmin } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { authRateLimiter } from '../middleware/rateLimiter';
 import {
   registerSchema,
   loginSchema,
@@ -26,22 +27,20 @@ import {
 
 const router = Router();
 
-// Customer Google Authentication (Sign-up + Login)
-router.post('/google', validate(googleAuthSchema), googleAuth);
+// Customer Google Authentication (Sole Customer Sign-up & Login entrypoint)
+router.post('/google', authRateLimiter, validate(googleAuthSchema), googleAuth);
 
-// Customer Firebase Phone OTP Auth
-router.post('/firebase/register', validate(firebaseRegisterSchema), firebaseRegister);
-router.post('/firebase/login', validate(firebaseLoginSchema), firebaseLogin);
-router.post('/firebase/check-phone', validate(checkPhoneSchema), checkPhoneRegistered);
-
-// Customer auth & session
-router.post('/register', validate(registerSchema), register);
-router.post('/login', validate(loginSchema), login);
-router.post('/refresh', refreshToken);
+// Disabled legacy customer authentication endpoints (return 403 Forbidden)
+router.post('/firebase/register', firebaseRegister);
+router.post('/firebase/login', firebaseLogin);
+router.post('/firebase/check-phone', checkPhoneRegistered);
+router.post('/register', register);
+router.post('/login', login);
+router.post('/refresh', authRateLimiter, refreshToken);
 router.get('/profile', authenticateCustomer, getProfile);
 router.put('/profile', authenticateCustomer, validate(updateProfileSchema), updateProfile);
 
 // Admin auth — completely untouched
-router.post('/admin/login', validate(adminLoginSchema), adminLogin);
+router.post('/admin/login', authRateLimiter, validate(adminLoginSchema), adminLogin);
 
 export default router;

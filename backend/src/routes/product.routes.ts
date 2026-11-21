@@ -9,6 +9,7 @@ import {
   deleteProduct,
   restoreAdminProducts,
 } from '../controllers/product.controller';
+import { getProductReviews } from '../controllers/review.controller';
 import { authenticateAdmin } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { upload, setUploadType } from '../middleware/upload';
@@ -21,6 +22,7 @@ router.get('/', getProducts);
 router.get('/sync/restore-admin-data', restoreAdminProducts);
 router.get('/admin/all', authenticateAdmin, adminGetProducts);
 router.get('/id/:id', getProductById);
+router.get('/:productId/reviews', getProductReviews);
 router.get('/:slug', getProductBySlug);
 
 // Admin routes

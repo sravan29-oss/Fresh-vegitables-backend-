@@ -135,74 +135,12 @@ export async function getWallet(req: AuthRequest, res: Response, next: NextFunct
 
 export async function topupWallet(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user ? await resolveCustomerUserId(req.user) : '11111111-1111-1111-1111-111111111111';
-    const amount = Number(req.body.amount);
-
-    if (!amount || amount <= 0) {
-      throw new BadRequestError('Topup amount must be greater than 0');
-    }
-
-    let wallet: any = null;
-    let newTx: any = null;
-
-    try {
-      const walletId = uuidv4();
-      const upsertRes = await db.query(
-        `INSERT INTO wallets (id, user_id, balance, currency, is_locked, updated_at)
-         VALUES ($1, $2, $3, 'INR', false, NOW())
-         ON CONFLICT (user_id)
-         DO UPDATE SET balance = wallets.balance + $3, updated_at = NOW()
-         RETURNING *`,
-        [walletId, userId, amount]
-      );
-      wallet = upsertRes.rows[0];
-      wallet.balance = Number(wallet.balance);
-
-      const txId = uuidv4();
-      const txRes = await db.query(
-        `INSERT INTO wallet_transactions (id, wallet_id, amount, transaction_type, balance_after, reference_type, reference_id, description, status)
-         VALUES ($1, $2, $3, 'CREDIT', $4, 'topup', $5, $6, 'SUCCESS')
-         RETURNING *`,
-        [txId, wallet.id, amount, wallet.balance, `top_${Date.now()}`, `Added ₹${amount} to wallet via Instant UPI`]
-      );
-      newTx = txRes.rows[0];
-    } catch {
-      // Memory fallback
-      wallet = (memoryStore as any).wallets.find((w: any) => w.user_id === userId);
-      if (!wallet) {
-        wallet = {
-          id: uuidv4(),
-          user_id: userId,
-          balance: 0.0,
-          currency: 'INR',
-          is_locked: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        (memoryStore as any).wallets.push(wallet);
-      }
-      wallet.balance = Number((wallet.balance + amount).toFixed(2));
-      wallet.updated_at = new Date().toISOString();
-
-      newTx = {
-        id: uuidv4(),
-        wallet_id: wallet.id,
-        amount,
-        transaction_type: 'CREDIT',
-        balance_after: wallet.balance,
-        reference_type: 'topup',
-        reference_id: `top_${Date.now()}`,
-        description: `Added ₹${amount} to wallet via Instant UPI`,
-        status: 'SUCCESS',
-        created_at: new Date().toISOString(),
-      };
-      (memoryStore as any).wallet_transactions.unshift(newTx);
-    }
-
-    sendSuccess(res, `₹${amount} successfully added to wallet`, {
-      wallet,
-      transaction: newTx,
-    });
+    // SECURITY ENFORCEMENT:
+    // Wallet balance cannot be directly injected via unverified client requests.
+    // Real wallet top-ups require verified payment gateway webhook signatures.
+    throw new BadRequestError(
+      'Online wallet top-up is temporarily disabled pending production payment gateway activation. Cash on Delivery is available for all orders.'
+    );
   } catch (error) {
     next(error);
   }

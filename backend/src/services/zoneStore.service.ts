@@ -6,6 +6,8 @@ const ZONES_FILE = path.join(__dirname, '..', 'config', 'delivery_zones.json');
 
 export interface DeliveryZoneItem {
   id: string;
+  hub_id?: string;
+  hub_code?: string;
   name: string;
   pincodes: string[];
   delivery_radius_km: number;
@@ -32,6 +34,8 @@ export interface DeliveryZoneItem {
 const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
   {
     id: 'zone-champapet',
+    hub_id: 'hub-champapet',
+    hub_code: 'champapet',
     name: 'Champapet & Saroornagar Zone',
     pincodes: ['500059', '500079', '500035', '500060'],
     delivery_radius_km: 5.0,
@@ -52,6 +56,8 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
   },
   {
     id: 'zone-kphb',
+    hub_id: 'hub-kphb',
+    hub_code: 'kphb',
     name: 'Kukatpally & KPHB Zone',
     pincodes: ['500072', '500085', '500090', '500018', '500038'],
     delivery_radius_km: 5.0,
@@ -72,6 +78,8 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
   },
   {
     id: 'zone-hitech',
+    hub_id: 'hub-kphb',
+    hub_code: 'kphb',
     name: 'Hitech City, Madhapur & Gachibowli',
     pincodes: ['500081', '500032', '500084', '500046', '500033'],
     delivery_radius_km: 5.0,
@@ -92,6 +100,8 @@ const DEFAULT_FALLBACK_ZONES: DeliveryZoneItem[] = [
   },
   {
     id: 'zone-miyapur',
+    hub_id: 'hub-kphb',
+    hub_code: 'kphb',
     name: 'Miyapur, Chandanagar & BHEL',
     pincodes: ['500049', '500050', '500019', '502032'],
     delivery_radius_km: 5.0,

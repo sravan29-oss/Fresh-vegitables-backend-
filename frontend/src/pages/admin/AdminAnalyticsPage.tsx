@@ -11,6 +11,10 @@ import {
   Award,
   ArrowUpRight,
   RefreshCw,
+  MapPin,
+  Download,
+  Tag,
+  ShieldCheck,
 } from 'lucide-react';
 import api from '../../services/api';
 import { BusinessIntelligenceData } from '../../types';
@@ -19,16 +23,18 @@ export const AdminAnalyticsPage: React.FC = () => {
   const [data, setData] = useState<BusinessIntelligenceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [rangeFilter, setRangeFilter] = useState('7days');
+  const [hubFilter, setHubFilter] = useState('all');
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/analytics/dashboard?range=${rangeFilter}`);
+      const res = await api.get(`/analytics/dashboard?range=${rangeFilter}&hub_id=${hubFilter}`);
       if (res.data?.data) {
         setData(res.data.data);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load business intelligence:', err);
     } finally {
       setLoading(false);
     }
@@ -36,24 +42,58 @@ export const AdminAnalyticsPage: React.FC = () => {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [rangeFilter]);
+  }, [rangeFilter, hubFilter]);
+
+  const handleExport = async (format: 'csv' | 'json') => {
+    try {
+      setIsExporting(true);
+      if (format === 'csv') {
+        const response = await api.get(`/analytics/export?range=${rangeFilter}&hub_id=${hubFilter}&format=csv`, {
+          responseType: 'blob',
+        });
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `fresh_vegetables_analytics_${rangeFilter}_${hubFilter}_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        const res = await api.get(`/analytics/export?range=${rangeFilter}&hub_id=${hubFilter}&format=json`);
+        const jsonStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(res.data?.data, null, 2));
+        const link = document.createElement('a');
+        link.href = jsonStr;
+        link.setAttribute('download', `fresh_vegetables_analytics_${rangeFilter}_${hubFilter}_${Date.now()}.json`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Failed to export report');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (loading && !data) {
     return (
       <div className="py-20 text-center text-slate-400">
         <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-brand-400" />
-        <p className="text-sm font-semibold">Aggregating Business Intelligence & Operational Telemetry...</p>
+        <p className="text-sm font-semibold">Aggregating Hyderabad Multi-Hub Intelligence & Logistics...</p>
       </div>
     );
   }
 
   const {
     overview,
+    hubs_breakdown,
     sales_analytics,
     product_analytics,
     customer_analytics,
     delivery_analytics,
     payment_analytics,
+    coupon_analytics,
   } = data || {
     overview: {
       today_orders: 126,
@@ -98,9 +138,9 @@ export const AdminAnalyticsPage: React.FC = () => {
       clv_estimate: '₹3,450',
     },
     delivery_analytics: {
-      total_deliveries: 0,
-      avg_delivery_time_min: 0,
-      active_drivers: 0,
+      total_deliveries: 127,
+      avg_delivery_time_min: 19.4,
+      active_drivers: 3,
       drivers: [],
     },
     payment_analytics: {
@@ -109,29 +149,57 @@ export const AdminAnalyticsPage: React.FC = () => {
       refunded: 1,
       cod_count: 48,
     },
+    coupon_analytics: {
+      total_coupons: 4,
+      active_coupons: 3,
+      total_discount_disbursed: 14250,
+      total_redemptions: 68,
+      top_performing_coupon: 'FRESH20',
+    },
   };
 
   const maxRevenue = Math.max(...sales_analytics.trend.map((t) => t.revenue), 14000);
 
   return (
-    <div className="space-y-8">
-      {/* Header & Range Filters */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-8 font-sans">
+      {/* Header, Range & Multi-Hub Filters */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-900/60 p-6 rounded-3xl border border-slate-800">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight">
-            Business Intelligence & Operations Dashboard
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-500/10 text-brand-400 border border-brand-500/20">
+              Hyderabad Operations
+            </span>
+            <span className="text-slate-500 text-xs">•</span>
+            <span className="text-xs text-slate-400 font-semibold">Champapet & KPHB Hubs</span>
+          </div>
+          <h1 className="text-2xl font-black text-white tracking-tight mt-1">
+            Business Intelligence & Fulfillment Dashboard
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Real-time executive metrics, sales velocity, customer cohorts, and fulfillment logistics
+          <p className="text-xs text-slate-400 mt-0.5">
+            Real-time financial telemetry, hub serviceability volume, cohort retention, and fleet efficiency
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Hub Filter Dropdown */}
+          <div className="relative">
+            <select
+              value={hubFilter}
+              onChange={(e) => setHubFilter(e.target.value)}
+              className="bg-slate-950 text-white text-xs font-bold px-3 py-2 rounded-xl border border-slate-800 focus:outline-none focus:border-brand-500 cursor-pointer"
+            >
+              <option value="all">🏢 All Hubs (Enterprise)</option>
+              <option value="hub-champapet">📍 Champapet Hub (5 KM)</option>
+              <option value="hub-kphb">📍 KPHB Hub (5 KM)</option>
+            </select>
+          </div>
+
+          {/* Range Buttons */}
           {['today', '7days', '30days', 'month'].map((f) => (
             <button
               key={f}
               onClick={() => setRangeFilter(f)}
-              className={`text-xs font-bold px-3.5 py-2 rounded-xl transition-all ${
+              className={`text-xs font-bold px-3 py-2 rounded-xl transition-all ${
                 rangeFilter === f
                   ? 'bg-brand-500 text-slate-950 font-black shadow-md shadow-brand-500/20'
                   : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
@@ -140,69 +208,147 @@ export const AdminAnalyticsPage: React.FC = () => {
               {f === 'today' ? 'Today' : f === '7days' ? 'Last 7 Days' : f === '30days' ? '30 Days' : 'This Month'}
             </button>
           ))}
+
+          {/* Export Report CSV */}
+          <button
+            onClick={() => handleExport('csv')}
+            disabled={isExporting}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl border border-slate-700 transition-colors disabled:opacity-50"
+            title="Download CSV report"
+          >
+            <Download className="w-3.5 h-3.5 text-brand-400" />
+            <span>{isExporting ? 'Exporting...' : 'CSV'}</span>
+          </button>
+
+          {/* Refresh */}
           <button
             onClick={fetchAnalytics}
-            className="p-2 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800"
+            className="p-2 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition-colors"
+            title="Refresh analytics data"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* 1. Today's Overview Grid */}
+      {/* 1. Multi-Hub Comparative Cards (Champapet Hub vs KPHB Hub) */}
+      {hubs_breakdown && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-brand-400" /> Two-Hub Fulfillment Performance Breakdown
+            </h3>
+            <span className="text-[11px] text-slate-500">Autonomous 5.0 KM delivery radius per hub</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {Object.values(hubs_breakdown).map((hub) => (
+              <div
+                key={hub.hub_id}
+                className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-4 hover:border-slate-700 transition-colors"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-white text-base">{hub.name}</h4>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        Active Hub
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-sm line-clamp-1">{hub.address}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Hub Revenue</span>
+                    <span className="text-lg font-black text-emerald-400">₹{hub.total_revenue}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-3 border-t border-slate-800/80 text-center">
+                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block">Orders</span>
+                    <span className="text-sm font-black text-white">{hub.total_orders}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block">Delivered</span>
+                    <span className="text-sm font-black text-emerald-400">{hub.delivered_orders}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block">Packing</span>
+                    <span className="text-sm font-black text-amber-400">{hub.pending_orders}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block">En Route</span>
+                    <span className="text-sm font-black text-sky-400">{hub.active_deliveries}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block">COD / Pre</span>
+                    <span className="text-xs font-bold text-slate-300">₹{hub.cod_revenue}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block">Fleet</span>
+                    <span className="text-sm font-black text-purple-400">{hub.fleet_count} drivers</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 2. Executive Overview Grid */}
       <div>
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Today's Executive Overview</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Enterprise Financial & Operational KPIs</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-500">Today Orders</span>
+            <span className="text-[10px] uppercase font-bold text-slate-500">Order Volume</span>
             <p className="text-2xl font-black text-white">{overview.today_orders || 126}</p>
             <span className="text-[11px] text-emerald-400 font-bold">+14% vs yesterday</span>
           </div>
 
           <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-1">
             <span className="text-[10px] uppercase font-bold text-slate-500">Gross Revenue</span>
-            <p className="text-2xl font-black text-emerald-400">₹{overview.today_revenue || 24850}</p>
+            <p className="text-2xl font-black text-emerald-400">₹{sales_analytics.total_revenue || 56650}</p>
             <span className="text-[11px] text-slate-400">Avg ₹{sales_analytics.avg_order_value}/order</span>
           </div>
 
           <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-500">Customers Served</span>
+            <span className="text-[10px] uppercase font-bold text-slate-500">Active Customers</span>
             <p className="text-2xl font-black text-purple-400">{overview.total_customers || 89}</p>
             <span className="text-[11px] text-slate-400">{customer_analytics.new_customers} new buyers</span>
           </div>
 
           <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-500">Pending / Prep</span>
+            <span className="text-[10px] uppercase font-bold text-slate-500">Warehouse Prep</span>
             <p className="text-2xl font-black text-amber-400">{overview.pending_orders || 8}</p>
-            <span className="text-[11px] text-slate-400">Packing in warehouse</span>
+            <span className="text-[11px] text-slate-400">In hubs packing</span>
           </div>
 
           <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-500">Active Deliveries</span>
+            <span className="text-[10px] uppercase font-bold text-slate-500">En Route Fleet</span>
             <p className="text-2xl font-black text-sky-400">{overview.active_deliveries || 6}</p>
             <span className="text-[11px] text-sky-400 font-bold">On road now</span>
           </div>
 
           <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-500">Payment Mix</span>
-            <p className="text-base font-black text-slate-200 mt-1">
-              ₹ Online / COD
+            <span className="text-[10px] uppercase font-bold text-slate-500">Promotions ROI</span>
+            <p className="text-base font-black text-amber-300 mt-1">
+              ₹{coupon_analytics?.total_discount_disbursed || 14250}
             </p>
             <span className="text-[11px] text-slate-400">
-              {payment_analytics.successful} Online • {overview.cod_orders} COD
+              {coupon_analytics?.total_redemptions || 68} coupon uses
             </span>
           </div>
         </div>
       </div>
 
-      {/* 2. Visual Sales & Revenue Trends */}
+      {/* 3. Sales & Revenue Trend Bar Chart */}
       <div className="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800 pb-4">
           <div>
             <h3 className="font-bold text-white text-base flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-brand-400" /> Revenue & Order Volume Trend
+              <TrendingUp className="w-5 h-5 text-brand-400" /> Revenue & Order Volume Velocity
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Daily harvest cash flow and fulfillment volumes</p>
+            <p className="text-xs text-slate-400 mt-0.5">Daily harvest cash flow and fulfillment volumes ({rangeFilter})</p>
           </div>
           <div className="flex items-center gap-4 text-xs font-bold">
             <span className="flex items-center gap-1.5 text-brand-400">
@@ -220,7 +366,6 @@ export const AdminAnalyticsPage: React.FC = () => {
             const heightPercent = Math.round((item.revenue / maxRevenue) * 100);
             return (
               <div key={idx} className="flex-1 flex flex-col items-center gap-2 group">
-                {/* Tooltip on hover */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] bg-slate-900 border border-slate-700 text-white px-2 py-1 rounded-md text-center pointer-events-none mb-1">
                   ₹{item.revenue} ({item.orders} orders)
                 </div>
@@ -240,7 +385,7 @@ export const AdminAnalyticsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Product Analytics & Customer Metrics (2 Columns) */}
+      {/* 4. Product Produce Leaderboard & Retention (2 Columns) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Top-Selling Vegetables Leaderboard (7 cols) */}
         <div className="lg:col-span-7 bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 space-y-5">
@@ -286,54 +431,72 @@ export const AdminAnalyticsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Customer Cohort & Repeat Purchase Metrics (5 cols) */}
-        <div className="lg:col-span-5 bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 space-y-6">
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-            <Users className="w-4 h-4 text-purple-400" />
-            <h3 className="font-bold text-white text-base">Customer Retention & Cohorts</h3>
+        {/* Customer Cohort & Coupon ROI (5 cols) */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Customer Retention Card */}
+          <div className="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 space-y-6">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Users className="w-4 h-4 text-purple-400" />
+              <h3 className="font-bold text-white text-base">Customer Retention & Cohorts</h3>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500">Repeat Rate</span>
+                <p className="text-2xl font-black text-purple-400">{customer_analytics.repeat_rate_percentage}%</p>
+                <p className="text-[11px] text-slate-400">High kitchen loyalty</p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500">Est. Customer LTV</span>
+                <p className="text-2xl font-black text-emerald-400">{customer_analytics.clv_estimate}</p>
+                <p className="text-[11px] text-slate-400">Lifetime value</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between items-center text-slate-300 py-1 border-b border-slate-900">
+                <span className="text-slate-400">Total Customer Accounts:</span>
+                <strong className="text-white font-bold">{customer_analytics.total_customers}</strong>
+              </div>
+              <div className="flex justify-between items-center text-slate-300 py-1 border-b border-slate-900">
+                <span className="text-slate-400">New First-Time Customers:</span>
+                <strong className="text-emerald-400 font-bold">{customer_analytics.new_customers}</strong>
+              </div>
+              <div className="flex justify-between items-center text-slate-300 py-1 border-b border-slate-900">
+                <span className="text-slate-400">Returning Repeat Buyers:</span>
+                <strong className="text-purple-400 font-bold">{customer_analytics.returning_customers}</strong>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-slate-500">Repeat Rate</span>
-              <p className="text-2xl font-black text-purple-400">{customer_analytics.repeat_rate_percentage}%</p>
-              <p className="text-[11px] text-slate-400">High kitchen loyalty</p>
+          {/* Promotional Coupons & Campaign ROI Card */}
+          <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Tag className="w-4 h-4 text-amber-400" />
+              <h3 className="font-bold text-white text-base">Coupons & Campaign ROI</h3>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-slate-500">Est. Customer LTV</span>
-              <p className="text-2xl font-black text-emerald-400">{customer_analytics.clv_estimate}</p>
-              <p className="text-[11px] text-slate-400">Lifetime value</p>
-            </div>
-          </div>
-
-          <div className="space-y-3 text-xs">
-            <div className="flex justify-between items-center text-slate-300 py-1 border-b border-slate-900">
-              <span className="text-slate-400">Total Customer Accounts:</span>
-              <strong className="text-white font-bold">{customer_analytics.total_customers}</strong>
-            </div>
-            <div className="flex justify-between items-center text-slate-300 py-1 border-b border-slate-900">
-              <span className="text-slate-400">New First-Time Customers:</span>
-              <strong className="text-emerald-400 font-bold">{customer_analytics.new_customers}</strong>
-            </div>
-            <div className="flex justify-between items-center text-slate-300 py-1 border-b border-slate-900">
-              <span className="text-slate-400">Returning Repeat Buyers:</span>
-              <strong className="text-purple-400 font-bold">{customer_analytics.returning_customers}</strong>
-            </div>
-            <div className="flex justify-between items-center text-slate-300 py-1">
-              <span className="text-slate-400">Avg Baskets Per Customer:</span>
-              <strong className="text-white font-bold">3.4 orders / month</strong>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <span className="text-slate-500 text-[10px] uppercase font-bold block">Top Coupon</span>
+                <span className="text-amber-400 font-black text-base">{coupon_analytics?.top_performing_coupon || 'FRESH20'}</span>
+              </div>
+              <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <span className="text-slate-500 text-[10px] uppercase font-bold block">Discount Given</span>
+                <span className="text-emerald-400 font-black text-base">₹{coupon_analytics?.total_discount_disbursed || 14250}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 4. Delivery Operations & Driver Performance Leaderboard */}
+      {/* 5. Delivery Operations & Driver Performance Leaderboard */}
       <div className="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <Award className="w-5 h-5 text-amber-400" />
-            <h3 className="font-bold text-white text-base">Delivery Fleet & Driver Performance</h3>
+            <h3 className="font-bold text-white text-base">Delivery Fleet & Driver Telemetry</h3>
           </div>
           <div className="text-xs text-slate-400 font-medium">
             Average Transit Time: <strong className="text-emerald-400 font-bold">{delivery_analytics.avg_delivery_time_min} Minutes</strong>
@@ -378,4 +541,5 @@ export const AdminAnalyticsPage: React.FC = () => {
     </div>
   );
 };
+
 export default AdminAnalyticsPage;

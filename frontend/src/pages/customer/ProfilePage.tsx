@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, MapPin, Plus, Trash2, CheckCircle2, Phone, Mail, Navigation, AlertCircle, Loader2, CheckCircle, LogOut, Package, Wallet } from 'lucide-react';
+import { User, MapPin, Plus, Trash2, CheckCircle2, Phone, Mail, Navigation, AlertCircle, Loader2, CheckCircle, LogOut, Package, Wallet, ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
 import { Address } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -147,7 +147,7 @@ export const ProfilePage: React.FC = () => {
         serviceable: isServ,
         zoneName: isServ ? 'Express Delivery Hub' : undefined,
         message: isServ
-          ? 'Serviceable delivery zone! Express 30 mins delivery.'
+          ? 'Serviceable delivery zone! Express delivery active.'
           : `Currently unavailable for delivery: Pincode ${clean} is outside our active delivery zones.`,
       });
     }
@@ -391,131 +391,141 @@ export const ProfilePage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-8 font-sans animate-slide-up">
       <SEOHead title="Account & Addresses | Fresh Vegetables Organic" noindex={true} />
+
+      {/* Breadcrumb */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-semibold text-ink-500">
+        <Link to="/" className="hover:text-forest-900 transition-colors">Home</Link>
+        <span className="text-ink-300">/</span>
+        <span className="text-ink-900 font-bold">Profile & Addresses</span>
+      </nav>
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Account & Addresses</h1>
-          <p className="text-xs text-slate-500 mt-1">Manage your personal information, orders, and delivery destinations</p>
+          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">Account & Addresses</h1>
+          <p className="text-xs sm:text-sm text-ink-500 mt-1">Manage your customer profile, orders, and delivery addresses</p>
         </div>
         <button
           type="button"
           onClick={handleLogout}
-          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/90 text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2.5 rounded-full bg-tomato-50 hover:bg-tomato-100 text-tomato-600 border border-tomato-200 text-xs font-bold transition-all cursor-pointer min-h-[40px]"
           title="Sign Out of Account"
         >
-          <LogOut className="w-4 h-4 text-rose-500" />
+          <LogOut className="w-4 h-4 text-tomato-500" />
           <span>Sign Out</span>
         </button>
       </div>
 
-      {/* Quick Navigation Cards on Mobile & Tablet */}
+      {/* Quick Navigation Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Link
           to="/orders"
-          className="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:border-emerald-500 hover:shadow-xs transition-all group"
+          className="flex items-center gap-3 p-4 rounded-2xl bg-surface border border-line shadow-soft hover:border-leaf-500/50 hover:shadow-soft-md transition-all group"
         >
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#0c831f] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Package className="w-4.5 h-4.5" />
+          <div className="w-10 h-10 rounded-xl bg-sage-100 text-forest-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Package className="w-5 h-5" />
           </div>
           <div className="overflow-hidden">
-            <p className="font-extrabold text-xs text-slate-900 group-hover:text-[#0c831f] transition-colors truncate">My Orders</p>
-            <p className="text-[10px] text-slate-400 font-medium truncate">Track & history</p>
+            <p className="font-bold text-xs sm:text-sm text-ink-900 group-hover:text-forest-900 transition-colors truncate">My Orders</p>
+            <p className="text-[11px] text-ink-400 font-medium truncate">Track live & history</p>
           </div>
         </Link>
 
         <Link
           to="/wallet"
-          className="flex items-center gap-3 p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:border-amber-500 hover:shadow-xs transition-all group"
+          className="flex items-center gap-3 p-4 rounded-2xl bg-surface border border-line shadow-soft hover:border-marigold-500/50 hover:shadow-soft-md transition-all group"
         >
-          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Wallet className="w-4.5 h-4.5" />
+          <div className="w-10 h-10 rounded-xl bg-cream-200 text-marigold-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Wallet className="w-5 h-5" />
           </div>
           <div className="overflow-hidden">
-            <p className="font-extrabold text-xs text-slate-900 group-hover:text-amber-600 transition-colors truncate">Wallet</p>
-            <p className="text-[10px] text-slate-400 font-medium truncate">Credits & balance</p>
+            <p className="font-bold text-xs sm:text-sm text-ink-900 group-hover:text-forest-900 transition-colors truncate">Wallet & Rewards</p>
+            <p className="text-[11px] text-ink-400 font-medium truncate">Credits & balance</p>
           </div>
         </Link>
 
         <button
           type="button"
           onClick={handleLogout}
-          className="col-span-2 sm:col-span-1 flex items-center gap-3 p-3.5 rounded-2xl bg-rose-50/60 hover:bg-rose-50 border border-rose-200/80 shadow-2xs hover:border-rose-400 transition-all text-left cursor-pointer group"
+          className="col-span-2 sm:col-span-1 flex items-center gap-3 p-4 rounded-2xl bg-surface hover:bg-tomato-50/50 border border-line shadow-soft hover:border-tomato-300 transition-all text-left cursor-pointer group"
         >
-          <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <LogOut className="w-4.5 h-4.5" />
+          <div className="w-10 h-10 rounded-xl bg-tomato-50 text-tomato-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <LogOut className="w-5 h-5" />
           </div>
           <div className="overflow-hidden">
-            <p className="font-extrabold text-xs text-rose-600 truncate">Sign Out</p>
-            <p className="text-[10px] text-rose-400 font-medium truncate">End session safely</p>
+            <p className="font-bold text-xs sm:text-sm text-tomato-600 truncate">Sign Out</p>
+            <p className="text-[11px] text-ink-400 font-medium truncate">End session safely</p>
           </div>
         </button>
       </div>
 
       {message && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-2xl">
-          ✓ {message}
+        <div className="p-4 bg-sage-50 border border-leaf-500/30 text-forest-900 text-xs font-bold rounded-2xl flex items-center gap-2 shadow-soft">
+          <CheckCircle className="w-4 h-4 text-forest-700" />
+          <span>{message}</span>
         </div>
       )}
 
       {/* 1. Profile Details Card */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
-        <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-          <User className="w-5 h-5 text-brand-600" />
-          <h3 className="text-lg font-bold text-slate-900">Personal Information</h3>
+      <div className="bg-surface p-6 sm:p-8 rounded-3xl border border-line shadow-soft space-y-5">
+        <div className="flex items-center gap-2 pb-3 border-b border-line">
+          <User className="w-5 h-5 text-forest-700" />
+          <h2 className="font-serif font-bold text-lg text-ink-900">Personal Information</h2>
         </div>
 
         <form onSubmit={handleUpdateProfile} className="space-y-4 max-w-lg text-xs">
           <div>
-            <label className="font-bold text-slate-700 block mb-1">Full Name</label>
+            <label className="font-bold text-ink-800 block mb-1">Full Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full p-3 border rounded-xl bg-slate-50 focus:bg-white"
+              className="input-organic w-full p-3 border border-line rounded-xl bg-cream-50/50 focus:bg-white text-ink-900 font-medium"
             />
           </div>
 
           <div>
-            <label className="font-bold text-slate-700 block mb-1">Email Address (Read-only)</label>
+            <label className="font-bold text-ink-800 block mb-1">Email Address (Read-only)</label>
             <input
               type="email"
               disabled
               value={user?.email || ''}
-              className="w-full p-3 border rounded-xl bg-slate-100 text-slate-500 cursor-not-allowed"
+              className="w-full p-3 border border-line rounded-xl bg-cream-100 text-ink-400 cursor-not-allowed font-medium"
             />
           </div>
 
           <div>
-            <label className="font-bold text-slate-700 block mb-1">Mobile Number</label>
+            <label className="font-bold text-ink-800 block mb-1">Mobile Number (10 digits)</label>
             <input
               type="tel"
               value={mobile}
               onChange={(e) => setMobile(e.target.value)}
-              className="w-full p-3 border rounded-xl bg-slate-50 focus:bg-white"
+              className="input-organic w-full p-3 border border-line rounded-xl bg-cream-50/50 focus:bg-white text-ink-900 font-medium font-mono"
             />
           </div>
 
           <button
             type="submit"
             disabled={isUpdating}
-            className="bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition-colors"
+            className="btn-pill-primary bg-forest-900 hover:bg-forest-850 text-cream-50 font-bold text-xs px-6 py-3 rounded-full shadow-soft transition-all min-h-[44px] cursor-pointer disabled:opacity-50"
           >
-            {isUpdating ? 'Saving...' : 'Save Profile Changes'}
+            {isUpdating ? 'Saving Changes...' : 'Save Profile Changes'}
           </button>
         </form>
       </div>
 
       {/* 2. Addresses Management */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div className="bg-surface p-6 sm:p-8 rounded-3xl border border-line shadow-soft space-y-5">
+        <div className="flex items-center justify-between pb-3 border-b border-line flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-brand-600" />
-            <h3 className="text-lg font-bold text-slate-900">Saved Addresses</h3>
+            <MapPin className="w-5 h-5 text-forest-700" />
+            <h2 className="font-serif font-bold text-lg text-ink-900">Saved Delivery Addresses</h2>
           </div>
           <button
+            type="button"
             onClick={handleToggleAddAddress}
-            className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 cursor-pointer"
+            className="text-xs font-bold text-forest-700 hover:text-forest-900 flex items-center gap-1.5 cursor-pointer py-1 px-3 rounded-full hover:bg-cream-100 transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>Add New Address</span>
@@ -523,23 +533,23 @@ export const ProfilePage: React.FC = () => {
         </div>
 
         {isAddingAddress && (
-          <form onSubmit={handleCreateAddress} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 text-xs mb-6">
-            <div className="flex items-center justify-between">
-              <h4 className="font-bold text-slate-800 text-sm">Add Delivery Address</h4>
+          <form onSubmit={handleCreateAddress} className="p-5 sm:p-6 rounded-2xl bg-cream-50 border border-line space-y-4 text-xs mb-6 shadow-soft animate-slide-up">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="font-serif font-bold text-ink-900 text-sm">Add New Address</h3>
               <button
                 type="button"
                 onClick={detectCurrentLocation}
                 disabled={isDetectingLocation}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-bold rounded-xl border border-brand-200 transition-all cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-surface hover:bg-cream-100 text-forest-800 text-xs font-bold rounded-full border border-line transition-all cursor-pointer disabled:opacity-50 min-h-[38px] shadow-soft"
               >
                 {isDetectingLocation ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Auto-Fetching...</span>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-forest-700" />
+                    <span>Auto-Fetching GPS...</span>
                   </>
                 ) : (
                   <>
-                    <Navigation className="w-3.5 h-3.5 text-brand-600 fill-current" />
+                    <Navigation className="w-3.5 h-3.5 text-forest-700 fill-current" />
                     <span>Auto-Fetch GPS</span>
                   </>
                 )}
@@ -548,30 +558,30 @@ export const ProfilePage: React.FC = () => {
 
             {/* Out of zone warning banner */}
             {zoneServiceability.checked && !zoneServiceability.serviceable && (
-              <div className="p-3.5 bg-rose-50 border-2 border-rose-300 rounded-xl flex items-start gap-2 text-rose-800">
-                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+              <div className="p-3.5 bg-marigold-50 border border-marigold-200 rounded-xl flex items-start gap-2.5 text-ink-900 shadow-soft">
+                <AlertCircle className="w-4 h-4 text-marigold-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold text-xs uppercase text-rose-700">Currently Unavailable for Delivery</p>
-                  <p className="text-xs text-rose-600 mt-0.5 font-medium">
-                    {zoneServiceability.message || 'We do not deliver to this location yet.'}
+                  <p className="font-bold text-xs uppercase font-serif text-ink-900">Currently Outside Service Zone</p>
+                  <p className="text-xs text-ink-600 mt-0.5 font-medium leading-relaxed">
+                    {zoneServiceability.message || 'We deliver within 5 km of our Champapet & KPHB hubs.'}
                   </p>
                 </div>
               </div>
             )}
 
             {zoneServiceability.checked && zoneServiceability.serviceable && (
-              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800 text-xs font-bold">
-                <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <div className="p-3 bg-sage-50 border border-leaf-500/30 rounded-xl flex items-center gap-2 text-forest-900 text-xs font-bold shadow-soft">
+                <CheckCircle className="w-4 h-4 text-forest-700 shrink-0" />
                 <span>{zoneServiceability.message || `Serviceable: ${zoneServiceability.zoneName}`}</span>
               </div>
             )}
 
-            <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
-              <span className="font-bold text-slate-700 text-xs">Recipient Details</span>
+            <div className="flex items-center justify-between pb-1 border-b border-line">
+              <span className="font-bold text-ink-800 text-xs">Recipient Details</span>
               <button
                 type="button"
                 onClick={fetchUserBasicDetails}
-                className="text-[11px] font-bold text-[#0c831f] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-[11px] font-bold text-forest-700 hover:text-forest-900 flex items-center gap-1 cursor-pointer"
                 title="Auto-fetch your profile details"
               >
                 <User className="w-3.5 h-3.5" />
@@ -579,7 +589,7 @@ export const ProfilePage: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <input
                   type="text"
@@ -587,11 +597,11 @@ export const ProfilePage: React.FC = () => {
                   required
                   value={newAddress.full_name}
                   onChange={(e) => setNewAddress({ ...newAddress, full_name: e.target.value })}
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 text-xs font-medium"
+                  className="input-organic w-full p-3 bg-surface border border-line rounded-xl focus:outline-none focus:border-leaf-500 text-xs font-medium text-ink-900"
                 />
               </div>
               <div className="relative flex items-center">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-extrabold text-slate-600 text-[11px] select-none bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-ink-600 text-xs select-none">
                   +91
                 </span>
                 <input
@@ -605,43 +615,43 @@ export const ProfilePage: React.FC = () => {
                     const clean = raw.length === 12 && raw.startsWith('91') ? raw.slice(2) : raw.slice(0, 10);
                     setNewAddress({ ...newAddress, phone: clean });
                   }}
-                  className="w-full pl-12 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 text-xs font-medium tracking-wider"
+                  className="input-organic w-full pl-12 pr-3 py-3 bg-surface border border-line rounded-xl focus:outline-none focus:border-leaf-500 text-xs font-mono font-medium text-ink-900"
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
                 type="text"
-                placeholder="House / Flat No."
+                placeholder="House / Flat No. *"
                 required
                 value={newAddress.house_number}
                 onChange={(e) => setNewAddress({ ...newAddress, house_number: e.target.value })}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
+                className="input-organic p-3 bg-surface border border-line rounded-xl text-xs font-medium text-ink-900"
               />
               <input
                 type="text"
                 placeholder="Street / Colony"
                 value={newAddress.street}
                 onChange={(e) => setNewAddress({ ...newAddress, street: e.target.value })}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
+                className="input-organic p-3 bg-surface border border-line rounded-xl text-xs font-medium text-ink-900"
               />
             </div>
             <input
               type="text"
-              placeholder="Area / Locality"
+              placeholder="Area / Locality *"
               required
               value={newAddress.area}
               onChange={(e) => setNewAddress({ ...newAddress, area: e.target.value })}
-              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
+              className="input-organic w-full p-3 bg-surface border border-line rounded-xl text-xs font-medium text-ink-900"
             />
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <input
                 type="text"
                 placeholder="City"
                 required
                 value={newAddress.city}
                 onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
+                className="input-organic p-3 bg-surface border border-line rounded-xl text-xs font-medium text-ink-900"
               />
               <input
                 type="text"
@@ -649,11 +659,11 @@ export const ProfilePage: React.FC = () => {
                 required
                 value={newAddress.state}
                 onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
+                className="input-organic p-3 bg-surface border border-line rounded-xl text-xs font-medium text-ink-900"
               />
               <input
                 type="text"
-                placeholder="Pincode"
+                placeholder="Pincode *"
                 required
                 maxLength={6}
                 value={newAddress.pincode}
@@ -666,27 +676,23 @@ export const ProfilePage: React.FC = () => {
                     setZoneServiceability({ checked: false, serviceable: true });
                   }
                 }}
-                className="p-2.5 bg-white border border-slate-200 rounded-xl font-mono focus:outline-none focus:border-brand-500"
+                className="input-organic p-3 bg-surface border border-line rounded-xl font-mono text-xs font-medium text-ink-900"
               />
             </div>
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               <button
                 type="submit"
                 disabled={zoneServiceability.checked && !zoneServiceability.serviceable}
-                className={`font-bold px-5 py-2.5 rounded-xl text-xs transition-all ${
-                  zoneServiceability.checked && !zoneServiceability.serviceable
-                    ? 'bg-rose-100 text-rose-500 border border-rose-300 cursor-not-allowed opacity-70'
-                    : 'bg-brand-600 hover:bg-brand-700 text-white cursor-pointer shadow-md shadow-brand-600/20'
-                }`}
+                className="btn-pill-primary font-bold px-6 py-3 rounded-full text-xs transition-all bg-forest-900 hover:bg-forest-850 text-cream-50 disabled:bg-cream-200 disabled:text-ink-400 disabled:cursor-not-allowed shadow-soft min-h-[44px]"
               >
                 {zoneServiceability.checked && !zoneServiceability.serviceable
-                  ? 'Currently Unavailable - Out of Zone'
-                  : 'Save Address'}
+                  ? 'Currently Out of Service Zone'
+                  : 'Save Delivery Address'}
               </button>
               <button
                 type="button"
                 onClick={() => setIsAddingAddress(false)}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition-colors"
+                className="bg-cream-100 hover:bg-cream-200/80 text-ink-700 font-bold px-5 py-3 rounded-full text-xs transition-colors border border-line min-h-[44px]"
               >
                 Cancel
               </button>
@@ -698,33 +704,42 @@ export const ProfilePage: React.FC = () => {
           {addresses.map((a) => (
             <div
               key={a.id}
-              className={`p-4 rounded-2xl border transition-all ${
-                a.is_default ? 'border-brand-500 bg-brand-50/40' : 'border-slate-200'
+              className={`p-5 rounded-2xl border transition-all ${
+                a.is_default ? 'border-leaf-500 bg-sage-50/60 shadow-soft' : 'border-line bg-surface'
               }`}
             >
-              <div className="flex justify-between items-start mb-1">
-                <span className="font-bold text-xs uppercase tracking-wider text-slate-800">
+              <div className="flex justify-between items-start mb-2">
+                <span className="font-bold text-xs uppercase tracking-wider text-ink-800 bg-cream-100 px-2 py-0.5 rounded-md border border-line">
                   {a.address_type}
                 </span>
                 <div className="flex items-center gap-2">
                   {!a.is_default && (
                     <button
+                      type="button"
                       onClick={() => handleSetDefault(a.id)}
-                      className="text-[10px] text-brand-600 hover:underline font-bold"
+                      className="text-[11px] text-forest-700 hover:text-forest-900 hover:underline font-bold cursor-pointer"
                     >
                       Make Default
                     </button>
                   )}
+                  {a.is_default && (
+                    <span className="text-[10px] font-bold text-forest-800 bg-sage-100 px-2 py-0.5 rounded-full border border-leaf-500/20">
+                      Default
+                    </span>
+                  )}
                   <button
+                    type="button"
                     onClick={() => handleDeleteAddress(a.id)}
-                    className="text-slate-300 hover:text-rose-500"
+                    className="text-ink-400 hover:text-tomato-500 p-1 transition-colors cursor-pointer"
+                    title="Remove address"
+                    aria-label="Remove address"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-              <p className="font-semibold text-xs text-slate-800">{a.full_name} • {a.phone}</p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="font-bold text-xs text-ink-900">{a.full_name} • <span className="font-mono">{a.phone}</span></p>
+              <p className="text-xs text-ink-500 mt-1 leading-relaxed">
                 {[a.house_number, a.street, a.area, a.landmark, a.city, a.pincode]
                   .filter(Boolean)
                   .join(', ')}
@@ -735,15 +750,15 @@ export const ProfilePage: React.FC = () => {
       </div>
 
       {/* 3. Account Session & Logout Section */}
-      <div className="bg-slate-50 p-5 sm:p-6 rounded-3xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-surface p-5 sm:p-6 rounded-3xl border border-line shadow-soft flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-black text-slate-900">Signed In Account</p>
-          <p className="text-[11px] text-slate-500 mt-0.5">{user?.name} ({user?.email || user?.mobile || 'Active Customer'})</p>
+          <p className="text-xs font-bold text-ink-900 font-serif">Signed In Account</p>
+          <p className="text-[11px] text-ink-500 mt-0.5">{user?.name} ({user?.email || user?.mobile || 'Active Customer'})</p>
         </div>
         <button
           type="button"
           onClick={handleLogout}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-tomato-50 hover:bg-tomato-100 text-tomato-600 border border-tomato-200 text-xs font-bold transition-all cursor-pointer min-h-[40px]"
         >
           <LogOut className="w-4 h-4" />
           <span>Log Out of Account</span>
@@ -752,3 +767,5 @@ export const ProfilePage: React.FC = () => {
     </div>
   );
 };
+
+export default ProfilePage;

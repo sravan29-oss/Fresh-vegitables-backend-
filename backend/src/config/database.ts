@@ -53,6 +53,11 @@ async function ensureSchemaAlignment() {
 
 async function checkPgHealth(): Promise<boolean> {
   if (isPgHealthy) return true;
+  const now = Date.now();
+  if (hasCheckedPg && (now - lastWarnTime < 15000)) {
+    return false;
+  }
+  hasCheckedPg = true;
   try {
     const res = await pool.query('SELECT 1');
     isPgHealthy = res.rows.length > 0;
@@ -62,9 +67,8 @@ async function checkPgHealth(): Promise<boolean> {
     }
   } catch (e: any) {
     isPgHealthy = false;
-    const now = Date.now();
-    if (now - lastWarnTime > 30000) {
-      lastWarnTime = now;
+    lastWarnTime = now;
+    if (now - lastWarnTime > 30000 || !lastWarnTime) {
       if (env.NODE_ENV === 'production') {
         console.error('❌ [DATABASE WARNING] PostgreSQL connection check failed in production mode:');
         console.error(`❌ Details: ${e.message} (Code: ${e.code || 'UNKNOWN'})`);
@@ -504,8 +508,8 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
       const sum = memoryStore.orders.reduce((acc, o) => acc + (o.order_status !== 'cancelled' ? o.total : 0), 0);
       return { rows: [{ amount: sum }] };
     }
-    if (lower.includes('where id = $1') || lower.includes('where o.id = $1')) {
-      const ord = memoryStore.orders.find((o) => o.id === params[0]);
+    if (lower.includes('where id = $1') || lower.includes('where o.id = $1') || lower.includes('where order_number = $1') || lower.includes('where o.order_number = $1')) {
+      const ord = memoryStore.orders.find((o) => o.id === params[0] || o.order_number === params[0]);
       if (ord) {
         const user = memoryStore.users.find((u) => u.id === ord.user_id);
         const addr = typeof ord.address_snapshot === 'object' ? ord.address_snapshot : {};
@@ -530,9 +534,9 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
       const addr = typeof o.address_snapshot === 'object' ? o.address_snapshot : {};
       return {
         ...o,
-        customer_name: user?.name || addr?.full_name || 'Customer',
-        customer_mobile: user?.mobile || addr?.phone || '',
-        customer_email: user?.email || '',
+        customer_name: o.customer_name || user?.name || addr?.full_name || 'Customer',
+        customer_mobile: o.customer_mobile || user?.mobile || addr?.phone || '',
+        customer_email: o.customer_email || user?.email || '',
       };
     });
     return { rows: mapped };
@@ -569,14 +573,30 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
 
   if (lower.startsWith('update orders')) {
     const id = params[params.length - 1];
-    const ord = memoryStore.orders.find((o) => o.id === id);
+    const ord = memoryStore.orders.find((o) => o.id === id || o.order_number === id);
     if (ord) {
-      if (lower.includes('order_status =')) {
-        const statusVal = params.find((p) => ['pending', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'cancelled'].includes(p));
+      if (lower.includes("order_status = 'out_for_delivery'")) {
+        ord.order_status = 'out_for_delivery';
+      } else if (lower.includes("order_status = 'delivered'")) {
+        ord.order_status = 'delivered';
+      } else if (lower.includes("order_status = 'cancelled'")) {
+        ord.order_status = 'cancelled';
+      } else if (lower.includes("order_status = 'confirmed'")) {
+        ord.order_status = 'confirmed';
+      } else if (lower.includes("order_status = 'ready_for_delivery'")) {
+        ord.order_status = 'ready_for_delivery';
+      } else if (lower.includes('order_status =')) {
+        const statusVal = params.find((p) => ['pending', 'confirmed', 'preparing', 'ready_for_delivery', 'packed', 'out_for_delivery', 'delivered', 'cancelled'].includes(p));
         if (statusVal) ord.order_status = statusVal;
       }
-      if (lower.includes('payment_status =')) {
-        const payVal = params.find((p) => ['pending', 'paid', 'failed', 'refunded', 'success'].includes(p));
+      if (lower.includes("payment_status = 'cod_collected'")) {
+        ord.payment_status = 'cod_collected';
+      } else if (lower.includes("payment_status = 'awaiting_cod_collection'")) {
+        ord.payment_status = 'awaiting_cod_collection';
+      } else if (lower.includes("then 'paid'") || lower.includes("payment_status = 'paid'")) {
+        ord.payment_status = 'paid';
+      } else if (lower.includes('payment_status =')) {
+        const payVal = params.find((p) => ['pending', 'paid', 'failed', 'refunded', 'success', 'cod_collected', 'awaiting_cod_collection'].includes(p));
         if (payVal) ord.payment_status = payVal === 'success' ? 'paid' : payVal;
       }
       savePersistedOrders(memoryStore.orders);
@@ -672,6 +692,13 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
   }
 
   if (lower.includes('from refunds')) {
+    if (lower.includes('sum(amount)') && lower.includes('order_id = $1')) {
+      const orderId = params[0];
+      const sum = memoryStore.refunds
+        .filter((r) => r.order_id === orderId && (String(r.status).toUpperCase() === 'COMPLETED'))
+        .reduce((acc, r) => acc + Number(r.amount || 0), 0);
+      return { rows: [{ total_refunded: sum }] };
+    }
     return { rows: memoryStore.refunds };
   }
 
@@ -690,30 +717,42 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
     return { rows: [newRef] };
   }
 
-  // 9. DELIVERY PARTNERS & ASSIGNMENTS (Phase 8 & 9)
+  // 9. DELIVERY PARTNERS & ASSIGNMENTS (Phase 8, 9, 11 & 12)
   if (lower.includes('from delivery_partners')) {
     if (lower.includes('where id = $1')) {
       const dp = memoryStore.delivery_partners.find((d) => d.id === params[0]);
+      return { rows: dp ? [dp] : [] };
+    }
+    if (lower.includes('where phone = $1')) {
+      const dp = memoryStore.delivery_partners.find((d) => d.phone === params[0] || d.phone.replace(/\s+/g, '') === String(params[0]).replace(/\s+/g, ''));
       return { rows: dp ? [dp] : [] };
     }
     return { rows: memoryStore.delivery_partners };
   }
 
   if (lower.startsWith('insert into delivery_partners')) {
+    const assignedHub = params[5] || 'hub-champapet';
     const newDp = {
       id: uuidv4(),
       name: params[0],
       phone: params[1],
       email: params[2],
-      vehicle_type: params[3] || 'Bike',
-      vehicle_number: params[4] || 'TS-09-EV-0000',
-      status: 'AVAILABLE',
+      vehicle_type: params[3] || 'Electric Cargo Bike',
+      vehicle_number: params[4] || 'TS-08-EV-1000',
+      assigned_hub_id: assignedHub,
+      status: params[6] || 'AVAILABLE',
       availability: true,
       rating: 4.8,
-      latitude: 23.0225,
-      longitude: 72.5714,
+      latitude: params[7] !== undefined ? Number(params[7]) : (assignedHub === 'hub-kphb' ? 17.489420 : 17.344570),
+      longitude: params[8] !== undefined ? Number(params[8]) : (assignedHub === 'hub-kphb' ? 78.397227 : 78.516972),
+      pin_hash: params[9] || '',
+      failed_login_attempts: 0,
+      locked_until: null,
+      is_active: true,
       total_deliveries: 0,
+      failed_deliveries: 0,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
     (memoryStore.delivery_partners as any).push(newDp);
     return { rows: [newDp] };
@@ -722,7 +761,26 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
   if (lower.startsWith('update delivery_partners')) {
     const id = params[params.length - 1];
     const dp = memoryStore.delivery_partners.find((d) => d.id === id);
-    if (dp && params[0]) dp.status = params[0];
+    if (dp) {
+      if (lower.includes('status = $1')) dp.status = params[0];
+      if (lower.includes('is_active = false') || lower.includes("status = 'suspended'")) {
+        dp.is_active = false;
+        dp.status = 'SUSPENDED';
+      }
+      if (lower.includes('failed_login_attempts = $1')) dp.failed_login_attempts = Number(params[0]);
+      if (lower.includes('failed_login_attempts = 0')) dp.failed_login_attempts = 0;
+      if (lower.includes('locked_until = $2')) dp.locked_until = params[1] ? new Date(params[1]).toISOString() : null;
+      if (lower.includes('locked_until = null')) dp.locked_until = null;
+      if (lower.includes('pin_hash = $1')) dp.pin_hash = params[0];
+      if (lower.includes('total_deliveries = total_deliveries + 1')) dp.total_deliveries = (dp.total_deliveries || 0) + 1;
+      if (lower.includes('failed_deliveries = failed_deliveries + 1')) dp.failed_deliveries = (dp.failed_deliveries || 0) + 1;
+      if (lower.includes('latitude = $1') && lower.includes('longitude = $2')) {
+        dp.latitude = Number(params[0]);
+        dp.longitude = Number(params[1]);
+        dp.last_location_at = new Date().toISOString();
+      }
+      dp.updated_at = new Date().toISOString();
+    }
     return { rows: dp ? [dp] : [] };
   }
 
@@ -733,6 +791,10 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
   }
 
   if (lower.includes('from delivery_assignments')) {
+    if (lower.includes('where id = $1')) {
+      const da = memoryStore.delivery_assignments.find((a) => a.id === params[0]);
+      return { rows: da ? [da] : [] };
+    }
     if (lower.includes('where order_id = $1') || lower.includes('where da.order_id = $1')) {
       const da = memoryStore.delivery_assignments.find((a) => a.order_id === params[0]);
       if (da) {
@@ -740,6 +802,13 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
         return { rows: [{ ...da, partner_name: partner?.name, partner_phone: partner?.phone, partner_rating: partner?.rating, partner_lat: partner?.latitude, partner_lng: partner?.longitude }] };
       }
       return { rows: [] };
+    }
+    if (lower.includes('where delivery_partner_id = $1')) {
+      let list = memoryStore.delivery_assignments.filter((a) => a.delivery_partner_id === params[0]);
+      if (lower.includes("status = 'out_for_delivery'")) {
+        list = list.filter((a) => a.status === 'OUT_FOR_DELIVERY');
+      }
+      return { rows: list };
     }
     return { rows: memoryStore.delivery_assignments };
   }
@@ -750,14 +819,82 @@ function runMemoryQuery(text: string, params: any[] = []): { rows: any[] } {
       order_id: params[0],
       delivery_partner_id: params[1],
       status: 'DRIVER_ASSIGNED',
+      notes: params[2] || '',
+      otp_hash: params[3] || '',
+      otp_expires_at: params[4] ? new Date(params[4]).toISOString() : new Date(Date.now() + 86400000).toISOString(),
+      otp_attempts: 0,
+      cod_amount_collected: null,
+      cod_collected_at: null,
+      cod_collected_by: null,
+      assigned_by: params[5] || null,
+      hub_id: params[6] || 'hub-champapet',
       assigned_at: new Date().toISOString(),
       picked_up_at: null,
       delivered_at: null,
-      estimated_delivery_time: new Date(Date.now() + 1800000).toISOString(), // 30 mins
-      notes: params[2] || '',
+      dispatched_at: null,
+      failed_at: null,
     };
     (memoryStore.delivery_assignments as any).unshift(newDa);
     return { rows: [newDa] };
+  }
+
+  if (lower.startsWith('update delivery_assignments')) {
+    const id = params[params.length - 1];
+    const da = memoryStore.delivery_assignments.find((a) => a.id === id || a.order_id === id);
+    if (da) {
+      if (lower.includes("status = 'delivered'")) {
+        da.status = 'DELIVERED';
+        da.delivered_at = new Date().toISOString();
+        if (lower.includes('cod_amount_collected = $1')) {
+          da.cod_amount_collected = Number(params[0]);
+          da.cod_collected_at = new Date().toISOString();
+          da.cod_collected_by = params[1] || null;
+        }
+      } else if (lower.includes("status = 'delivery_failed'")) {
+        da.status = 'DELIVERY_FAILED';
+        da.failed_at = new Date().toISOString();
+        if (params[0]) da.failure_reason = params[0];
+        if (params[1]) da.failure_notes = params[1];
+      } else if (lower.includes('status = $1')) {
+        da.status = params[0];
+        if (params[0] === 'PICKED_UP') da.picked_up_at = new Date().toISOString();
+        if (params[0] === 'OUT_FOR_DELIVERY') da.dispatched_at = new Date().toISOString();
+        if (params[1]) da.notes = params[1];
+      }
+      if (lower.includes('otp_attempts = $1')) {
+        da.otp_attempts = Number(params[0]);
+      }
+    }
+    return { rows: da ? [da] : [] };
+  }
+
+  if (lower.startsWith('insert into delivery_status_history')) {
+    const dsh = {
+      id: uuidv4(),
+      assignment_id: params[0],
+      order_id: params[1],
+      status: params[2],
+      notes: params[3],
+      updated_by: params[4],
+      updated_by_role: params[5] || 'system',
+      timestamp: new Date().toISOString(),
+    };
+    (memoryStore.delivery_status_history as any).push(dsh);
+    return { rows: [dsh] };
+  }
+
+  if (lower.startsWith('insert into delivery_locations')) {
+    const loc = {
+      id: uuidv4(),
+      assignment_id: params[0],
+      delivery_partner_id: params[1],
+      latitude: params[2],
+      longitude: params[3],
+      accuracy: params[4],
+      recorded_at: new Date().toISOString(),
+    };
+    (memoryStore.delivery_locations as any).push(loc);
+    return { rows: [loc] };
   }
 
   // 10. COUPONS & PROMOTIONS (Phase 10)

@@ -107,17 +107,23 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
       const toRad = (d: number) => (d * Math.PI) / 180;
       const R = 6371; // km
 
-      // Strict check: Calculate unrounded distance to Champapet Hub (17.34457, 78.516972)
-      const dLatHub = toRad(17.34457 - lat);
-      const dLngHub = toRad(78.516972 - lng);
-      const aHub =
-        Math.sin(dLatHub / 2) ** 2 +
-        Math.cos(toRad(lat)) * Math.cos(toRad(17.34457)) * Math.sin(dLngHub / 2) ** 2;
-      const cHub = 2 * Math.atan2(Math.sqrt(aHub), Math.sqrt(1 - aHub));
-      const distToHub = R * cHub;
+      // Haversine distance calculator
+      const haversineDist = (hLat: number, hLng: number) => {
+        const dLat = toRad(hLat - lat);
+        const dLng = toRad(hLng - lng);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat)) * Math.cos(toRad(hLat)) * Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
 
-      // If outside 5.0 KM radius from Champapet Hub, NEVER match any zone
-      if (distToHub > 5.0) {
+      // Authoritative check: Calculate unrounded distance to both Champapet and KPHB hubs
+      const distChampapet = haversineDist(17.34457, 78.516972);
+      const distKphb = haversineDist(17.48942, 78.397227);
+      const minDistToHub = Math.min(distChampapet, distKphb);
+
+      // If outside 5.0 KM radius from BOTH hubs, NEVER match any zone
+      if (minDistToHub > 5.0) {
         return null;
       }
 
@@ -420,28 +426,35 @@ export const InteractiveLocationMap: React.FC<InteractiveLocationMapProps> = ({
     const group = zonesLayerGroupRef.current;
     group.clearLayers();
 
-    // 1. Authoritative 5.0 KM Delivery Boundary Circle around Champapet Hub
-    const hubCircle = L.circle([17.34457, 78.516972], {
-      radius: 5000,
-      color: '#059669',
-      weight: 2.5,
-      opacity: 0.9,
-      fillColor: '#10b981',
-      fillOpacity: 0.12,
-      dashArray: '6, 6',
-    }).addTo(group);
+    // 1. Authoritative 5.0 KM Delivery Boundary Circles around BOTH hubs
+    const deliveryHubs = [
+      { name: 'Fresh Vegetables Champapet Hub', lat: 17.34457, lng: 78.516972 },
+      { name: 'Fresh Vegetables KPHB Hub', lat: 17.48942, lng: 78.397227 },
+    ];
 
-    hubCircle.bindTooltip(
-      `<div style="font-family: inherit; font-size: 11px; padding: 2px 4px;">
-        <strong style="color: #ffffff;">Fresh Vegetables Champapet Hub</strong><br/>
-        <span style="color: #34d399;">5.0 KM Maximum Serviceable Radius</span>
-      </div>`,
-      {
-        permanent: false,
-        direction: 'top',
-        className: 'fresh-zone-tooltip',
-      }
-    );
+    deliveryHubs.forEach((hub) => {
+      const hubCircle = L.circle([hub.lat, hub.lng], {
+        radius: 5000,
+        color: '#15803d',
+        weight: 2.5,
+        opacity: 0.9,
+        fillColor: '#22c55e',
+        fillOpacity: 0.12,
+        dashArray: '6, 6',
+      }).addTo(group);
+
+      hubCircle.bindTooltip(
+        `<div style="font-family: inherit; font-size: 11px; padding: 2px 4px;">
+          <strong style="color: #ffffff;">${hub.name}</strong><br/>
+          <span style="color: #86efac;">5.0 KM Maximum Serviceable Radius</span>
+        </div>`,
+        {
+          permanent: false,
+          direction: 'top',
+          className: 'fresh-zone-tooltip',
+        }
+      );
+    });
 
     zones.forEach((zone) => {
       if (zone.latitude && zone.longitude) {

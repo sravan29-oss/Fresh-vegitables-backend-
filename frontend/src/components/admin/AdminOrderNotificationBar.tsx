@@ -271,7 +271,7 @@ export const AdminOrderNotificationBar: React.FC = () => {
                     New Order #{alert.order_number}
                   </h4>
                   <p className="text-[11px] text-slate-400 truncate">
-                    {alert.customer_name} •{' '}
+                    {alert.customer_name} {alert.customer_phone ? `(${alert.customer_phone})` : ''} •{' '}
                     {new Date(alert.created_at).toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',

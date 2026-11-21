@@ -285,53 +285,31 @@ export async function getCustomerById(req: AuthRequest, res: Response, next: Nex
 
 // ===================== INVENTORY =====================
 
+import {
+  getHubInventory,
+  updateHubStock,
+  getHubInventoryMovements,
+  getHubLowStockAlerts,
+} from '../services/hubInventory.service';
+
 export async function getInventory(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { page, limit, offset } = parsePaginationParams(req.query);
-    const { search, stock_status } = req.query as any;
+    const { page, limit } = parsePaginationParams(req.query);
+    const { search, stock_status, hub_id } = req.query as any;
 
-    let whereClause = "WHERE p.status = 'active'";
-    const params: any[] = [];
-    let paramIdx = 1;
+    const result = await getHubInventory({
+      hub_id: hub_id || undefined,
+      stock_status: stock_status || undefined,
+      search: search || undefined,
+      page,
+      limit,
+    });
 
-    if (search) {
-      whereClause += ` AND p.name ILIKE $${paramIdx}`;
-      params.push(`%${search}%`);
-      paramIdx++;
-    }
-
-    if (stock_status === 'out_of_stock') {
-      whereClause += ' AND p.stock_quantity <= 0';
-    } else if (stock_status === 'low_stock') {
-      whereClause += ' AND p.stock_quantity > 0 AND p.stock_quantity <= p.minimum_stock';
-    } else if (stock_status === 'in_stock') {
-      whereClause += ' AND p.stock_quantity > p.minimum_stock';
-    }
-
-    const countResult = await db.query(
-      `SELECT COUNT(*)::int as total FROM products p ${whereClause}`,
-      params
-    );
-
-    const dataParams = [...params, limit, offset];
-    const result = await db.query(
-      `SELECT p.id, p.name, p.slug, p.unit, p.stock_quantity, p.minimum_stock,
-              p.selling_price, p.status,
-              c.name as category_name
-       FROM products p
-       LEFT JOIN categories c ON p.category_id = c.id
-       ${whereClause}
-       ORDER BY p.stock_quantity ASC
-       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
-      dataParams
-    );
-
-    const inventory = result.rows.map((p) => ({
-      ...p,
-      stock_status: getStockStatus(p.stock_quantity, p.minimum_stock),
-    }));
-
-    sendPaginated(res, 'Inventory fetched', inventory, { page, limit, total: countResult.rows[0].total });
+    sendSuccess(res, 'Inventory fetched', {
+      items: result.items,
+      total: result.total,
+      summary: result.summary,
+    });
   } catch (error) {
     next(error);
   }
@@ -340,33 +318,75 @@ export async function getInventory(req: AuthRequest, res: Response, next: NextFu
 export async function updateStock(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { stock_quantity, minimum_stock } = req.body;
+    const { stock_quantity, minimum_stock, hub_id, operation, reason, quantity } = req.body;
 
-    const fields: string[] = [];
-    const values: any[] = [];
-    let idx = 1;
+    const targetHubId = hub_id || 'hub-champapet';
+    const op = operation || (quantity !== undefined ? 'ADD' : 'ADJUST');
+    const targetQty = quantity !== undefined ? Number(quantity) : Number(stock_quantity || 0);
 
-    if (stock_quantity !== undefined) { fields.push(`stock_quantity = $${idx++}`); values.push(stock_quantity); }
-    if (minimum_stock !== undefined) { fields.push(`minimum_stock = $${idx++}`); values.push(minimum_stock); }
-
-    if (fields.length === 0) {
-      return sendSuccess(res, 'No changes');
-    }
-
-    values.push(id);
-    const result = await db.query(
-      `UPDATE products SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, name, stock_quantity, minimum_stock`,
-      values
-    );
-
-    if (result.rows.length === 0) {
-      return sendSuccess(res, 'Product not found', null);
-    }
-
-    sendSuccess(res, 'Stock updated', {
-      ...result.rows[0],
-      stock_status: getStockStatus(result.rows[0].stock_quantity, result.rows[0].minimum_stock),
+    const result = await updateHubStock({
+      hub_id: targetHubId,
+      product_id: id,
+      operation: op,
+      quantity: targetQty,
+      reason: reason || 'Admin stock quick-update',
+      admin_id: req.user?.id,
     });
+
+    // Also update products table to maintain backwards compatibility
+    try {
+      if (stock_quantity !== undefined) {
+        await db.query('UPDATE products SET stock_quantity = $1 WHERE id = $2', [stock_quantity, id]);
+      }
+      if (minimum_stock !== undefined) {
+        await db.query('UPDATE products SET minimum_stock = $1 WHERE id = $2', [minimum_stock, id]);
+      }
+    } catch {}
+
+    sendSuccess(res, 'Stock updated successfully', result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateHubStockOperation(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { hub_id, product_id, variant_id, operation, quantity, reason } = req.body;
+    const result = await updateHubStock({
+      hub_id,
+      product_id,
+      variant_id,
+      operation,
+      quantity: Number(quantity),
+      reason,
+      admin_id: req.user?.id,
+    });
+
+    sendSuccess(res, 'Stock modification recorded successfully', result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getInventoryMovements(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { hub_id, product_id, limit } = req.query as any;
+    const movements = await getHubInventoryMovements({
+      hub_id: hub_id || undefined,
+      product_id: product_id || undefined,
+      limit: limit ? Number(limit) : 50,
+    });
+    sendSuccess(res, 'Stock movement history', movements);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getInventoryAlerts(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { hub_id } = req.query as any;
+    const alerts = await getHubLowStockAlerts(hub_id || undefined);
+    sendSuccess(res, 'Active low stock alerts', alerts);
   } catch (error) {
     next(error);
   }

@@ -40,7 +40,7 @@ async function runMigrations() {
 
   const files = fs
     .readdirSync(migrationsDir)
-    .filter((file) => file.endsWith('.sql'))
+    .filter((file) => file.endsWith('.sql') && !file.toLowerCase().includes('rollback'))
     .sort();
 
   console.log(`Found ${files.length} migration files: ${files.join(', ')}`);

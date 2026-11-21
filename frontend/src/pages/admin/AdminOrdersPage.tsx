@@ -76,6 +76,10 @@ export const AdminOrdersPage: React.FC = () => {
   const [isResendingEmail, setIsResendingEmail] = useState<boolean>(false);
   const [resendEmailMsg, setResendEmailMsg] = useState<{ id: string; success: boolean; text: string } | null>(null);
   const [showWhatsAppPreview, setShowWhatsAppPreview] = useState<boolean>(false);
+  // COD explicit confirmation modal state
+  const [codModalOrder, setCodModalOrder] = useState<Order | null>(null);
+  const [codAmountInput, setCodAmountInput] = useState<string>('');
+  const [codNotesInput, setCodNotesInput] = useState<string>('');
 
   const { id: paramOrderId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -316,13 +320,13 @@ export const AdminOrdersPage: React.FC = () => {
   const getGoogleMapsUrl = (order: Order): string => {
     const coords = getCoordinates(order);
     if (coords) {
-      return `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`;
+      return `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
     }
     const addr = order.address_snapshot || order.delivery_address;
     if (!addr) return 'https://www.google.com/maps';
     if (typeof addr === 'string') {
       const cleanStr = addr.replace(/^flat\/house:\s*/i, '').replace(/pincode:\s*/i, '').trim();
-      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanStr)}`;
+      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cleanStr)}`;
     }
     const clean = (val: any) =>
       typeof val === 'string'
@@ -340,7 +344,7 @@ export const AdminOrdersPage: React.FC = () => {
     ].filter(Boolean);
 
     const query = parts.length > 0 ? parts.join(', ') : 'Hyderabad, Telangana';
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
   };
 
   // Generate complete WhatsApp customer message with itemized produce, payment info & live location request
@@ -363,10 +367,11 @@ export const AdminOrdersPage: React.FC = () => {
     }
 
     const statusLabels: Record<string, string> = {
-      pending: 'New Order (Pending Confirmation)',
-      confirmed: 'Confirmed & Queued for Harvest',
-      preparing: 'Harvesting & Packing Fresh Produce',
-      packed: 'Packed & Ready for Dispatch',
+      pending: 'Order Placed (Pending Confirmation)',
+      confirmed: 'Order Confirmed & Queued for Harvest',
+      preparing: 'Preparing & Harvesting Fresh Produce',
+      ready_for_delivery: 'Ready for Delivery (Packed)',
+      packed: 'Ready for Delivery (Packed)',
       out_for_delivery: 'Out for Delivery (On Route 🛵)',
       delivered: 'Delivered Successfully ✅',
       cancelled: 'Cancelled',
@@ -422,7 +427,7 @@ export const AdminOrdersPage: React.FC = () => {
       (order.notes ? `🕒 *Delivery Preference / Slot:* ${order.notes}\n` : '') +
       `\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📍 *LOCATION SHARING REQUEST:*\n` +
-      `*Please share your current WhatsApp live location* with us in this chat so our delivery partner can navigate directly to your exact doorstep without delay! 🛵💨\n` +
+      `*Please share your current WhatsApp live location* with us in this chat so our direct delivery team can navigate directly to your exact doorstep without delay! 🛵💨\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `🌿 *100% Certified Organic • Harvested Fresh Today*\n` +
       `📞 Customer Support: +91 8106970384`
@@ -510,30 +515,61 @@ export const AdminOrdersPage: React.FC = () => {
     setIsDetailDrawerOpen(true);
   };
 
-  // Record COD collection handler
-  const handleRecordCodCollection = async (orderId: string) => {
+  // Open explicit COD collection modal
+  const openCodModal = (order: Order) => {
+    setCodModalOrder(order);
+    setCodAmountInput(String(order.total || 0));
+    setCodNotesInput('Cash handed over at customer doorstep');
+  };
+
+  // Confirm COD collection with exact amount verification
+  const handleConfirmCodSubmit = async () => {
+    if (!codModalOrder) return;
+    const numericAmount = Number(codAmountInput);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      showToast('error', 'Please enter a valid positive collection amount.');
+      return;
+    }
+    const expected = Number(codModalOrder.total || 0);
+    if (Math.abs(numericAmount - expected) > 0.01) {
+      showToast('error', `Received amount must equal the order total of ₹${expected.toFixed(2)}`);
+      return;
+    }
+
     try {
       setIsUpdatingStatus(true);
-      await api.post('/payments/cod-collect', { order_id: orderId });
+      await api.post('/payments/cod-collect', {
+        order_id: codModalOrder.id,
+        amount: numericAmount,
+        notes: codNotesInput.trim() || undefined,
+      });
+
+      const updatedId = codModalOrder.id;
       setOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId
-            ? { ...o, payment_status: 'cod_collected' as any }
-            : o
-        )
+        prev.map((o) => (o.id === updatedId ? { ...o, payment_status: 'cod_collected' as any } : o))
       );
-      if (selectedOrder && selectedOrder.id === orderId) {
+      if (selectedOrder && selectedOrder.id === updatedId) {
         setSelectedOrder((prev) => (prev ? { ...prev, payment_status: 'cod_collected' as any } : null));
       }
+
+      setCodModalOrder(null);
       fetchSummary();
       notifyLiveUpdate('orders');
       notifyLiveUpdate('payments');
-      showToast('success', 'Cash on Delivery successfully recorded as collected!');
+      showToast('success', `Cash on Delivery of ₹${numericAmount.toFixed(2)} recorded as collected!`);
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to record COD collection';
       showToast('error', msg);
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  // Compatibility alias
+  const handleRecordCodCollection = async (orderId: string) => {
+    const found = orders.find((o) => o.id === orderId) || (selectedOrder?.id === orderId ? selectedOrder : null);
+    if (found) {
+      openCodModal(found);
     }
   };
 
@@ -553,11 +589,17 @@ export const AdminOrdersPage: React.FC = () => {
           dot: 'bg-blue-400',
         };
       case 'preparing':
-      case 'packed':
         return {
           label: 'Preparing',
           bg: 'bg-purple-500/10 border-purple-500/30 text-purple-400',
           dot: 'bg-purple-400',
+        };
+      case 'ready_for_delivery':
+      case 'packed':
+        return {
+          label: 'Ready for Delivery',
+          bg: 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400',
+          dot: 'bg-indigo-400',
         };
       case 'out_for_delivery':
         return {
@@ -606,21 +648,23 @@ export const AdminOrdersPage: React.FC = () => {
     }
   };
 
-  // Workflow stages sequence
+  // Workflow stages sequence (Direct Admin-Managed Delivery)
   const workflowStages = [
-    { id: 'pending', label: '1. New Order', action: 'Confirm Order', nextStatus: 'confirmed' },
+    { id: 'pending', label: '1. Order Placed', action: 'Confirm Order', nextStatus: 'confirmed' },
     { id: 'confirmed', label: '2. Confirmed', action: 'Start Preparing', nextStatus: 'preparing' },
-    { id: 'preparing', label: '3. Preparing & Packed', action: 'Dispatch for Delivery', nextStatus: 'out_for_delivery' },
-    { id: 'out_for_delivery', label: '4. Out for Delivery', action: 'Mark as Delivered', nextStatus: 'delivered' },
-    { id: 'delivered', label: '5. Delivered', action: null, nextStatus: null },
+    { id: 'preparing', label: '3. Preparing', action: 'Mark Ready for Delivery', nextStatus: 'ready_for_delivery' },
+    { id: 'ready_for_delivery', label: '4. Ready for Delivery', action: 'Dispatch Out for Delivery', nextStatus: 'out_for_delivery' },
+    { id: 'out_for_delivery', label: '5. Out for Delivery', action: 'Mark as Delivered', nextStatus: 'delivered' },
+    { id: 'delivered', label: '6. Delivered', action: null, nextStatus: null },
   ];
 
   const getStageIndex = (status: string) => {
     if (status === 'pending') return 0;
     if (status === 'confirmed') return 1;
-    if (status === 'preparing' || status === 'packed') return 2;
-    if (status === 'out_for_delivery') return 3;
-    if (status === 'delivered') return 4;
+    if (status === 'preparing') return 2;
+    if (status === 'ready_for_delivery' || status === 'packed') return 3;
+    if (status === 'out_for_delivery') return 4;
+    if (status === 'delivered') return 5;
     return -1;
   };
 
@@ -930,9 +974,10 @@ export const AdminOrdersPage: React.FC = () => {
               className="px-3 py-2 bg-slate-900 border border-slate-800 text-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer"
             >
               <option value="">All Statuses</option>
-              <option value="pending">New / Pending</option>
+              <option value="pending">Order Placed</option>
               <option value="confirmed">Confirmed</option>
               <option value="preparing">Being Prepared</option>
+              <option value="ready_for_delivery">Ready for Delivery</option>
               <option value="out_for_delivery">Out for Delivery</option>
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
@@ -1234,13 +1279,16 @@ export const AdminOrdersPage: React.FC = () => {
                             className={`text-[11px] font-bold px-2.5 py-1.5 rounded-xl border focus:outline-none cursor-pointer bg-slate-900 transition-colors ${statusInfo.bg}`}
                           >
                             <option value="pending" className="bg-slate-900 text-amber-400">
-                              New / Pending
+                              Order Placed
                             </option>
                             <option value="confirmed" className="bg-slate-900 text-blue-400">
                               Confirmed
                             </option>
                             <option value="preparing" className="bg-slate-900 text-purple-400">
                               Preparing
+                            </option>
+                            <option value="ready_for_delivery" className="bg-slate-900 text-indigo-400">
+                              Ready for Delivery
                             </option>
                             <option value="out_for_delivery" className="bg-slate-900 text-sky-400">
                               Out for Delivery
@@ -1416,13 +1464,16 @@ export const AdminOrdersPage: React.FC = () => {
                       className={`flex-1 text-[11px] font-bold px-3 py-2 rounded-xl border focus:outline-none cursor-pointer bg-slate-900 transition-colors ${statusInfo.bg}`}
                     >
                       <option value="pending" className="bg-slate-900 text-amber-400">
-                        New / Pending
+                        Order Placed
                       </option>
                       <option value="confirmed" className="bg-slate-900 text-blue-400">
                         Confirmed
                       </option>
                       <option value="preparing" className="bg-slate-900 text-purple-400">
                         Preparing
+                      </option>
+                      <option value="ready_for_delivery" className="bg-slate-900 text-indigo-400">
+                        Ready for Delivery
                       </option>
                       <option value="out_for_delivery" className="bg-slate-900 text-sky-400">
                         Out for Delivery
@@ -1437,10 +1488,10 @@ export const AdminOrdersPage: React.FC = () => {
 
                     {isAwaitingCod && (
                       <button
-                        onClick={() => handleRecordCodCollection(o.id)}
+                        onClick={() => openCodModal(o)}
                         disabled={isUpdatingStatus}
                         className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs transition-colors flex items-center gap-1 shrink-0 shadow-sm"
-                        title="Mark COD Cash as Collected"
+                        title="Confirm COD Cash Collection"
                       >
                         <DollarSign className="w-3.5 h-3.5" />
                         <span>Collect COD</span>
@@ -1586,10 +1637,7 @@ export const AdminOrdersPage: React.FC = () => {
                         onClick={() =>
                           handleUpdateStatus(
                             selectedOrder.id,
-                            nextStage.nextStatus!,
-                            nextStage.nextStatus === 'delivered' && selectedOrder.payment_method === 'cod'
-                              ? 'paid'
-                              : undefined
+                            nextStage.nextStatus!
                           )
                         }
                         disabled={isUpdatingStatus}
@@ -2137,7 +2185,7 @@ export const AdminOrdersPage: React.FC = () => {
                   selectedOrder.payment_status !== 'paid' &&
                   selectedOrder.order_status !== 'cancelled' && (
                     <button
-                      onClick={() => handleRecordCodCollection(selectedOrder.id)}
+                      onClick={() => openCodModal(selectedOrder)}
                       disabled={isUpdatingStatus}
                       className="w-full py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
                     >
@@ -2224,6 +2272,94 @@ export const AdminOrdersPage: React.FC = () => {
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs transition-colors flex items-center gap-1.5"
               >
                 {isUpdatingStatus ? 'Cancelling...' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== COD CASH COLLECTION CONFIRMATION MODAL ===================== */}
+      {codModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full text-white shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                <DollarSign className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base">Confirm COD Cash Collection</h3>
+                <p className="text-xs text-slate-400">
+                  Order #{codModalOrder.order_number || codModalOrder.id.slice(0, 8)}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5 text-xs">
+              <div className="flex justify-between items-center text-slate-400">
+                <span>Customer:</span>
+                <span className="font-semibold text-slate-200">{codModalOrder.customer_name || 'Customer'}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400">
+                <span>Delivery Status:</span>
+                <span className="font-semibold text-emerald-400 uppercase tracking-wide text-[11px]">
+                  {codModalOrder.order_status.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400">
+                <span>Outstanding Balance:</span>
+                <span className="font-extrabold text-brand-400 text-sm">₹{codModalOrder.total}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">
+                  Cash Amount Received (₹) <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={codAmountInput}
+                  onChange={(e) => setCodAmountInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm font-bold text-emerald-400 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  placeholder="Enter exact cash received"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Backend requires exact match with order total (₹{codModalOrder.total}).
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Handover Notes (Optional)</label>
+                <input
+                  type="text"
+                  value={codNotesInput}
+                  onChange={(e) => setCodNotesInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  placeholder="e.g. Received ₹500 note, returned ₹50 change"
+                />
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] leading-relaxed">
+              <strong>Notice:</strong> Physical delivery status and payment status are strictly decoupled. Recording this cash collection atomically updates payment status to <code>cod_collected</code> and logs the transaction.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setCodModalOrder(null)}
+                disabled={isUpdatingStatus}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmCodSubmit}
+                disabled={isUpdatingStatus || !codAmountInput || Math.abs(Number(codAmountInput) - Number(codModalOrder.total)) > 0.01}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-xs transition-colors flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
+              >
+                {isUpdatingStatus ? 'Confirming...' : `Confirm Receipt (₹${codAmountInput || '0'})`}
               </button>
             </div>
           </div>

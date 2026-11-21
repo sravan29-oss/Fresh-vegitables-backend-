@@ -1,0 +1,37 @@
+[
+  {
+    "id": "hub-champapet",
+    "hub_code": "champapet",
+    "name": "Fresh Vegetables Champapet Hub",
+    "address": "Flat/House 9-153/4, Raji Reddy Nagar Colony, Champapet, Hyderabad, Telangana - 500059.",
+    "latitude": 17.34457,
+    "longitude": 78.516972,
+    "delivery_radius_km": 5.0,
+    "is_active": true,
+    "is_paused": false,
+    "pause_reason": "",
+    "operating_hours_start": "06:00",
+    "operating_hours_end": "22:00",
+    "max_orders_per_slot": 35,
+    "created_at": "2026-11-11T00:00:00.000Z",
+    "updated_at": "2026-11-11T00:00:00.000Z"
+  },
+  {
+    "id": "hub-kphb",
+    "hub_code": "kphb",
+    "name": "Fresh Vegetables KPHB Hub",
+    "address": "Road Number 3, Phase 3, KPHB Colony, Hyderabad, Telangana - 500072.",
+    "latitude": 17.48942,
+    "longitude": 78.397227,
+    "delivery_radius_km": 5.0,
+    "is_active": true,
+    "is_paused": false,
+    "pause_reason": "",
+    "operating_hours_start": "06:00",
+    "operating_hours_end": "22:00",
+    "max_orders_per_slot": 35,
+    "created_at": "2026-11-11T00:00:00.000Z",
+    "updated_at": "2026-11-11T00:00:00.000Z"
+  }
+]
+

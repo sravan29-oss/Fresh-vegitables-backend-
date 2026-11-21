@@ -3,6 +3,8 @@ import {
   validateAndApplyCoupon,
   getActiveCoupons,
   getAdminCoupons,
+  getAdminCouponsSummary,
+  getCouponUsage,
   createCoupon,
   updateCoupon,
   deleteCoupon,
@@ -15,10 +17,14 @@ const router = Router();
 router.get('/active', getActiveCoupons);
 router.post('/apply', authenticateCustomer, validateAndApplyCoupon);
 
-// Admin
+// Admin Campaigns & Analytics
+router.get('/admin/summary', authenticateAdmin, getAdminCouponsSummary);
+router.get('/admin/usage', authenticateAdmin, getCouponUsage);
+router.get('/admin/usage/:id', authenticateAdmin, getCouponUsage);
 router.get('/admin/all', authenticateAdmin, getAdminCoupons);
 router.post('/admin', authenticateAdmin, createCoupon);
 router.put('/admin/:id', authenticateAdmin, updateCoupon);
+router.patch('/admin/:id', authenticateAdmin, updateCoupon);
 router.delete('/admin/:id', authenticateAdmin, deleteCoupon);
 
 export default router;

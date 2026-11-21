@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ShoppingBag, Plus, Minus, ShieldCheck, Truck, Sparkles, Check, AlertTriangle, Ban } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Plus, Minus, ShieldCheck, Truck, Sparkles, Check, AlertTriangle, Ban, MapPin, Clock, Star } from 'lucide-react';
 import api from '../../services/api';
-import { Product, ProductVariant } from '../../types';
+import { Product, ProductVariant, ProductReview } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { getProductImageUrl, getFallbackImageUrl } from '../../utils/imageUrl';
@@ -11,6 +11,8 @@ import { ProductDetailSkeleton } from '../../components/product/ProductDetailSke
 import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { subscribeLiveUpdates } from '../../services/liveSync';
 import { SEOHead } from '../../components/common/SEOHead';
+import { ProductReviewsSection } from '../../components/product/ProductReviewsSection';
+import { ProductViewer } from '../../components/3d/ProductViewer';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -26,6 +28,9 @@ export const ProductDetailPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [serverError, setServerError] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [loadedReviews, setLoadedReviews] = useState<ProductReview[]>([]);
+  const [liveAvgRating, setLiveAvgRating] = useState<number>(0);
+  const [liveReviewCount, setLiveReviewCount] = useState<number>(0);
 
   // Unified available pack sizes list (Base Pack + Configured Variants)
   const availablePackOptions = React.useMemo(() => {
@@ -167,15 +172,16 @@ export const ProductDetailPage: React.FC = () => {
   if (!product) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-16 text-center space-y-4">
-        <div className="text-6xl">🥬</div>
-        <h2 className="text-2xl font-bold text-slate-800">Vegetable Not Found</h2>
-        <Link to="/products" className="inline-block bg-brand-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl cursor-pointer">
+        <div className="w-16 h-16 mx-auto rounded-full bg-cream-100 flex items-center justify-center text-4xl">
+          🥬
+        </div>
+        <h2 className="font-serif text-2xl font-bold text-ink-900">Vegetable Not Found</h2>
+        <Link to="/products" className="btn-pill-primary inline-flex items-center gap-1.5 bg-forest-900 hover:bg-forest-850 text-cream-50 font-bold text-xs px-6 py-2.5 rounded-full cursor-pointer shadow-soft">
           Back to Vegetables
         </Link>
       </div>
     );
   }
-
 
   const price = currentOption ? currentOption.selling_price : Number(product.selling_price);
   const mrp = currentOption ? currentOption.mrp : Number(product.mrp || product.selling_price);
@@ -221,7 +227,7 @@ export const ProductDetailPage: React.FC = () => {
     '@type': 'Product',
     name: product.name,
     image: ogImageUrl,
-    description: product.description || `Order fresh ${product.name.toLowerCase()} online from Fresh Vegetables Organic. Local delivery within our 5 km service zone in Hyderabad.`,
+    description: product.description || `Order fresh ${product.name.toLowerCase()} online from Fresh Vegetables Organic. Local delivery within 5 km of our Champapet & KPHB hubs in Hyderabad.`,
     sku: (product as any).sku || product.slug,
     offers: {
       '@type': 'Offer',
@@ -235,6 +241,32 @@ export const ProductDetailPage: React.FC = () => {
         name: 'Fresh Vegetables Organic',
       },
     },
+    ...(((liveReviewCount > 0) || (product.review_count && product.review_count > 0)) ? {
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: Number(liveAvgRating || product.average_rating || 0).toFixed(1),
+        reviewCount: liveReviewCount || product.review_count,
+        bestRating: '5',
+        worstRating: '1',
+      },
+      ...(loadedReviews.length > 0 ? {
+        review: loadedReviews.slice(0, 5).map((r) => ({
+          '@type': 'Review',
+          reviewRating: {
+            '@type': 'Rating',
+            ratingValue: String(r.rating),
+            bestRating: '5',
+            worstRating: '1',
+          },
+          author: {
+            '@type': 'Person',
+            name: r.customer_name || 'Verified Customer',
+          },
+          datePublished: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : undefined,
+          reviewBody: r.review_text || r.title || 'Verified customer review',
+        })),
+      } : {}),
+    } : {}),
   } : undefined;
 
   const breadcrumbSchema = product ? {
@@ -269,11 +301,11 @@ export const ProductDetailPage: React.FC = () => {
   } : undefined;
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-8 sm:space-y-12 pb-24 md:pb-12">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-8 sm:space-y-12 pb-24 md:pb-16">
       {/* Dynamic SEO Meta & Structured Data */}
       <SEOHead
         title={`Fresh ${product.name} Online | Fresh Vegetables Organic`}
-        description={`Order fresh ${product.name.toLowerCase()} online from Fresh Vegetables Organic. Check current availability and doorstep delivery within our 5 km local service zone.`}
+        description={`Order fresh ${product.name.toLowerCase()} online from Fresh Vegetables Organic. Check current availability and doorstep delivery within 5 km of our Champapet & KPHB hubs.`}
         canonicalUrl={`https://fresh-vegetables-organic.vercel.app/products/${product.slug}`}
         ogType="product"
         ogImage={ogImageUrl}
@@ -281,70 +313,48 @@ export const ProductDetailPage: React.FC = () => {
       />
 
       {/* Back button & Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-        <Link to="/products" className="hover:text-brand-600 flex items-center gap-1">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-semibold text-ink-500 font-sans">
+        <Link to="/products" className="hover:text-forest-900 flex items-center gap-1 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>All Vegetables</span>
         </Link>
-        <span>/</span>
+        <span className="text-ink-300">/</span>
         {product.category_slug ? (
           <Link
             to={`/categories/${product.category_slug}`}
-            className="text-slate-500 hover:text-brand-600 transition-colors"
+            className="text-ink-600 hover:text-forest-900 transition-colors"
           >
             {product.category_name || 'Produce'}
           </Link>
         ) : (
-          <span className="text-slate-400">{product.category_name || 'Greens'}</span>
+          <span className="text-ink-400">{product.category_name || 'Greens'}</span>
         )}
-        <span>/</span>
-        <span className="text-slate-800 font-bold truncate max-w-[140px] sm:max-w-none">{product.name}</span>
+        <span className="text-ink-300">/</span>
+        <span className="text-ink-900 font-bold truncate max-w-[140px] sm:max-w-none">{product.name}</span>
       </nav>
 
       {/* Main Product Showcase */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 bg-white p-4 sm:p-10 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm">
-        {/* Left Column: Image Gallery */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 bg-surface p-4 sm:p-8 lg:p-10 rounded-2xl sm:rounded-3xl border border-line shadow-soft">
+        {/* Left Column: 3D Interactive Studio & Gallery */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="aspect-square bg-[#f8fafc] rounded-3xl border border-slate-200/80 flex items-center justify-center overflow-hidden relative p-6">
-            {activeImage ? (
-              <img
-                src={getProductImageUrl(activeImage, product.name)}
-                alt={`Fresh ${product.name} - Organic Produce`}
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  e.currentTarget.src = getFallbackImageUrl(product.name);
-                }}
-              />
-            ) : (
-              <span className="text-9xl select-none">🥦</span>
-            )}
-
-            {discount > 0 && (
-              <div className="absolute top-4 left-4 bg-amber-500 text-slate-950 font-black text-xs px-3 py-1 rounded-full shadow-md z-10">
-                {discount}% OFF
-              </div>
-            )}
-
-            {isOutOfStock && (
-              <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] flex flex-col items-center justify-center z-20 gap-2">
-                <span className="bg-rose-600 text-white text-sm font-black px-5 py-2 rounded-full uppercase tracking-wider shadow-xl border border-white/30 flex items-center gap-2">
-                  <Ban className="w-4 h-4" /> Out of Stock
-                </span>
-                <span className="text-xs font-bold text-white/90">Produce currently unavailable</span>
-              </div>
-            )}
-          </div>
+          <ProductViewer
+            productName={product.name}
+            categorySlug={product.category_slug}
+            imageUrl={activeImage || product.images?.[0]}
+          />
 
           {/* Thumbnail row if multiple images exist */}
           {product.images && product.images.length > 1 && (
             <div className="flex gap-3 overflow-x-auto pb-2">
               {product.images.map((img, i) => (
                 <button
+                  type="button"
                   key={i}
                   onClick={() => setActiveImage(img)}
-                  className={`w-16 h-16 rounded-xl border-2 overflow-hidden flex-shrink-0 transition-all ${
-                    activeImage === img ? 'border-brand-600 shadow-sm' : 'border-slate-200 opacity-70'
+                  className={`w-16 h-16 rounded-xl border-2 overflow-hidden shrink-0 transition-all cursor-pointer ${
+                    activeImage === img ? 'border-forest-900 shadow-soft' : 'border-line opacity-70 hover:opacity-100'
                   }`}
+                  aria-label={`View image ${i + 1}`}
                 >
                   <img
                     src={getProductImageUrl(img, product.name)}
@@ -362,63 +372,84 @@ export const ProductDetailPage: React.FC = () => {
 
         {/* Right Column: Details & Actions */}
         <div className="lg:col-span-7 flex flex-col justify-between space-y-6">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-1.5 bg-brand-50 text-brand-700 text-xs font-bold px-3 py-1 rounded-full border border-brand-200">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Farm Picked Today</span>
+          <div className="space-y-3.5">
+            <div className="inline-flex items-center gap-1.5 bg-sage-100 text-forest-800 text-xs font-semibold px-3 py-1 rounded-full border border-leaf-500/20 font-sans">
+              <Sparkles className="w-3.5 h-3.5 text-forest-700" />
+              <span>Fresh Daily Harvest</span>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+            <h1 className="font-serif text-2xl sm:text-4xl font-bold text-ink-900 tracking-tight">
               {product.name}
             </h1>
 
+            {/* Customer Rating Summary Pill */}
+            {(liveReviewCount > 0 || (product.review_count && product.review_count > 0)) ? (
+              <div>
+                <a
+                  href="#reviews-section"
+                  className="inline-flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-2.5 py-1 rounded-full text-xs text-amber-900 transition-colors cursor-pointer group"
+                >
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                  <span className="font-bold text-ink-900">
+                    {Number(liveAvgRating || product.average_rating || 0).toFixed(1)}
+                  </span>
+                  <span className="text-ink-500">
+                    ({liveReviewCount || product.review_count} verified {Number(liveReviewCount || product.review_count) === 1 ? 'review' : 'reviews'})
+                  </span>
+                  <span className="text-leaf-700 text-[10px] underline ml-1 group-hover:text-forest-900">
+                    View
+                  </span>
+                </a>
+              </div>
+            ) : null}
+
             {product.description && (
-              <p className="text-xs text-slate-600 leading-relaxed max-w-xl whitespace-pre-line">
+              <p className="text-xs sm:text-sm text-ink-600 leading-relaxed max-w-xl whitespace-pre-line font-sans">
                 {product.description}
               </p>
             )}
 
             {/* Price Box */}
             <div className="pt-2 flex items-baseline gap-3">
-              <span className="text-3xl font-black text-slate-900">
+              <span className="font-serif text-3xl sm:text-4xl font-bold text-ink-900">
                 ₹{price}
               </span>
               {mrp > price && (
-                <span className="text-base text-slate-400 line-through font-semibold">
+                <span className="text-base sm:text-lg text-ink-400 line-through font-sans font-medium">
                   ₹{mrp}
                 </span>
               )}
               {discount > 0 && (
-                <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                  You save ₹{mrp - price}
+                <span className="text-xs font-bold text-forest-800 bg-sage-100 border border-leaf-500/20 px-2.5 py-0.5 rounded-full font-sans">
+                  Save ₹{mrp - price} ({discount}% off)
                 </span>
               )}
             </div>
 
-            {/* Live Stock Quantity & Customer Caution Banner */}
+            {/* Live Stock Quantity Indicator */}
             <div className="pt-1">
               {isOutOfStock ? (
-                <div className="flex items-center gap-2 text-xs font-black text-rose-700 bg-rose-50 px-3.5 py-2.5 rounded-2xl border border-rose-200 shadow-xs max-w-md">
-                  <Ban className="w-4 h-4 text-rose-600 shrink-0" />
+                <div className="flex items-center gap-2 text-xs font-bold text-tomato-600 bg-tomato-50 px-3.5 py-2.5 rounded-2xl border border-tomato-200/80 shadow-soft max-w-md font-sans">
+                  <Ban className="w-4 h-4 text-tomato-500 shrink-0" />
                   <span>Out of Stock — This vegetable is currently unavailable.</span>
                 </div>
               ) : isLowStock ? (
-                <div className="flex items-center justify-between text-xs font-extrabold text-amber-950 bg-amber-50 px-3.5 py-2.5 rounded-2xl border border-amber-300 shadow-xs max-w-md animate-pulse">
+                <div className="flex items-center justify-between text-xs font-bold text-marigold-900 bg-marigold-50 px-3.5 py-2.5 rounded-2xl border border-marigold-200 shadow-soft max-w-md font-sans">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Caution: Only <strong className="font-black text-amber-900 underline decoration-amber-400 decoration-2">{stock}</strong> units left in stock!</span>
+                    <AlertTriangle className="w-4 h-4 text-marigold-600 shrink-0" />
+                    <span>Limited: Only <strong className="font-black text-marigold-950 underline">{stock}</strong> units left!</span>
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md shadow-2xs">
-                    Limited
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-marigold-400 text-forest-950 px-2 py-0.5 rounded-md">
+                    Low Stock
                   </span>
                 </div>
               ) : (
-                <div className="flex items-center justify-between text-xs font-semibold text-emerald-800 bg-emerald-50 px-3.5 py-2.5 rounded-2xl border border-emerald-200/80 shadow-xs max-w-md">
+                <div className="flex items-center justify-between text-xs font-semibold text-forest-800 bg-sage-50 px-3.5 py-2.5 rounded-2xl border border-leaf-500/20 shadow-soft max-w-md font-sans">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                    <span>In Stock: <strong className="font-black text-emerald-950">{stock}</strong> units available</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-leaf-500 animate-pulse shrink-0" />
+                    <span>In Stock: <strong className="font-bold text-ink-900">{stock}</strong> units available</span>
                   </div>
-                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-md">
+                  <span className="text-[11px] font-semibold text-forest-700 bg-sage-100 px-2 py-0.5 rounded-full">
                     Ready for Dispatch
                   </span>
                 </div>
@@ -428,7 +459,7 @@ export const ProductDetailPage: React.FC = () => {
             {/* Weight / Pack Variant Selector */}
             {availablePackOptions && availablePackOptions.length > 1 && (
               <div className="pt-3">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-bold text-ink-700 uppercase tracking-wider mb-2 font-sans">
                   Select Pack Size:
                 </label>
                 <div className="flex flex-wrap gap-2.5">
@@ -439,19 +470,20 @@ export const ProductDetailPage: React.FC = () => {
                     const isSelected = selectedOptionId === opt.id;
                     return (
                       <button
+                        type="button"
                         key={opt.id || 'base-pack'}
                         onClick={() => setSelectedOptionId(opt.id)}
-                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                        className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all border flex items-center gap-2 cursor-pointer min-h-[44px] ${
                           isSelected
-                            ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm ring-2 ring-emerald-500/20'
-                            : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                            ? 'border-forest-900 bg-forest-900 text-cream-50 shadow-soft'
+                            : 'border-line text-ink-700 bg-cream-50 hover:bg-cream-100'
                         }`}
                       >
                         <span>{opt.name} ({opt.unit}) • ₹{opt.selling_price}</span>
                         {optOut ? (
-                          <span className="text-[10px] font-black text-rose-600 bg-rose-100 px-1.5 py-0.2 rounded">Out of stock</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${isSelected ? 'bg-tomato-500 text-cream-50' : 'text-tomato-500 bg-tomato-50'}`}>Out of stock</span>
                         ) : optLow ? (
-                          <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded">Only {optStock}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${isSelected ? 'bg-marigold-500 text-forest-950' : 'text-marigold-700 bg-marigold-50'}`}>Only {optStock}</span>
                         ) : null}
                       </button>
                     );
@@ -462,20 +494,21 @@ export const ProductDetailPage: React.FC = () => {
 
             {/* Outside Zone Banner */}
             {serviceability.checked && !serviceability.serviceable && (
-              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-2">
+              <div className="p-4 rounded-2xl bg-marigold-50 border border-marigold-200/80 text-ink-900 space-y-2.5 shadow-soft">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <h4 className="font-black text-sm">Sorry, we are currently unavailable in your area.</h4>
+                  <AlertTriangle className="w-5 h-5 text-marigold-600 shrink-0" />
+                  <h4 className="font-serif font-bold text-sm text-ink-900">Delivery currently unavailable at your address</h4>
                 </div>
-                <p className="text-xs text-amber-900 leading-relaxed">
-                  Your selected location is outside our 5 km delivery zone. Choose a different location to check availability.
+                <p className="text-xs text-ink-600 leading-relaxed font-sans">
+                  Your selected location is outside our 5 km delivery radius from Champapet & KPHB hubs. Choose a different location to check availability.
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsLocationModalOpen(true)}
-                  className="mt-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                  className="mt-1 px-4 py-2 bg-forest-900 hover:bg-forest-850 text-cream-50 font-semibold text-xs rounded-full shadow-soft transition-all cursor-pointer min-h-[40px] flex items-center gap-1.5"
                 >
-                  Choose a Different Location
+                  <MapPin className="w-3.5 h-3.5 text-leaf-400" />
+                  <span>Choose Another Location</span>
                 </button>
               </div>
             )}
@@ -483,45 +516,50 @@ export const ProductDetailPage: React.FC = () => {
             {/* Quantity Stepper & Add to Cart */}
             <div className="pt-4 flex flex-wrap items-center gap-4">
               {!isOutOfStock && (
-                <div className="flex items-center bg-slate-100 rounded-2xl p-1 border border-slate-200">
+                <div className="flex items-center bg-cream-100 rounded-full p-1 border border-line">
                   <button
+                    type="button"
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     disabled={serviceability.checked && !serviceability.serviceable}
-                    className="w-9 h-9 rounded-xl bg-white hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-slate-700 shadow-xs transition-colors"
+                    className="w-9 h-9 rounded-full bg-surface hover:bg-cream-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-ink-700 shadow-soft transition-colors cursor-pointer"
+                    aria-label="Decrease quantity"
                   >
-                    <Minus className="w-4 h-4" />
+                    <Minus className="w-4 h-4 stroke-[2.5]" />
                   </button>
-                  <span className="w-10 text-center font-bold text-sm text-slate-900">
+                  <span className="w-10 text-center font-bold text-sm text-ink-900 font-mono">
                     {quantity}
                   </span>
                   <button
+                    type="button"
                     onClick={() => setQuantity(quantity + 1)}
                     disabled={quantity >= stock || (serviceability.checked && !serviceability.serviceable)}
                     title={quantity >= stock ? 'Cannot exceed available stock' : 'Add one more'}
-                    className="w-9 h-9 rounded-xl bg-white hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-slate-700 shadow-xs transition-colors"
+                    className="w-9 h-9 rounded-full bg-surface hover:bg-cream-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-ink-700 shadow-soft transition-colors cursor-pointer"
+                    aria-label="Increase quantity"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
                   </button>
                 </div>
               )}
 
               <button
+                type="button"
                 onClick={handleAddToCart}
                 disabled={isOutOfStock || isAdding || (serviceability.checked && !serviceability.serviceable)}
-                className="flex-1 min-w-[200px] bg-brand-600 hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-extrabold py-3.5 px-6 rounded-2xl shadow-lg shadow-brand-600/25 disabled:shadow-none flex items-center justify-center gap-2 transition-all active:scale-98"
+                className="flex-1 min-w-[200px] btn-pill-primary bg-forest-900 hover:bg-forest-850 disabled:bg-cream-200 disabled:text-ink-400 disabled:cursor-not-allowed text-cream-50 font-bold py-3.5 px-6 rounded-full shadow-soft hover:shadow-soft-md disabled:shadow-none flex items-center justify-center gap-2 transition-all active:scale-98 min-h-[48px] cursor-pointer"
               >
                 {serviceability.checked && !serviceability.serviceable ? (
                   <>
-                    <Ban className="w-4 h-4 text-slate-400" />
+                    <Ban className="w-4 h-4 text-ink-400" />
                     <span>Delivery unavailable at this location</span>
                   </>
                 ) : isOutOfStock ? (
                   <>
-                    <Ban className="w-4 h-4 text-slate-400" />
+                    <Ban className="w-4 h-4 text-ink-400" />
                     <span>Out of Stock</span>
                   </>
                 ) : isAdding ? (
-                  <Check className="w-4 h-4" />
+                  <Check className="w-4 h-4 text-leaf-400" />
                 ) : (
                   <>
                     <ShoppingBag className="w-4 h-4" />
@@ -532,29 +570,55 @@ export const ProductDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Trust Guarantees */}
-          <div className="pt-6 border-t border-slate-100 grid grid-cols-2 gap-4 text-xs text-slate-600">
+          {/* Delivery & Service Info */}
+          <div className="pt-6 border-t border-line/70 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-ink-600 font-sans">
             <div className="flex items-center gap-2.5">
-              <Truck className={`w-4 h-4 ${deliveryEstimate.isPaused ? 'text-amber-600' : 'text-brand-600'}`} />
-              <span className={deliveryEstimate.isPaused ? 'text-amber-700 font-bold' : ''}>
+              <Truck className={`w-4 h-4 shrink-0 ${deliveryEstimate.isPaused ? 'text-marigold-600' : 'text-forest-700'}`} />
+              <span className={deliveryEstimate.isPaused ? 'text-marigold-700 font-semibold' : ''}>
                 {deliveryEstimate.isPaused
                   ? 'Delivery Temporarily Paused'
-                  : (deliveryEstimate.etaText ? `Delivered in ${deliveryEstimate.etaText}` : 'Delivery estimate unavailable')}
+                  : (deliveryEstimate.etaText ? `Dispatch Estimate: ${deliveryEstimate.etaText}` : 'Delivery Available within 5 KM')}
               </span>
             </div>
             <div className="flex items-center gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-brand-600" />
-              <span>100% Quality Guaranteed</span>
+              <ShieldCheck className="w-4 h-4 text-forest-700 shrink-0" />
+              <span>Hand-Sorted & Inspected Quality</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Related Products Section (2 Columns on Phone, 4 on Desktop) */}
+      {/* Customer Reviews & Ratings Section */}
+      <ProductReviewsSection
+        productId={product.id}
+        productName={product.name}
+        onReviewsLoaded={(revs, avg, count) => {
+          setLoadedReviews(revs);
+          setLiveAvgRating(avg);
+          setLiveReviewCount(count);
+        }}
+      />
+
+      {/* Related Products Section (2 Columns on Mobile, 4 on Desktop) */}
       {relatedProducts.length > 0 && (
-        <section className="space-y-4 sm:space-y-6">
-          <h3 className="text-lg sm:text-xl font-bold text-slate-900">Similar Farm Vegetables</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-5">
+        <section className="space-y-4 sm:space-y-6 animate-slide-up">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-leaf-700 font-bold text-[11px] uppercase tracking-wider font-sans">
+                More From This Category
+              </span>
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-ink-900 tracking-tight mt-0.5">
+                Similar Farm Vegetables
+              </h3>
+            </div>
+            <Link
+              to="/products"
+              className="text-xs sm:text-sm font-semibold text-forest-700 hover:text-forest-900 transition-colors"
+            >
+              View All
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
             {relatedProducts.slice(0, 6).map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
@@ -564,3 +628,5 @@ export const ProductDetailPage: React.FC = () => {
     </div>
   );
 };
+
+export default ProductDetailPage;

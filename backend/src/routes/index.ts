@@ -21,12 +21,14 @@ import feedRoutes from './feed.routes';
 import zoneRoutes from './zone.routes';
 import auditRoutes from './audit.routes';
 import webhookRoutes from './webhook.routes';
+import reviewRoutes from './review.routes';
 
 const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/products', productRoutes);
+router.use('/reviews', reviewRoutes);
 router.use('/cart', cartRoutes);
 router.use('/addresses', addressRoutes);
 router.use('/orders', orderRoutes);

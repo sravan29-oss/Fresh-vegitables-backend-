@@ -4,6 +4,7 @@ import { getGoogleShoppingFeed, getSitemapXml, getRobotsTxt } from '../controlle
 const router = Router();
 
 // Feed endpoints
+router.get('/google-shopping', getGoogleShoppingFeed);
 router.get('/google-shopping.xml', getGoogleShoppingFeed);
 router.get('/sitemap.xml', getSitemapXml);
 router.get('/robots.txt', getRobotsTxt);

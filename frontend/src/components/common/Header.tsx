@@ -8,7 +8,6 @@ import {
   LogOut,
   Package,
   MapPin,
-  Menu,
   X,
   ShieldAlert,
   Bell,
@@ -21,7 +20,6 @@ import {
   ShieldCheck,
   Sparkles,
   Leaf,
-  ArrowRight,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
@@ -49,7 +47,17 @@ export const Header: React.FC = () => {
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [cartBounced, setCartBounced] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Pulse cart button when items are added
+  useEffect(() => {
+    if (itemCount > 0) {
+      setCartBounced(true);
+      const t = setTimeout(() => setCartBounced(false), 600);
+      return () => clearTimeout(t);
+    }
+  }, [itemCount]);
 
   // Dynamic rotating search placeholder with smooth timing
   useEffect(() => {
@@ -66,7 +74,7 @@ export const Header: React.FC = () => {
     quality_badge?: string;
   }>({
     support_phone: '+91 8106970384',
-    announcement_text: 'Same-Day Farm Delivery for orders placed before 2:00 PM',
+    announcement_text: 'Same-Day Delivery within our serviceable areas in Hyderabad',
     quality_badge: '100% Genuine Certified Organic Harvest',
   });
 
@@ -204,44 +212,44 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white/98 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all duration-300 w-full safe-area-pt">
-      {/* ─── Top Announcement Bar (Vibrant Quick-Commerce Green) ─── */}
-      <div className="bg-[#0c831f] text-white text-[11px] font-medium h-7.5 sm:h-8.5 flex items-center overflow-hidden w-full">
+    <header className="sticky top-0 z-50 bg-cream-50/95 backdrop-blur-md border-b border-line shadow-soft transition-all duration-200 w-full safe-area-pt">
+      {/* ─── Top Announcement Bar (Deep Forest Boutique Green) ─── */}
+      <div className="bg-forest-900 text-cream-50 text-[11px] font-medium h-8 flex items-center overflow-hidden w-full border-b border-forest-800">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full flex items-center justify-between gap-3 min-w-0">
           
           {/* Left: Dispatch Radar & Rotating Live Status */}
           <div className="flex items-center gap-2 min-w-0">
             <span className="relative flex h-2 w-2 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-leaf-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-leaf-500"></span>
             </span>
-            <span className={`px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider shrink-0 ${
-              deliveryEstimate.isPaused ? 'bg-amber-500/30 text-amber-200' : 'bg-white/20 text-white'
+            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+              deliveryEstimate.isPaused ? 'bg-marigold-500/20 text-marigold-400' : 'bg-forest-800 text-leaf-300'
             }`}>
-              {deliveryEstimate.isPaused ? '⚠️ DELIVERIES PAUSED' : `⚡ ${deliveryEstimate.etaText || 'Estimate unavailable'} DISPATCH`}
+              {deliveryEstimate.isPaused ? 'Deliveries Paused' : (deliveryEstimate.etaText ? `${deliveryEstimate.etaText} Dispatch` : 'Fresh Dispatch')}
             </span>
-            <span className="truncate text-white font-bold tracking-wide text-[11px] sm:text-[11.5px]">
+            <span className="truncate text-cream-50/90 font-medium text-[11px] sm:text-[11.5px]">
               {deliveryEstimate.isPaused
                 ? (deliveryEstimate.statusMessage || 'Express delivery temporarily paused in your area')
-                : (storeSettings.announcement_text || 'Same-Day Farm Delivery for orders placed before 2:00 PM')}
+                : (storeSettings.announcement_text || 'Same-Day Delivery within our serviceable areas in Hyderabad')}
             </span>
           </div>
 
           {/* Right: Quality Certification & Support (Desktop only) */}
-          <div className="flex items-center gap-4 shrink-0 hidden sm:flex text-emerald-100">
-            <div className="flex items-center gap-1.5 text-xs text-white font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
-              <span>{storeSettings.quality_badge || '100% Residue-Free & Certified Organic'}</span>
+          <div className="flex items-center gap-4 shrink-0 hidden sm:flex text-forest-200">
+            <div className="flex items-center gap-1.5 text-xs text-cream-100 font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-leaf-400 shrink-0" />
+              <span>{storeSettings.quality_badge || '100% Genuine Certified Organic Harvest'}</span>
             </div>
 
-            <span className="text-emerald-300 font-bold">•</span>
+            <span className="text-forest-700 font-bold">•</span>
 
             <a
               href={`tel:${(storeSettings.support_phone || '+91 8106970384').replace(/[\s-]/g, '')}`}
-              className="group flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 hover:bg-white/25 text-white transition-all text-[11px] font-bold cursor-pointer"
+              className="group flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-forest-800/80 hover:bg-forest-700 text-cream-50 transition-colors text-[11px] font-semibold cursor-pointer"
               title="Call Dedicated Customer Support"
             >
-              <Phone className="w-3 h-3 text-white group-hover:scale-110 transition-transform" />
+              <Phone className="w-3 h-3 text-leaf-400 group-hover:scale-105 transition-transform" />
               <span>Support: {storeSettings.support_phone || '+91 8106970384'}</span>
             </a>
           </div>
@@ -249,79 +257,71 @@ export const Header: React.FC = () => {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          MOBILE NAVBAR (< md: Phone / Small Screens) - Zepto/Blinkit Native App Style
+          MOBILE NAVBAR (< md: Phone / Small Screens) - Clean Boutique Mobile Header
           ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="md:hidden w-full px-3 pt-2 pb-2.5">
+      <div className="md:hidden w-full px-3 pt-2.5 pb-2.5">
         {/* Row 1: Brand & Location (Left) + Notification & Quick Cart / Profile (Right) */}
-        <div className="flex items-center justify-between gap-1.5 h-11 w-full">
+        <div className="flex items-center justify-between gap-2 h-11 w-full">
           
-          {/* Left: Brand Icon + Delivery Time & Location Stack + Choose Location Control */}
-          <div className="flex items-center gap-1.5 min-w-0">
+          {/* Left: Brand Icon + Delivery Location Chip */}
+          <div className="flex items-center gap-2 min-w-0">
             <Link to="/" className="shrink-0 flex items-center" aria-label="Fresh Vegetables Organic Home">
               <img
                 src="/logo.png"
                 alt="Fresh Vegetables Organic"
-                className="w-9 h-9 rounded-xl object-cover ring-1 ring-emerald-500/20 shadow-xs"
+                className="w-9 h-9 rounded-xl object-cover border border-line shadow-soft"
               />
             </Link>
 
+            {/* Location selector chip */}
             <button
               type="button"
               onClick={() => setIsLocationModalOpen(true)}
-              className="flex flex-col text-left justify-center cursor-pointer min-w-0 group"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-2xl bg-surface border border-line hover:border-leaf-500 shadow-soft text-left cursor-pointer min-w-0 group transition-all duration-150 min-h-[44px]"
               title="Change delivery location"
               aria-label={displayLocationName ? `Delivery location: ${displayLocationName}` : 'Select delivery location'}
             >
-              <div className="flex items-center gap-1 leading-none">
-                {displayLocationName && serviceability.checked ? (
-                  serviceability.serviceable ? (
-                    deliveryEstimate.isPaused ? (
-                      <span className="text-[9.5px] font-black uppercase text-amber-600 flex items-center gap-1 tracking-wider">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                        <span>DELIVERY PAUSED</span>
+              <div className="w-6 h-6 rounded-full bg-sage-100 flex items-center justify-center shrink-0 text-forest-700 group-hover:text-forest-900">
+                <MapPin className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0 leading-tight">
+                <div className="flex items-center gap-1 leading-none">
+                  {displayLocationName && serviceability.checked ? (
+                    serviceability.serviceable ? (
+                      deliveryEstimate.isPaused ? (
+                        <span className="text-[9px] font-bold uppercase text-marigold-600 flex items-center gap-1 tracking-wider">
+                          <span className="w-1.5 h-1.5 rounded-full bg-marigold-500 animate-pulse"></span>
+                          <span>DELIVERY PAUSED</span>
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold uppercase text-forest-700 flex items-center gap-1 tracking-wider truncate">
+                          <span className="w-1.5 h-1.5 rounded-full bg-leaf-500 animate-pulse"></span>
+                          <span>{serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} KM • ${deliveryEstimate.etaText || 'Express'}` : (deliveryEstimate.etaText || 'Express')}</span>
+                        </span>
+                      )
+                    ) : !serviceability.configured ? (
+                      <span className="text-[9px] font-bold uppercase text-marigold-600 flex items-center gap-1 tracking-wider">
+                        <span className="w-1.5 h-1.5 rounded-full bg-marigold-500"></span>
+                        <span>CONFIGURING</span>
                       </span>
                     ) : (
-                      <span className="text-[9.5px] font-black uppercase text-[#0c831f] flex items-center gap-1 tracking-wider">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f] animate-pulse"></span>
-                        <span>{serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} KM • ${deliveryEstimate.etaText || 'Estimate unavailable'}` : `${deliveryEstimate.etaText || 'Delivery estimate unavailable'}`}</span>
+                      <span className="text-[9px] font-bold uppercase text-tomato-500 flex items-center gap-1 tracking-wider">
+                        <span className="w-1.5 h-1.5 rounded-full bg-tomato-500"></span>
+                        <span>OUTSIDE 5 KM ZONE</span>
                       </span>
                     )
-                  ) : !serviceability.configured ? (
-                    <span className="text-[9.5px] font-black uppercase text-amber-600 flex items-center gap-1 tracking-wider">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                      <span>CONFIGURING</span>
-                    </span>
                   ) : (
-                    <span className="text-[9.5px] font-black uppercase text-rose-600 flex items-center gap-1 tracking-wider">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                      <span>OUTSIDE 5 KM ZONE</span>
+                    <span className="text-[9px] font-bold uppercase text-forest-700 flex items-center gap-1 tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-leaf-500 animate-pulse"></span>
+                      <span>SELECT LOCATION</span>
                     </span>
-                  )
-                ) : (
-                  <span className="text-[9.5px] font-black uppercase text-emerald-700 flex items-center gap-1 tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                    <span>SELECT LOCATION</span>
-                  </span>
-                )}
+                  )}
+                </div>
+                <span className="text-xs font-semibold text-ink-900 truncate max-w-[120px] xs:max-w-[160px] flex items-center gap-0.5 mt-0.5">
+                  <span className="truncate">{displayLocationName || 'Select Locality'}</span>
+                  <ChevronDown className="w-3 h-3 text-ink-400 shrink-0 group-hover:translate-y-0.5 transition-transform" />
+                </span>
               </div>
-
-              <span className="text-xs font-black text-slate-900 truncate max-w-[110px] xs:max-w-[150px] flex items-center gap-0.5 mt-0.5 leading-tight group-hover:text-[#0c831f] transition-colors">
-                <span className="truncate">{displayLocationName || 'Select Location'}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 group-hover:translate-y-0.5 transition-transform" />
-              </span>
-            </button>
-
-            {/* Prominent "Choose delivery location" button control beside locality */}
-            <button
-              type="button"
-              onClick={() => setIsLocationModalOpen(true)}
-              className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-300 text-[10px] font-extrabold text-[#0c831f] flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs"
-              title="Choose delivery location"
-              aria-label="Choose delivery location"
-            >
-              <MapPin className="w-3 h-3 text-[#0c831f]" />
-              <span className="hidden xs:inline">Choose location</span>
-              <span className="xs:hidden">Change</span>
             </button>
           </div>
 
@@ -330,14 +330,15 @@ export const Header: React.FC = () => {
             {/* Notification Bell */}
             <div className="relative" ref={notifRef}>
               <button
+                type="button"
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
-                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-700 flex items-center justify-center transition-all cursor-pointer relative"
+                className="w-10 h-10 rounded-full bg-surface border border-line text-ink-700 hover:text-forest-900 hover:border-leaf-500 flex items-center justify-center transition-colors cursor-pointer relative shadow-soft"
                 title="Notifications"
                 aria-label="Notifications"
               >
                 <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-black min-w-[16px] h-[16px] px-1 rounded-full flex items-center justify-center ring-2 ring-white shadow-xs">
+                  <span className="absolute -top-0.5 -right-0.5 bg-tomato-500 text-white text-[9px] font-bold min-w-[16px] h-[16px] px-1 rounded-full flex items-center justify-center ring-2 ring-white shadow-soft">
                     {unreadCount}
                   </span>
                 )}
@@ -346,32 +347,33 @@ export const Header: React.FC = () => {
               {/* Mobile Notification Dropdown */}
               {isNotifOpen && (
                 <div
-                  className="fixed right-2 top-24 w-[calc(100vw-16px)] max-w-sm rounded-2xl z-[80] animate-fade-in shadow-2xl border border-slate-200 bg-white overflow-hidden"
+                  className="fixed right-3 top-24 w-[calc(100vw-24px)] max-w-sm rounded-2xl z-[80] animate-fade-in shadow-soft-lg border border-line bg-surface overflow-hidden"
                 >
-                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <div className="px-4 py-3 bg-cream-50 border-b border-line flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-slate-900 text-sm">Notifications</span>
+                      <span className="font-serif font-bold text-ink-900 text-sm">Notifications</span>
                       {unreadCount > 0 && (
-                        <span className="text-[10px] font-black bg-emerald-100 text-[#0c831f] border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-bold bg-sage-100 text-forest-900 border border-leaf-500/20 px-2 py-0.5 rounded-full">
                           {unreadCount} new
                         </span>
                       )}
                     </div>
                     {unreadCount > 0 && (
                       <button
+                        type="button"
                         onClick={markAllAsRead}
-                        className="text-[11px] font-bold text-[#0c831f] hover:text-[#0a701a] flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
+                        className="text-[11px] font-semibold text-forest-700 hover:text-forest-900 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-sage-100 transition-colors cursor-pointer"
                       >
-                        <Check className="w-3.5 h-3.5" /> Mark all read
+                        <Check className="w-3.5 h-3.5" /> Mark read
                       </button>
                     )}
                   </div>
 
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 bg-white">
+                  <div className="max-h-80 overflow-y-auto divide-y divide-line/60 bg-surface">
                     {notifications.length === 0 ? (
-                      <div className="py-10 text-center text-xs text-slate-500 bg-white">
-                        <Bell className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                        <p className="font-semibold text-slate-700">No notifications yet</p>
+                      <div className="py-10 text-center text-xs text-ink-500 bg-surface">
+                        <Bell className="w-8 h-8 text-ink-300 mx-auto mb-2" />
+                        <p className="font-medium text-ink-700">No notifications yet</p>
                       </div>
                     ) : (
                       notifications.map((n) => (
@@ -380,23 +382,23 @@ export const Header: React.FC = () => {
                           onClick={() => handleNotificationClick(n)}
                           className={`p-3.5 cursor-pointer transition-colors text-xs ${
                             !n.is_read
-                              ? 'bg-emerald-50/60 hover:bg-emerald-50 border-l-4 border-[#0c831f]'
-                              : 'bg-white hover:bg-slate-50 border-l-4 border-transparent'
+                              ? 'bg-sage-50 hover:bg-sage-100/70 border-l-3 border-leaf-500'
+                              : 'bg-surface hover:bg-cream-50 border-l-3 border-transparent'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <p className="font-extrabold text-slate-900 text-[13px] leading-snug">
+                            <p className="font-semibold text-ink-900 text-[13px] leading-snug">
                               {n.title}
                             </p>
                             {!n.is_read && (
-                              <span className="w-2 h-2 rounded-full bg-[#0c831f] shrink-0 mt-1"></span>
+                              <span className="w-2 h-2 rounded-full bg-leaf-500 shrink-0 mt-1"></span>
                             )}
                           </div>
-                          <p className="text-slate-600 text-xs mt-1 leading-relaxed font-normal">
+                          <p className="text-ink-500 text-xs mt-1 leading-relaxed">
                             {n.message}
                           </p>
-                          <div className="flex items-center gap-1.5 text-[10.5px] text-[#0c831f] font-semibold mt-1.5">
-                            <Clock className="w-3 h-3 text-[#0c831f]" />
+                          <div className="flex items-center gap-1.5 text-[10.5px] text-forest-700 font-medium mt-1.5">
+                            <Clock className="w-3 h-3 text-leaf-500" />
                             <span>{new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         </div>
@@ -412,7 +414,7 @@ export const Header: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="w-9 h-9 rounded-xl bg-[#0c831f] active:bg-[#0a701a] text-white font-black text-xs flex items-center justify-center shadow-xs ring-1 ring-emerald-600/30 shrink-0 cursor-pointer"
+                className="w-10 h-10 rounded-full bg-forest-900 text-cream-50 font-bold text-xs flex items-center justify-center shadow-pill shrink-0 cursor-pointer hover:bg-forest-700 transition-colors"
                 title="Account & Menu"
                 aria-label="Account Profile and Menu"
               >
@@ -421,7 +423,7 @@ export const Header: React.FC = () => {
             ) : (
               <Link
                 to="/login"
-                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-700 flex items-center justify-center transition-all shrink-0"
+                className="w-10 h-10 rounded-full bg-surface hover:bg-cream-100 border border-line text-ink-700 flex items-center justify-center transition-colors shrink-0 shadow-soft"
                 title="Sign In"
                 aria-label="Sign In"
               >
@@ -429,15 +431,15 @@ export const Header: React.FC = () => {
               </Link>
             )}
 
-            {/* Cart Pill (Zepto/Blinkit Green Pill) */}
+            {/* Cart Pill Button */}
             <button
               type="button"
               onClick={() => setIsCartOpen(true)}
-              className="h-9 px-3 rounded-xl bg-[#0c831f] active:bg-[#0a701a] text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+              className="h-10 px-3.5 rounded-full bg-forest-900 hover:bg-forest-700 text-cream-50 font-semibold text-xs flex items-center gap-1.5 shadow-pill cursor-pointer shrink-0 transition-all duration-150 active:scale-95"
               title="View Cart"
               aria-label={`Cart with ${itemCount} items`}
             >
-              <ShoppingBag className="w-3.5 h-3.5" />
+              <ShoppingBag className="w-3.5 h-3.5 text-cream-50" />
               <span>{itemCount}</span>
             </button>
           </div>
@@ -447,19 +449,19 @@ export const Header: React.FC = () => {
         <div className="pt-2 w-full">
           <form onSubmit={handleSearchSubmit} className="w-full">
             <div className="relative flex items-center w-full">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-ink-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder={DYNAMIC_PLACEHOLDERS[placeholderIdx]}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-9 pr-8 text-xs bg-slate-100 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#0c831f] focus:ring-1 focus:ring-emerald-500 rounded-xl text-slate-900 placeholder:text-slate-400 font-medium transition-all"
+                className="w-full h-11 pl-10 pr-9 text-xs bg-surface hover:bg-cream-50/50 focus:bg-surface border border-line focus:border-forest-700 focus:ring-2 focus:ring-forest-900/10 rounded-[12px] text-ink-900 placeholder:text-ink-400 font-medium transition-all shadow-soft"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-full cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-ink-400 hover:text-ink-900 rounded-full cursor-pointer"
                   title="Clear search"
                   aria-label="Clear search"
                 >
@@ -472,107 +474,98 @@ export const Header: React.FC = () => {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          DESKTOP NAVBAR (>= md: Tablets & Laptops) - Expansive Commercial Header
+          DESKTOP NAVBAR (>= md: Tablets & Laptops) - Slim, High-End Organic Header
           ═══════════════════════════════════════════════════════════════════════ */}
       <div className="hidden md:block max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20 gap-3 md:gap-5">
+        <div className="flex items-center justify-between h-20 gap-4 lg:gap-6">
           
           {/* Brand Logo & Wordmark */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
+          <div className="flex items-center gap-3 shrink-0">
+            <Link to="/" className="flex items-center gap-3 group">
               <div className="relative">
                 <img
                   src="/logo.png"
                   alt="Fresh Vegetables Organic Logo"
-                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm group-hover:scale-105 transition-all duration-300"
+                  className="w-11 h-11 rounded-2xl object-cover border border-line shadow-soft group-hover:scale-105 transition-all duration-200"
                 />
-                <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#0c831f] border-2 border-white flex items-center justify-center">
-                  <Leaf className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" />
+                <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-forest-900 border-2 border-surface flex items-center justify-center">
+                  <Leaf className="w-2.5 h-2.5 text-leaf-300" />
                 </span>
               </div>
 
               <div className="flex flex-col justify-center leading-none">
-                <span className="text-lg sm:text-2xl lg:text-[24px] font-black tracking-tight text-slate-900 group-hover:text-emerald-800 transition-colors flex items-center gap-1.5 flex-wrap">
-                  <span>Fresh<span className="text-[#0c831f]">Vegetables</span></span>
-                  <span className="text-emerald-700 text-[10px] sm:text-xs font-black tracking-wider uppercase px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200/80">Organic</span>
+                <span className="font-serif text-xl lg:text-2xl font-bold tracking-tight text-ink-900 group-hover:text-forest-900 transition-colors flex items-center gap-2">
+                  <span>Fresh Vegetables</span>
+                  <span className="badge-organic text-[10px] tracking-wider uppercase font-sans">Organic</span>
                 </span>
-                <div className="flex text-[9.5px] font-extrabold uppercase tracking-[0.14em] text-slate-500 mt-1 items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${deliveryEstimate.isPaused ? 'bg-amber-500' : 'bg-[#0c831f]'} animate-pulse`}></span>
-                  <span>{deliveryEstimate.isPaused ? '⚠️ DELIVERIES PAUSED • 100% ORGANIC' : `⚡ ${deliveryEstimate.etaText || 'Estimate unavailable'} EXPRESS • 100% ORGANIC`}</span>
+                <div className="flex text-[10px] font-semibold tracking-wider text-ink-500 mt-1 items-center gap-1.5 font-sans">
+                  <span className={`w-1.5 h-1.5 rounded-full ${deliveryEstimate.isPaused ? 'bg-marigold-500' : 'bg-leaf-500'} animate-pulse`}></span>
+                  <span>{deliveryEstimate.isPaused ? 'Deliveries Paused' : (deliveryEstimate.etaText ? `${deliveryEstimate.etaText} Express • 5 KM Radius` : 'Fresh Delivery • 5 KM Radius')}</span>
                 </div>
               </div>
             </Link>
           </div>
 
-          {/* Location & Express Zone Capsule */}
+          {/* Location & Delivery Zone Capsule */}
           <button
+            type="button"
             onClick={() => setIsLocationModalOpen(true)}
-            className={`flex items-center h-10 px-3 rounded-xl border transition-all duration-200 cursor-pointer group text-left shrink-0 ${
-              displayLocationName && serviceability.checked && !serviceability.serviceable
-                ? 'bg-rose-50/70 hover:bg-rose-100/70 border-rose-200 text-rose-950'
-                : !displayLocationName
-                ? 'bg-emerald-50/80 hover:bg-emerald-100/80 border-emerald-300 text-emerald-950'
-                : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/80 text-slate-800'
-            }`}
-            title="Click to switch delivery zone or address"
+            className="flex items-center h-11 px-3.5 rounded-full bg-surface hover:bg-cream-100 border border-line hover:border-leaf-500 transition-all duration-200 cursor-pointer group text-left shrink-0 shadow-soft min-h-[44px]"
+            title="Click to check delivery availability or switch address"
           >
-            <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mr-2 group-hover:scale-110 transition-transform ${
-              displayLocationName && serviceability.checked && !serviceability.serviceable
-                ? 'bg-rose-100 border border-rose-200 text-rose-600'
-                : 'bg-emerald-100 border border-emerald-200 text-[#0c831f]'
-            }`}>
+            <div className="w-7 h-7 rounded-full bg-sage-100 flex items-center justify-center shrink-0 mr-2.5 text-forest-700 group-hover:scale-105 transition-transform">
               <MapPin className="w-3.5 h-3.5" />
             </div>
             <div className="flex flex-col justify-center leading-tight">
               <div className="flex items-center gap-1.5">
-                <span className="text-[8.5px] font-black uppercase tracking-[0.14em] text-slate-500">
-                  {displayLocationName ? 'DELIVERING TO' : 'LOCATION'}
+                <span className="text-[9px] font-bold uppercase tracking-wider text-ink-500">
+                  {displayLocationName ? 'Deliver to' : 'Location'}
                 </span>
                 {displayLocationName && serviceability.checked ? (
                   serviceability.serviceable ? (
-                    <span className="text-[9px] bg-emerald-100 text-[#0c831f] font-black px-1.5 py-0.2 rounded-full border border-emerald-200">
-                      {serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} km • Available` : 'Inside 5 km'}
+                    <span className="text-[9px] bg-sage-100 text-forest-900 font-semibold px-2 py-0.2 rounded-full border border-leaf-500/20">
+                      {serviceability.distanceKm !== undefined ? `${serviceability.distanceKm} km • Available` : 'Serviceable'}
                     </span>
                   ) : !serviceability.configured ? (
-                    <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.2 rounded-full border border-amber-200">
+                    <span className="text-[9px] bg-marigold-50 text-marigold-700 font-semibold px-2 py-0.2 rounded-full border border-marigold-500/30">
                       Configuring
                     </span>
                   ) : (
-                    <span className="text-[9px] bg-rose-100 text-rose-700 font-black px-1.5 py-0.2 rounded-full border border-rose-200">
-                      Outside 5 km Zone
+                    <span className="text-[9px] bg-tomato-50 text-tomato-500 font-semibold px-2 py-0.2 rounded-full border border-tomato-500/20">
+                      Outside 5 km
                     </span>
                   )
                 ) : (
-                  <span className="text-[9px] bg-emerald-100 text-[#0c831f] font-black px-1.5 py-0.2 rounded-full border border-emerald-200 animate-pulse">
-                    Select Location
+                  <span className="text-[9px] bg-sage-100 text-forest-900 font-semibold px-2 py-0.2 rounded-full border border-leaf-500/20 animate-pulse">
+                    Check Location
                   </span>
                 )}
               </div>
-              <div className="font-bold text-slate-900 group-hover:text-[#0c831f] transition-colors text-xs flex items-center gap-1.5 mt-0.5">
-                <span className="truncate max-w-[135px] font-extrabold" title={displayLocationName || 'Select Delivery Location'}>
-                  {displayLocationName || 'Select Location'}
+              <div className="font-semibold text-ink-900 group-hover:text-forest-900 transition-colors text-xs flex items-center gap-1.5 mt-0.5">
+                <span className="truncate max-w-[140px]" title={displayLocationName || 'Check Delivery Location'}>
+                  {displayLocationName || 'Select Locality'}
                 </span>
                 {displayLocationName && (
                   <>
-                    <span className="text-slate-400">•</span>
-                    <span className={`text-[10px] font-semibold flex items-center gap-1 shrink-0 ${deliveryEstimate.isPaused ? 'text-amber-700' : 'text-emerald-700'}`}>
-                      <Clock className={`w-3 h-3 ${deliveryEstimate.isPaused ? 'text-amber-600' : 'text-[#0c831f]'}`} />
-                      {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || 'Delivery estimate unavailable')}
+                    <span className="text-ink-300">•</span>
+                    <span className={`text-[10px] font-medium flex items-center gap-1 shrink-0 ${deliveryEstimate.isPaused ? 'text-marigold-700' : 'text-forest-700'}`}>
+                      <Clock className="w-3 h-3 text-leaf-500" />
+                      {deliveryEstimate.isPaused ? 'Paused' : (deliveryEstimate.etaText || 'Express')}
                     </span>
                   </>
                 )}
               </div>
             </div>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 group-hover:translate-y-0.5 transition-all ml-1.5 shrink-0" />
+            <ChevronDown className="w-3.5 h-3.5 text-ink-400 group-hover:text-ink-700 group-hover:translate-y-0.5 transition-all ml-2 shrink-0" />
           </button>
 
           {/* Center Search Input */}
-          <form onSubmit={handleSearchSubmit} className="flex-1 max-w-xl mx-2 lg:mx-4">
+          <form onSubmit={handleSearchSubmit} className="flex-1 max-w-lg mx-2 lg:mx-4">
             <div className="relative flex items-center w-full">
               <button
                 type="submit"
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0c831f] transition-colors cursor-pointer p-0.5 rounded-md"
-                title="Search"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-forest-900 transition-colors cursor-pointer p-0.5 rounded-md"
+                title="Search produce"
               >
                 <Search className="w-4.5 h-4.5" />
               </button>
@@ -582,14 +575,14 @@ export const Header: React.FC = () => {
                 placeholder={DYNAMIC_PLACEHOLDERS[placeholderIdx]}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-10 pr-10 text-xs sm:text-sm bg-slate-100 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#0c831f] focus:ring-2 focus:ring-emerald-500/20 rounded-xl transition-all text-slate-900 placeholder:text-slate-400 font-medium"
+                className="w-full h-11 pl-10 pr-10 text-xs sm:text-sm bg-surface hover:bg-cream-50/50 focus:bg-surface border border-line focus:border-forest-700 focus:ring-2 focus:ring-forest-900/10 rounded-[12px] transition-all text-ink-900 placeholder:text-ink-400 font-medium shadow-soft"
               />
               
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-ink-400 hover:text-ink-900 rounded-full hover:bg-cream-100 transition-colors cursor-pointer"
                   title="Clear search"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -599,52 +592,55 @@ export const Header: React.FC = () => {
           </form>
 
           {/* Right Action Bar (Bell, User, Cart) */}
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             
             {/* Desktop Notification Bell */}
             <div className="relative" ref={notifRef}>
               <button
+                type="button"
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
-                className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-700 hover:text-slate-900 flex items-center justify-center transition-all duration-200 group cursor-pointer relative"
+                className="w-11 h-11 rounded-full bg-surface hover:bg-cream-100 border border-line text-ink-700 hover:text-forest-900 flex items-center justify-center transition-colors group cursor-pointer relative shadow-soft"
                 title="Notifications"
+                aria-label="Notifications"
               >
                 <Bell className="w-4.5 h-4.5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-black min-w-[17px] h-[17px] px-1 rounded-full flex items-center justify-center ring-2 ring-white shadow-xs">
+                  <span className="absolute -top-0.5 -right-0.5 bg-tomato-500 text-white text-[9px] font-bold min-w-[17px] h-[17px] px-1 rounded-full flex items-center justify-center ring-2 ring-white shadow-soft">
                     {unreadCount}
                   </span>
                 )}
               </button>
 
-              {/* Crisp White Notifications Dropdown */}
+              {/* Notifications Dropdown */}
               {isNotifOpen && (
                 <div
-                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl z-[100] animate-fade-in shadow-2xl ring-1 ring-black/10 border border-slate-200 bg-white overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl z-[100] animate-fade-in shadow-soft-lg border border-line bg-surface overflow-hidden"
                 >
-                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <div className="px-4 py-3 bg-cream-50 border-b border-line flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-slate-900 text-sm">Notifications</span>
+                      <span className="font-serif font-bold text-ink-900 text-sm">Notifications</span>
                       {unreadCount > 0 && (
-                        <span className="text-[10px] font-black bg-emerald-100 text-[#0c831f] border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-bold bg-sage-100 text-forest-900 border border-leaf-500/20 px-2 py-0.5 rounded-full">
                           {unreadCount} new
                         </span>
                       )}
                     </div>
                     {unreadCount > 0 && (
                       <button
+                        type="button"
                         onClick={markAllAsRead}
-                        className="text-[11px] font-bold text-[#0c831f] hover:text-[#0a701a] flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
+                        className="text-[11px] font-semibold text-forest-700 hover:text-forest-900 flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-sage-100 transition-colors cursor-pointer"
                       >
                         <Check className="w-3.5 h-3.5" /> Mark all read
                       </button>
                     )}
                   </div>
 
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 bg-white">
+                  <div className="max-h-80 overflow-y-auto divide-y divide-line/60 bg-surface">
                     {notifications.length === 0 ? (
-                      <div className="py-10 text-center text-xs text-slate-500 bg-white">
-                        <Bell className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                        <p className="font-semibold text-slate-700">No notifications yet</p>
+                      <div className="py-10 text-center text-xs text-ink-500 bg-surface">
+                        <Bell className="w-8 h-8 text-ink-300 mx-auto mb-2" />
+                        <p className="font-medium text-ink-700">No notifications yet</p>
                       </div>
                     ) : (
                       notifications.map((n) => (
@@ -653,23 +649,23 @@ export const Header: React.FC = () => {
                           onClick={() => handleNotificationClick(n)}
                           className={`p-3.5 cursor-pointer transition-colors text-xs ${
                             !n.is_read
-                              ? 'bg-emerald-50/60 hover:bg-emerald-50 border-l-4 border-[#0c831f]'
-                              : 'bg-white hover:bg-slate-50 border-l-4 border-transparent'
+                              ? 'bg-sage-50 hover:bg-sage-100/70 border-l-3 border-leaf-500'
+                              : 'bg-surface hover:bg-cream-50 border-l-3 border-transparent'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <p className="font-extrabold text-slate-900 text-[13px] leading-snug">
+                            <p className="font-semibold text-ink-900 text-[13px] leading-snug">
                               {n.title}
                             </p>
                             {!n.is_read && (
-                              <span className="w-2 h-2 rounded-full bg-[#0c831f] shrink-0 mt-1"></span>
+                              <span className="w-2 h-2 rounded-full bg-leaf-500 shrink-0 mt-1"></span>
                             )}
                           </div>
-                          <p className="text-slate-600 text-xs mt-1 leading-relaxed font-normal">
+                          <p className="text-ink-500 text-xs mt-1 leading-relaxed">
                             {n.message}
                           </p>
-                          <div className="flex items-center gap-1.5 text-[10.5px] text-[#0c831f] font-semibold mt-1.5">
-                            <Clock className="w-3 h-3 text-[#0c831f]" />
+                          <div className="flex items-center gap-1.5 text-[10.5px] text-forest-700 font-medium mt-1.5">
+                            <Clock className="w-3 h-3 text-leaf-500" />
                             <span>{new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         </div>
@@ -684,72 +680,74 @@ export const Header: React.FC = () => {
             <div className="relative" ref={userMenuRef}>
               {user ? (
                 <button
+                  type="button"
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="h-10 flex items-center gap-1.5 pl-2 pr-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-slate-900 transition-all cursor-pointer group"
+                  className="h-11 flex items-center gap-2 pl-2 pr-3.5 rounded-full bg-surface hover:bg-cream-100 border border-line text-ink-900 transition-all cursor-pointer group shadow-soft min-h-[44px]"
                   title="Account"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-[#0c831f] text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0 ring-1 ring-emerald-600/30">
+                  <div className="w-7 h-7 rounded-full bg-forest-900 text-cream-50 font-bold text-xs flex items-center justify-center shrink-0">
                     {user.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex flex-col text-left leading-none">
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-wider">Account</span>
-                    <span className="text-xs font-extrabold text-slate-900 group-hover:text-[#0c831f] truncate max-w-[85px] mt-0.5">
+                    <span className="text-[8.5px] font-bold text-ink-500 uppercase tracking-wider">Account</span>
+                    <span className="text-xs font-semibold text-ink-900 group-hover:text-forest-900 truncate max-w-[85px] mt-0.5">
                       {user.name.split(' ')[0]}
                     </span>
                   </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 group-hover:translate-y-0.5 transition-all inline shrink-0 ml-0.5" />
+                  <ChevronDown className="w-3.5 h-3.5 text-ink-400 group-hover:text-ink-700 group-hover:translate-y-0.5 transition-all inline shrink-0 ml-0.5" />
                 </button>
               ) : (
                 <Link
                   to="/login"
-                  className="h-10 flex items-center gap-1.5 px-3.5 text-xs font-bold text-slate-800 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-all"
+                  className="btn-pill-secondary h-11 px-4 text-xs font-semibold"
                   title="Sign In"
                 >
-                  <User className="w-4 h-4 text-slate-600 shrink-0" />
+                  <User className="w-4 h-4 text-forest-900 shrink-0 mr-1.5" />
                   <span>Sign In</span>
                 </Link>
               )}
 
-              {/* Crisp White User Dropdown Menu */}
+              {/* User Dropdown Menu */}
               {user && isUserMenuOpen && (
                 <div
-                  className="absolute right-0 top-full mt-2 w-64 rounded-2xl z-[100] animate-fade-in shadow-2xl ring-1 ring-black/10 border border-slate-200 bg-white overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-64 rounded-2xl z-[100] animate-fade-in shadow-soft-lg border border-line bg-surface overflow-hidden"
                 >
-                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    <p className="text-[8.5px] text-slate-500 font-black uppercase tracking-wider">Signed in as</p>
-                    <p className="text-sm font-extrabold text-slate-900 truncate">{user.name}</p>
-                    <p className="text-xs text-slate-500 truncate" title={user.email}>{user.email}</p>
+                  <div className="px-4 py-3 bg-cream-50 border-b border-line">
+                    <p className="text-[8.5px] text-ink-500 font-bold uppercase tracking-wider">Signed in as</p>
+                    <p className="text-sm font-semibold text-ink-900 truncate">{user.name}</p>
+                    <p className="text-xs text-ink-500 truncate" title={user.email}>{user.email}</p>
                   </div>
-                  <div className="py-1.5 space-y-0.5 bg-white">
+                  <div className="py-1.5 space-y-0.5 bg-surface">
                     <Link
                       to="/orders"
                       onClick={() => setIsUserMenuOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-ink-700 hover:text-forest-900 hover:bg-cream-100 transition-colors"
                     >
-                      <Package className="w-4 h-4 text-[#0c831f]" />
+                      <Package className="w-4 h-4 text-leaf-500" />
                       <span>My Orders</span>
                     </Link>
                     <Link
                       to="/wallet"
                       onClick={() => setIsUserMenuOpen(false)}
-                      className="flex items-center justify-between px-4 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                      className="flex items-center justify-between px-4 py-2 text-xs font-medium text-ink-700 hover:text-forest-900 hover:bg-cream-100 transition-colors"
                     >
                       <div className="flex items-center gap-2.5">
-                        <Wallet className="w-4 h-4 text-amber-600" />
+                        <Wallet className="w-4 h-4 text-marigold-500" />
                         <span>Wallet &amp; Credits</span>
                       </div>
                     </Link>
                     <Link
                       to="/profile"
                       onClick={() => setIsUserMenuOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-ink-700 hover:text-forest-900 hover:bg-cream-100 transition-colors"
                     >
-                      <User className="w-4 h-4 text-[#0c831f]" />
+                      <User className="w-4 h-4 text-leaf-500" />
                       <span>Profile &amp; Addresses</span>
                     </Link>
                   </div>
-                  <div className="border-t border-slate-100 pt-1 bg-white">
+                  <div className="border-t border-line pt-1 bg-surface">
                     <button
+                      type="button"
                       onClick={() => {
                         setIsUserMenuOpen(false);
                         showLogoutConfirm(() => {
@@ -759,9 +757,9 @@ export const Header: React.FC = () => {
                           });
                         });
                       }}
-                      className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-tomato-500 hover:bg-tomato-50 transition-colors cursor-pointer"
                     >
-                      <LogOut className="w-4 h-4 text-rose-500" />
+                      <LogOut className="w-4 h-4 text-tomato-500" />
                       <span>Sign Out</span>
                     </button>
                   </div>
@@ -771,34 +769,37 @@ export const Header: React.FC = () => {
 
             {/* Desktop Cart Button */}
             <button
+              type="button"
               onClick={() => setIsCartOpen(true)}
-              className="h-10 px-4 rounded-xl bg-[#0c831f] hover:bg-[#0a701a] text-white font-extrabold text-sm flex items-center gap-2.5 shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 cursor-pointer shrink-0"
+              className={`btn-pill-primary h-11 px-5 gap-2.5 transition-all duration-300 ${
+                cartBounced ? 'scale-105 shadow-soft-lg ring-2 ring-leaf-400' : ''
+              }`}
               title="View Cart & Checkout"
             >
               <div className="relative flex items-center justify-center">
                 <ShoppingBag className="w-4 h-4" />
                 {itemCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2 bg-white text-[#0c831f] text-[9px] font-black min-w-[17px] h-[17px] px-0.5 rounded-full flex items-center justify-center ring-2 ring-[#0c831f] shadow-xs">
+                  <span className="absolute -top-1.5 -right-2 bg-marigold-500 text-forest-950 text-[9px] font-bold min-w-[17px] h-[17px] px-0.5 rounded-full flex items-center justify-center ring-2 ring-forest-900 shadow-soft">
                     {itemCount}
                   </span>
                 )}
               </div>
-              <span className="tracking-wider uppercase font-black text-[11px]">My Cart</span>
+              <span className="tracking-wider uppercase font-bold text-[11px]">My Cart</span>
             </button>
           </div>
         </div>
 
         {/* ─── Desktop Sub-Navigation Rail (Clean Categories) ─── */}
-        <div className="flex items-center gap-2 py-2.5 border-t border-slate-100 text-xs font-bold overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-2 py-2 border-t border-line text-xs font-medium overflow-x-auto scrollbar-none">
           <Link
             to="/products"
-            className={`px-3.5 py-1.5 rounded-lg transition-all duration-200 whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-full transition-all duration-150 whitespace-nowrap flex items-center gap-1.5 ${
               location.pathname === '/products' && !location.search
-                ? 'bg-emerald-50 text-[#0c831f] border border-emerald-200'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                ? 'bg-forest-900 text-cream-50 font-semibold'
+                : 'text-ink-700 hover:text-forest-900 hover:bg-cream-100'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-[#0c831f]" />
+            <Sparkles className="w-3.5 h-3.5 text-leaf-500" />
             <span>All Vegetables</span>
           </Link>
 
@@ -808,10 +809,10 @@ export const Header: React.FC = () => {
               <Link
                 key={cat.id}
                 to={`/categories/${cat.slug}`}
-                className={`px-3 py-1.5 rounded-lg transition-all duration-200 whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-full transition-all duration-150 whitespace-nowrap ${
                   isCatActive
-                    ? 'bg-emerald-50 text-[#0c831f] border border-emerald-200 font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                    ? 'bg-forest-900 text-cream-50 font-semibold'
+                    : 'text-ink-700 hover:text-forest-900 hover:bg-cream-100'
                 }`}
               >
                 {cat.name}
@@ -821,15 +822,15 @@ export const Header: React.FC = () => {
 
           <Link
             to="/products?in_stock=true"
-            className="px-3.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-black whitespace-nowrap transition-all ml-auto flex items-center gap-1.5 shadow-xs"
+            className="px-3.5 py-1.5 rounded-full bg-marigold-50 hover:bg-marigold-100 text-marigold-700 border border-marigold-500/30 font-semibold whitespace-nowrap transition-all ml-auto flex items-center gap-1.5"
           >
-            <Flame className="w-3.5 h-3.5 text-amber-600" />
+            <Flame className="w-3.5 h-3.5 text-marigold-600" />
             <span>Daily Deals</span>
           </Link>
 
-          <div className="hidden xl:flex items-center gap-2 pl-3 ml-2 border-l border-slate-200 text-[11px] font-bold text-slate-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#0c831f]"></span>
-            <span>Harvested Fresh Today • Zero Cold Storage</span>
+          <div className="hidden xl:flex items-center gap-2 pl-3 ml-2 border-l border-line text-[11px] font-medium text-ink-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-leaf-500"></span>
+            <span>Fresh Vegetables • 5 KM Delivery Radius</span>
           </div>
         </div>
       </div>
@@ -837,34 +838,35 @@ export const Header: React.FC = () => {
       {/* ─── Mobile Drawer Menu ─── */}
       {isMobileMenuOpen && createPortal(
         <div
-          className="md:hidden fixed inset-0 z-[99999] bg-slate-950/60 backdrop-blur-xs transition-opacity animate-fade-in flex flex-col justify-end"
+          className="md:hidden fixed inset-0 z-[99999] bg-forest-950/60 backdrop-blur-xs transition-opacity animate-fade-in flex flex-col justify-end"
           onClick={() => setIsMobileMenuOpen(false)}
         >
           <div
-            className="bg-white border-t border-slate-200 rounded-t-3xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-2xl text-slate-900"
+            className="bg-surface border-t border-line rounded-t-3xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-soft-lg text-ink-900"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+            <div className="flex items-center justify-between border-b border-line pb-4">
               <div className="flex items-center gap-3">
                 <img
                   src="/logo.png"
                   alt="Fresh Vegetables Organic Logo"
-                  className="w-11 h-11 rounded-xl object-cover ring-1 ring-slate-200"
+                  className="w-11 h-11 rounded-2xl object-cover border border-line"
                 />
                 <div>
-                  <h3 className="font-black text-base text-slate-900 leading-tight flex items-center gap-1.5">
-                    <span>Fresh<span className="text-[#0c831f]">Vegetables</span></span>
-                    <span className="text-emerald-700 text-[10px] font-black uppercase px-1 py-0.5 rounded bg-emerald-50 border border-emerald-200/80">Organic</span>
+                  <h3 className="font-serif font-bold text-base text-ink-900 leading-tight flex items-center gap-1.5">
+                    <span>Fresh Vegetables</span>
+                    <span className="badge-organic text-[10px] uppercase font-sans">Organic</span>
                   </h3>
-                  <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                    <span className={`w-1.5 h-1.5 rounded-full ${deliveryEstimate.isPaused ? 'bg-amber-500' : 'bg-[#0c831f]'}`}></span>
-                    ⚡ {deliveryEstimate.isPaused ? 'DELIVERY PAUSED' : `${deliveryEstimate.etaText || 'Estimate unavailable'} EXPRESS`} • 100% ORGANIC
+                  <p className="text-[10px] font-medium text-ink-500 flex items-center gap-1 mt-0.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${deliveryEstimate.isPaused ? 'bg-marigold-500' : 'bg-leaf-500'}`}></span>
+                    ⚡ {deliveryEstimate.isPaused ? 'Deliveries Paused' : `${deliveryEstimate.etaText || 'Express'} Express`} • 5 KM Radius
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-2 text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-100 transition-colors"
+                className="p-2 text-ink-400 hover:text-ink-900 rounded-full hover:bg-cream-100 transition-colors"
                 aria-label="Close menu"
               >
                 <X className="w-5 h-5" />
@@ -877,36 +879,38 @@ export const Header: React.FC = () => {
                 setIsMobileMenuOpen(false);
                 setIsLocationModalOpen(true);
               }}
-              className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between cursor-pointer"
+              className="p-3.5 bg-cream-50 rounded-2xl border border-line flex items-center justify-between cursor-pointer hover:border-leaf-500 transition-colors"
             >
               <div className="flex items-center gap-2.5">
-                <MapPin className="w-4 h-4 text-[#0c831f]" />
+                <div className="w-8 h-8 rounded-full bg-sage-100 flex items-center justify-center text-forest-700">
+                  <MapPin className="w-4 h-4" />
+                </div>
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Delivery Zone</p>
-                  <p className="text-xs font-bold text-slate-900">{currentZone ? currentZone.name : 'Select Zone'}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-ink-500">Delivery Zone</p>
+                  <p className="text-xs font-semibold text-ink-900">{currentZone ? currentZone.name : 'Select Delivery Zone'}</p>
                 </div>
               </div>
-              <span className="text-xs font-extrabold text-[#0c831f]">Change</span>
+              <span className="text-xs font-semibold text-forest-700">Change</span>
             </div>
 
             {/* Quick Links */}
             <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Produce Categories</p>
-              <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Produce Categories</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 <Link
                   to="/products"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-emerald-50 text-[#0c831f] border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors font-bold flex items-center gap-1.5"
+                  className="p-3 bg-sage-50 text-forest-900 border border-leaf-500/20 rounded-xl hover:bg-sage-100 transition-colors font-semibold flex items-center gap-1.5"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-[#0c831f]" />
+                  <Sparkles className="w-3.5 h-3.5 text-leaf-500" />
                   <span>All Vegetables</span>
                 </Link>
                 <Link
                   to="/products?in_stock=true"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors font-bold flex items-center gap-1.5"
+                  className="p-3 bg-marigold-50 text-marigold-700 border border-marigold-500/30 rounded-xl hover:bg-marigold-100 transition-colors font-semibold flex items-center gap-1.5"
                 >
-                  <Flame className="w-3.5 h-3.5 text-amber-600" />
+                  <Flame className="w-3.5 h-3.5 text-marigold-600" />
                   <span>Daily Deals</span>
                 </Link>
                 {categories.map((cat) => (
@@ -914,7 +918,7 @@ export const Header: React.FC = () => {
                     key={cat.id}
                     to={`/categories/${cat.slug}`}
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="p-3 bg-slate-50 text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors truncate"
+                    className="p-3 bg-surface text-ink-700 border border-line rounded-xl hover:bg-cream-100 transition-colors truncate font-medium"
                   >
                     {cat.name}
                   </Link>
@@ -923,41 +927,42 @@ export const Header: React.FC = () => {
             </div>
 
             {/* Account section */}
-            <div className="border-t border-slate-200 pt-4 space-y-3">
+            <div className="border-t border-line pt-4 space-y-3">
               {user ? (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                    <div className="w-9 h-9 rounded-lg bg-[#0c831f] text-white font-black flex items-center justify-center text-xs">
+                  <div className="flex items-center gap-3 p-3 bg-cream-50 rounded-2xl border border-line">
+                    <div className="w-9 h-9 rounded-full bg-forest-900 text-cream-50 font-bold flex items-center justify-center text-xs">
                       {user.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-extrabold text-sm text-slate-900">{user.name}</p>
-                      <p className="text-xs text-slate-500">{user.email}</p>
+                      <p className="font-semibold text-sm text-ink-900">{user.name}</p>
+                      <p className="text-xs text-ink-500">{user.email}</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
                     <Link
                       to="/profile"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-800 border border-slate-200 flex items-center gap-2 col-span-2"
+                      className="p-3 bg-surface hover:bg-cream-100 rounded-xl text-ink-900 border border-line flex items-center gap-2 col-span-2 font-medium"
                     >
-                      <User className="w-4 h-4 text-[#0c831f]" /> Profile &amp; Addresses
+                      <User className="w-4 h-4 text-leaf-500" /> Profile &amp; Addresses
                     </Link>
                     <Link
                       to="/orders"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-800 border border-slate-200 flex items-center gap-2"
+                      className="p-3 bg-surface hover:bg-cream-100 rounded-xl text-ink-900 border border-line flex items-center gap-2 font-medium"
                     >
-                      <Package className="w-4 h-4 text-[#0c831f]" /> My Orders
+                      <Package className="w-4 h-4 text-leaf-500" /> My Orders
                     </Link>
                     <Link
                       to="/wallet"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl text-amber-800 border border-slate-200 flex items-center gap-2"
+                      className="p-3 bg-surface hover:bg-cream-100 rounded-xl text-marigold-700 border border-line flex items-center gap-2 font-medium"
                     >
-                      <Wallet className="w-4 h-4 text-amber-600" /> Wallet &amp; Credits
+                      <Wallet className="w-4 h-4 text-marigold-500" /> Wallet &amp; Credits
                     </Link>
                     <button
+                      type="button"
                       onClick={() => {
                         setIsMobileMenuOpen(false);
                         showLogoutConfirm(() => {
@@ -967,9 +972,9 @@ export const Header: React.FC = () => {
                           });
                         });
                       }}
-                      className="p-3 bg-rose-50 hover:bg-rose-100 rounded-xl text-rose-600 border border-rose-200 flex items-center justify-center gap-2 col-span-2 cursor-pointer font-bold transition-colors"
+                      className="p-3 bg-tomato-50 hover:bg-tomato-100/70 rounded-xl text-tomato-500 border border-tomato-500/20 flex items-center justify-center gap-2 col-span-2 cursor-pointer font-semibold transition-colors"
                     >
-                      <LogOut className="w-4 h-4 text-rose-500" /> Sign Out
+                      <LogOut className="w-4 h-4 text-tomato-500" /> Sign Out
                     </button>
                   </div>
                 </div>
@@ -978,14 +983,14 @@ export const Header: React.FC = () => {
                   <Link
                     to="/login"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex-1 text-center py-2.5 bg-[#0c831f] hover:bg-[#0a701a] text-white rounded-xl font-bold text-xs shadow-xs"
+                    className="btn-pill-primary flex-1 text-center py-2.5"
                   >
                     Sign In
                   </Link>
                   <Link
                     to="/register"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex-1 text-center py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl font-bold text-xs hover:bg-slate-100"
+                    className="btn-pill-secondary flex-1 text-center py-2.5"
                   >
                     Create Account
                   </Link>
@@ -996,9 +1001,9 @@ export const Header: React.FC = () => {
                 <Link
                   to="/admin/login"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800 py-2"
+                  className="flex items-center justify-center gap-2 text-xs font-medium text-ink-400 hover:text-ink-700 py-2"
                 >
-                  <ShieldAlert className="w-4 h-4 text-amber-600" />
+                  <ShieldAlert className="w-4 h-4 text-marigold-500" />
                   Admin Operations Portal
                 </Link>
               </div>

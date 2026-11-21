@@ -128,7 +128,8 @@ async function runTests() {
   // Test 8: Invalid customer coordinates
   const resInvalid = checkServiceability(999, 999, testHub);
   assert(
-    resInvalid.serviceable === false && resInvalid.message.includes('Invalid delivery coordinates'),
+    resInvalid.serviceable === false &&
+      resInvalid.message.includes('Delivery address requires verified geographic coordinates'),
     'Invalid customer coordinates safely rejected without crashing'
   );
 

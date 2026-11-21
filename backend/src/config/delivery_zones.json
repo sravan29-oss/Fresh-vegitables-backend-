@@ -1,6 +1,8 @@
 [
   {
     "id": "zone-champapet",
+    "hub_id": "hub-champapet",
+    "hub_code": "champapet",
     "name": "Champapet & Saroornagar Zone",
     "pincodes": [
       "500059",
@@ -28,6 +30,8 @@
   },
   {
     "id": "zone-kphb",
+    "hub_id": "hub-kphb",
+    "hub_code": "kphb",
     "name": "Kukatpally & KPHB Zone",
     "pincodes": [
       "500072",
@@ -56,6 +60,8 @@
   },
   {
     "id": "zone-hitech",
+    "hub_id": "hub-kphb",
+    "hub_code": "kphb",
     "name": "Hitech City, Madhapur & Gachibowli",
     "pincodes": [
       "500081",
@@ -84,6 +90,8 @@
   },
   {
     "id": "zone-miyapur",
+    "hub_id": "hub-kphb",
+    "hub_code": "kphb",
     "name": "Miyapur, Chandanagar & BHEL",
     "pincodes": [
       "500049",

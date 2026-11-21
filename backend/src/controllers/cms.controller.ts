@@ -7,6 +7,56 @@ import cache from '../services/cache.service';
 import { logAuditEvent } from '../services/audit.service';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Sanitizes input text against Cross-Site Scripting (XSS) and unauthorized HTML/script injection
+ */
+export function sanitizeText(input?: string): string {
+  if (!input || typeof input !== 'string') return '';
+  return input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/onerror\s*=\s*["']?[^"'>]+/gi, '')
+    .replace(/onload\s*=\s*["']?[^"'>]+/gi, '')
+    .replace(/onclick\s*=\s*["']?[^"'>]+/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .trim();
+}
+
+/**
+ * Validates that an image URL is safe and valid
+ */
+export function isValidImageUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/uploads/') || trimmed.startsWith('data:image/')) return true;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validates link destination URL
+ */
+export function isValidLinkUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/') || trimmed.startsWith('#')) return true;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Public Customer Homepage Endpoint
+ * Returns only active, scheduled, and validated database catalog content
+ */
 export async function getHomepageData(req: Request, res: Response, next: NextFunction) {
   try {
     const cached = cache.get('cms:homepage');
@@ -14,22 +64,40 @@ export async function getHomepageData(req: Request, res: Response, next: NextFun
       return sendSuccess(res, 'Homepage CMS data (cached)', cached);
     }
 
-    const sectionsRes = await db.query(
-      `SELECT * FROM homepage_sections WHERE status = 'active' ORDER BY display_order ASC`
-    );
-    const bannersRes = await db.query(
-      `SELECT * FROM homepage_banners WHERE status = 'active' ORDER BY display_order ASC`
-    );
+    let rawActive: any[] = [];
+    let banners: any[] = [];
+
+    try {
+      const sectionsRes = await db.query(
+        `SELECT * FROM homepage_sections WHERE status = 'active' ORDER BY display_order ASC`
+      );
+      const bannersRes = await db.query(
+        `SELECT * FROM homepage_banners WHERE status = 'active' ORDER BY display_order ASC`
+      );
+      rawActive = sectionsRes.rows || [];
+      banners = bannersRes.rows || [];
+    } catch {
+      rawActive = ((memoryStore as any).homepage_sections || []).filter((s: any) => s.status === 'active');
+      banners = ((memoryStore as any).homepage_banners || []).filter((b: any) => b.status === 'active');
+    }
 
     const now = new Date();
-    const rawActive = (sectionsRes.rows || []).filter((sec: any) => {
-      if (sec.type === 'hero_banner') return false; // Default banner removed
+    // Strictly filter scheduled content
+    const filteredActive = rawActive.filter((sec: any) => {
+      if (sec.type === 'hero_banner') return false; // Default hero banner removed
       if (sec.start_date && new Date(sec.start_date) > now) return false;
       if (sec.end_date && new Date(sec.end_date) < now) return false;
       return true;
     });
 
-    const activeSections = rawActive.length > 0 ? rawActive : [
+    const activeBanners = banners.filter((b: any) => {
+      if (b.status !== 'active') return false;
+      if (b.start_date && new Date(b.start_date) > now) return false;
+      if (b.end_date && new Date(b.end_date) < now) return false;
+      return true;
+    });
+
+    const activeSections = filteredActive.length > 0 ? filteredActive : [
       { id: 'sec-cats', type: 'categories', title: 'Shop by Harvest Category', subtitle: 'Farm Categories', display_order: 1 },
       { id: 'sec-feat', type: 'featured_products', title: 'Handpicked Fresh Today', subtitle: 'Harvest Highlights', display_order: 2 },
       { id: 'sec-best', type: 'best_sellers', title: 'Top Community Favorites', subtitle: 'Most Ordered Produce', display_order: 3 },
@@ -39,35 +107,40 @@ export async function getHomepageData(req: Request, res: Response, next: NextFun
       { id: 'sec-app', type: 'app_promotion', title: 'Freshness on the Go', subtitle: 'Progressive Mobile App', display_order: 7 }
     ];
 
-    const banners = bannersRes.rows || [];
+    let allCategories: any[] = [];
+    let allProducts: any[] = [];
 
-    // Pull active categories and products via database
-    const [categoriesRes, productsRes, variantsRes] = await Promise.all([
-      db.query("SELECT * FROM categories WHERE status = 'active' ORDER BY display_order ASC"),
-      db.query("SELECT * FROM products WHERE status = 'active'"),
-      db.query("SELECT * FROM product_variants WHERE status = 'active' ORDER BY selling_price ASC"),
-    ]);
-
-    const allCategories = categoriesRes.rows || [];
-    const allVariants = variantsRes.rows || [];
-    const allProducts = (productsRes.rows || []).map((p: any) => ({
-      ...p,
-      variants: allVariants.filter((v: any) => v.product_id === p.id),
-    }));
+    try {
+      const [categoriesRes, productsRes, variantsRes] = await Promise.all([
+        db.query("SELECT * FROM categories WHERE status = 'active' ORDER BY display_order ASC"),
+        db.query("SELECT * FROM products WHERE status = 'active'"),
+        db.query("SELECT * FROM product_variants WHERE status = 'active' ORDER BY selling_price ASC"),
+      ]);
+      const allVariants = variantsRes.rows || [];
+      allCategories = (categoriesRes.rows || []).filter((c: any) => c.status === 'active');
+      allProducts = (productsRes.rows || []).filter((p: any) => p.status === 'active').map((p: any) => ({
+        ...p,
+        variants: allVariants.filter((v: any) => v.product_id === p.id && v.status === 'active'),
+      }));
+    } catch {
+      allCategories = (memoryStore.categories || []).filter((c: any) => c.status === 'active');
+      allProducts = (memoryStore.products || []).filter((p: any) => p.status === 'active');
+    }
 
     // Attach enriched preview products or categories for specific rail types
+    // NEVER inject hardcoded fake products: only products verified active in database catalog
     const enrichedSections = activeSections.map((sec: any) => {
       let enrichedData: any = {};
       if (sec.type === 'categories') {
         enrichedData.categories = allCategories;
       } else if (sec.type === 'featured_products' || sec.type === 'fresh_arrivals') {
-        const feat = allProducts.filter((p: any) => p.featured);
-        enrichedData.products = (feat.length > 0 ? feat : allProducts).slice(0, 8);
+        const feat = allProducts.filter((p: any) => p.status === 'active' && p.featured);
+        enrichedData.products = feat.slice(0, 8);
       } else if (sec.type === 'best_sellers') {
-        const best = allProducts.filter((p: any) => p.best_seller);
-        enrichedData.products = (best.length > 0 ? best : allProducts).slice(0, 8);
+        const best = allProducts.filter((p: any) => p.status === 'active' && p.best_seller);
+        enrichedData.products = best.slice(0, 8);
       } else if (sec.type === 'hero_banner') {
-        enrichedData.banners = banners;
+        enrichedData.banners = activeBanners;
       }
       return {
         ...sec,
@@ -77,7 +150,7 @@ export async function getHomepageData(req: Request, res: Response, next: NextFun
 
     const payload = {
       sections: enrichedSections,
-      banners,
+      banners: activeBanners,
     };
 
     // Cache for 5 minutes
@@ -91,35 +164,49 @@ export async function getHomepageData(req: Request, res: Response, next: NextFun
 
 export async function getHomepagePreview(req: Request, res: Response, next: NextFunction) {
   try {
-    const sectionsRes = await db.query(
-      `SELECT * FROM homepage_sections ORDER BY display_order ASC`
-    );
-    const bannersRes = await db.query(
-      `SELECT * FROM homepage_banners ORDER BY display_order ASC`
-    );
+    let rawSections: any[] = [];
+    let rawBanners: any[] = [];
 
-    const [categoriesRes, productsRes, variantsRes] = await Promise.all([
-      db.query("SELECT * FROM categories WHERE status = 'active' ORDER BY display_order ASC"),
-      db.query("SELECT * FROM products WHERE status = 'active'"),
-      db.query("SELECT * FROM product_variants WHERE status = 'active' ORDER BY selling_price ASC"),
-    ]);
+    try {
+      const sectionsRes = await db.query(`SELECT * FROM homepage_sections ORDER BY display_order ASC`);
+      const bannersRes = await db.query(`SELECT * FROM homepage_banners ORDER BY display_order ASC`);
+      rawSections = sectionsRes.rows || [];
+      rawBanners = bannersRes.rows || [];
+    } catch {
+      rawSections = (memoryStore as any).homepage_sections || [];
+      rawBanners = (memoryStore as any).homepage_banners || [];
+    }
 
-    const allVariants = variantsRes.rows || [];
-    const allProducts = (productsRes.rows || []).map((p: any) => ({
-      ...p,
-      variants: allVariants.filter((v: any) => v.product_id === p.id),
-    }));
+    let allCategories: any[] = [];
+    let allProducts: any[] = [];
 
-    const enrichedSections = (sectionsRes.rows || []).map((sec: any) => {
+    try {
+      const [categoriesRes, productsRes, variantsRes] = await Promise.all([
+        db.query("SELECT * FROM categories WHERE status = 'active' ORDER BY display_order ASC"),
+        db.query("SELECT * FROM products WHERE status = 'active'"),
+        db.query("SELECT * FROM product_variants WHERE status = 'active' ORDER BY selling_price ASC"),
+      ]);
+      const allVariants = variantsRes.rows || [];
+      allCategories = categoriesRes.rows || [];
+      allProducts = (productsRes.rows || []).map((p: any) => ({
+        ...p,
+        variants: allVariants.filter((v: any) => v.product_id === p.id && v.status === 'active'),
+      }));
+    } catch {
+      allCategories = (memoryStore.categories || []).filter((c: any) => c.status === 'active');
+      allProducts = (memoryStore.products || []).filter((p: any) => p.status === 'active');
+    }
+
+    const enrichedSections = rawSections.map((sec: any) => {
       let enrichedData: any = {};
       if (sec.type === 'categories') {
-        enrichedData.categories = categoriesRes.rows || [];
+        enrichedData.categories = allCategories;
       } else if (sec.type === 'featured_products' || sec.type === 'fresh_arrivals') {
-        enrichedData.products = allProducts.filter((p: any) => p.featured).slice(0, 8);
+        enrichedData.products = allProducts.filter((p: any) => p.status === 'active' && p.featured).slice(0, 8);
       } else if (sec.type === 'best_sellers') {
-        enrichedData.products = allProducts.filter((p: any) => p.best_seller).slice(0, 8);
+        enrichedData.products = allProducts.filter((p: any) => p.status === 'active' && p.best_seller).slice(0, 8);
       } else if (sec.type === 'hero_banner') {
-        enrichedData.banners = bannersRes.rows || [];
+        enrichedData.banners = rawBanners;
       }
       return {
         ...sec,
@@ -129,7 +216,7 @@ export async function getHomepagePreview(req: Request, res: Response, next: Next
 
     sendSuccess(res, 'Homepage CMS preview data (including draft/scheduled)', {
       sections: enrichedSections,
-      banners: bannersRes.rows || [],
+      banners: rawBanners,
     });
   } catch (error) {
     next(error);
@@ -138,8 +225,14 @@ export async function getHomepagePreview(req: Request, res: Response, next: Next
 
 export async function getAllSectionsAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const resSections = await db.query(`SELECT * FROM homepage_sections ORDER BY display_order ASC`);
-    sendSuccess(res, 'All homepage CMS sections for admin', resSections.rows);
+    let rows: any[] = [];
+    try {
+      const resSections = await db.query(`SELECT * FROM homepage_sections ORDER BY display_order ASC`);
+      rows = resSections.rows || [];
+    } catch {
+      rows = (memoryStore as any).homepage_sections || [];
+    }
+    sendSuccess(res, 'All homepage CMS sections for admin', rows);
   } catch (error) {
     next(error);
   }
@@ -162,42 +255,93 @@ export async function createSectionAdmin(req: Request, res: Response, next: Next
       configuration,
     } = req.body;
 
+    // Validate and sanitize content
+    const sanitizedTitle = sanitizeText(title) || 'New Section';
+    const sanitizedSubtitle = sanitizeText(subtitle);
+    const sanitizedDesc = sanitizeText(description);
+    const sanitizedBtnText = sanitizeText(button_text) || 'Shop Now';
+    const sanitizedBtnLink = sanitizeText(button_link) || '/products';
+
+    if (image && !isValidImageUrl(image)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_IMAGE_URL',
+        message: 'Invalid section image URL. Please provide a valid HTTP/HTTPS or uploaded image path.',
+      });
+    }
+
+    if (button_link && !isValidLinkUrl(button_link)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_LINK_URL',
+        message: 'Invalid button link URL. Script URLs and dangerous schemes are prohibited.',
+      });
+    }
+
+    const orderNum = display_order !== undefined && !isNaN(Number(display_order))
+      ? Math.max(0, Math.floor(Number(display_order)))
+      : 99;
+
+    const validStatus = status === 'inactive' || status === 'scheduled' ? status : 'active';
     const newId = uuidv4();
-    const orderNum = display_order !== undefined ? Number(display_order) : 99;
 
-    const result = await db.query(
-      `INSERT INTO homepage_sections (id, type, title, subtitle, description, image, button_text, button_link, display_order, status, start_date, end_date, configuration)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       RETURNING *`,
-      [
-        newId,
-        type || 'promotional_banner',
-        title || 'New Section',
-        subtitle || '',
-        description || '',
-        image || '',
-        button_text || 'Shop Now',
-        button_link || '/products',
-        orderNum,
-        status || 'active',
-        start_date || null,
-        end_date || null,
-        JSON.stringify(configuration || {}),
-      ]
-    );
+    const newSection = {
+      id: newId,
+      type: type || 'promotional_banner',
+      title: sanitizedTitle,
+      subtitle: sanitizedSubtitle,
+      description: sanitizedDesc,
+      image: image || '',
+      button_text: sanitizedBtnText,
+      button_link: sanitizedBtnLink,
+      display_order: orderNum,
+      status: validStatus,
+      start_date: start_date || null,
+      end_date: end_date || null,
+      configuration: configuration || {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
 
-    const created = result.rows[0];
+    if (!(memoryStore as any).homepage_sections) {
+      (memoryStore as any).homepage_sections = [];
+    }
+    (memoryStore as any).homepage_sections.push(newSection);
+
+    try {
+      await db.query(
+        `INSERT INTO homepage_sections (id, type, title, subtitle, description, image, button_text, button_link, display_order, status, start_date, end_date, configuration)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [
+          newId,
+          newSection.type,
+          newSection.title,
+          newSection.subtitle,
+          newSection.description,
+          newSection.image,
+          newSection.button_text,
+          newSection.button_link,
+          orderNum,
+          newSection.status,
+          start_date || null,
+          end_date || null,
+          JSON.stringify(configuration || {}),
+        ]
+      );
+    } catch {}
+
+    // Strict cache invalidation
     cache.invalidate('cms:homepage');
 
     await logAuditEvent({
       req,
       action: 'HOMEPAGE_SECTION_CREATED',
       entityType: 'homepage_section',
-      entityId: created.id,
-      newValues: created,
+      entityId: newSection.id,
+      newValues: newSection,
     });
 
-    sendSuccess(res, 'Homepage section created successfully', created, 201);
+    sendSuccess(res, 'Homepage section created successfully', newSection, 201);
   } catch (error) {
     next(error);
   }
@@ -208,43 +352,83 @@ export async function updateSectionAdmin(req: Request, res: Response, next: Next
     const { id } = req.params;
     const body = req.body;
 
-    const existingRes = await db.query('SELECT * FROM homepage_sections WHERE id = $1', [id]);
-    const existing = existingRes.rows[0] || (memoryStore as any).homepage_sections?.find((s: any) => s.id === id);
+    let existing: any = null;
+    try {
+      const existingRes = await db.query('SELECT * FROM homepage_sections WHERE id = $1', [id]);
+      if (existingRes.rows.length > 0) existing = existingRes.rows[0];
+    } catch {}
+
+    if (!existing) {
+      existing = (memoryStore as any).homepage_sections?.find((s: any) => s.id === id);
+    }
+
     if (!existing) {
       return res.status(404).json({ success: false, message: 'Section not found' });
     }
 
-    const oldValues = { ...existing };
-    const merged = { ...existing, ...body, updated_at: new Date().toISOString() };
+    if (body.image && !isValidImageUrl(body.image)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_IMAGE_URL',
+        message: 'Invalid section image URL. Please provide a valid HTTP/HTTPS or uploaded image path.',
+      });
+    }
 
-    // Update in memory store directly for immediate synchronization
+    if (body.button_link && !isValidLinkUrl(body.button_link)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_LINK_URL',
+        message: 'Invalid button link URL. Script URLs and dangerous schemes are prohibited.',
+      });
+    }
+
+    const sanitizedTitle = body.title !== undefined ? sanitizeText(body.title) : existing.title;
+    const sanitizedSubtitle = body.subtitle !== undefined ? sanitizeText(body.subtitle) : existing.subtitle;
+    const sanitizedDesc = body.description !== undefined ? sanitizeText(body.description) : existing.description;
+    const sanitizedBtnText = body.button_text !== undefined ? sanitizeText(body.button_text) : existing.button_text;
+    const sanitizedBtnLink = body.button_link !== undefined ? sanitizeText(body.button_link) : existing.button_link;
+
+    const oldValues = { ...existing };
+    const merged = {
+      ...existing,
+      ...body,
+      title: sanitizedTitle,
+      subtitle: sanitizedSubtitle,
+      description: sanitizedDesc,
+      button_text: sanitizedBtnText,
+      button_link: sanitizedBtnLink,
+      updated_at: new Date().toISOString(),
+    };
+
     const memSec = (memoryStore as any).homepage_sections?.find((s: any) => s.id === id);
     if (memSec) {
       Object.assign(memSec, merged);
     }
 
-    // Try executing parameterized update in database
-    await db.query(
-      `UPDATE homepage_sections
-       SET title = $1, subtitle = $2, description = $3, image = $4,
-           button_text = $5, button_link = $6, status = $7,
-           start_date = $8, end_date = $9, configuration = $10, updated_at = NOW()
-       WHERE id = $11`,
-      [
-        merged.title,
-        merged.subtitle,
-        merged.description,
-        merged.image,
-        merged.button_text,
-        merged.button_link,
-        merged.status,
-        merged.start_date || null,
-        merged.end_date || null,
-        JSON.stringify(merged.configuration || {}),
-        id,
-      ]
-    );
+    try {
+      await db.query(
+        `UPDATE homepage_sections
+         SET title = $1, subtitle = $2, description = $3, image = $4,
+             button_text = $5, button_link = $6, status = $7,
+             start_date = $8, end_date = $9, configuration = $10, updated_at = NOW()
+         WHERE id = $11`,
+        [
+          merged.title,
+          merged.subtitle,
+          merged.description,
+          merged.image,
+          merged.button_text,
+          merged.button_link,
+          merged.status,
+          merged.start_date || null,
+          merged.end_date || null,
+          JSON.stringify(merged.configuration || {}),
+          id,
+        ]
+      );
+    } catch {}
 
+    // Strict cache invalidation
     cache.invalidate('cms:homepage');
 
     await logAuditEvent({
@@ -265,23 +449,33 @@ export async function updateSectionAdmin(req: Request, res: Response, next: Next
 export async function toggleSectionStatus(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const existingRes = await db.query('SELECT * FROM homepage_sections WHERE id = $1', [id]);
-    const existing = existingRes.rows[0] || (memoryStore as any).homepage_sections?.find((s: any) => s.id === id);
+    let existing: any = null;
+    try {
+      const existingRes = await db.query('SELECT * FROM homepage_sections WHERE id = $1', [id]);
+      if (existingRes.rows.length > 0) existing = existingRes.rows[0];
+    } catch {}
+
+    if (!existing) {
+      existing = (memoryStore as any).homepage_sections?.find((s: any) => s.id === id);
+    }
+
     if (!existing) {
       return res.status(404).json({ success: false, message: 'Section not found' });
     }
 
     const nextStatus = existing.status === 'active' ? 'inactive' : 'active';
-    if (existingRes.rows.length > 0) {
-      existingRes.rows[0].status = nextStatus;
-    }
+    existing.status = nextStatus;
+
     const memSec = (memoryStore as any).homepage_sections?.find((s: any) => s.id === id);
     if (memSec) {
       memSec.status = nextStatus;
     }
 
-    await db.query(`UPDATE homepage_sections SET status = $1, updated_at = NOW() WHERE id = $2`, [nextStatus, id]);
+    try {
+      await db.query(`UPDATE homepage_sections SET status = $1, updated_at = NOW() WHERE id = $2`, [nextStatus, id]);
+    } catch {}
 
+    // Strict cache invalidation
     cache.invalidate('cms:homepage');
 
     await logAuditEvent({
@@ -300,20 +494,38 @@ export async function toggleSectionStatus(req: Request, res: Response, next: Nex
 
 export async function reorderSections(req: Request, res: Response, next: NextFunction) {
   try {
-    const { order } = req.body; // Array of { id: string, display_order: number }
-    if (Array.isArray(order)) {
-      for (const item of order) {
-        const memSec = (memoryStore as any).homepage_sections?.find((s: any) => s.id === item.id);
-        if (memSec) memSec.display_order = item.display_order;
+    const { order } = req.body;
+    if (!Array.isArray(order)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ORDER_PAYLOAD',
+        message: 'Order payload must be an array of { id: string, display_order: number } objects.',
+      });
+    }
 
+    for (const item of order) {
+      if (!item.id || typeof item.display_order !== 'number' || item.display_order < 0) {
+        return res.status(400).json({
+          success: false,
+          code: 'INVALID_SECTION_ORDER_ENTRY',
+          message: 'Each order entry must provide a valid section id and non-negative display_order integer.',
+        });
+      }
+
+      const memSec = (memoryStore as any).homepage_sections?.find((s: any) => s.id === item.id);
+      if (memSec) memSec.display_order = item.display_order;
+
+      try {
         await db.query(
           `UPDATE homepage_sections SET display_order = $1, updated_at = NOW() WHERE id = $2`,
           [item.display_order, item.id]
         );
-      }
-      (memoryStore as any).homepage_sections?.sort((a: any, b: any) => a.display_order - b.display_order);
+      } catch {}
     }
 
+    (memoryStore as any).homepage_sections?.sort((a: any, b: any) => a.display_order - b.display_order);
+
+    // Strict cache invalidation
     cache.invalidate('cms:homepage');
 
     await logAuditEvent({
@@ -323,8 +535,15 @@ export async function reorderSections(req: Request, res: Response, next: NextFun
       newValues: order,
     });
 
-    const refreshed = await db.query(`SELECT * FROM homepage_sections ORDER BY display_order ASC`);
-    sendSuccess(res, 'Homepage sections reordered successfully', refreshed.rows);
+    let refreshed: any[] = [];
+    try {
+      const resDb = await db.query(`SELECT * FROM homepage_sections ORDER BY display_order ASC`);
+      refreshed = resDb.rows || [];
+    } catch {
+      refreshed = (memoryStore as any).homepage_sections || [];
+    }
+
+    sendSuccess(res, 'Homepage sections reordered successfully', refreshed);
   } catch (error) {
     next(error);
   }
@@ -333,12 +552,16 @@ export async function reorderSections(req: Request, res: Response, next: NextFun
 export async function deleteSection(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    await db.query(`DELETE FROM homepage_sections WHERE id = $1`, [id]);
+    try {
+      await db.query(`DELETE FROM homepage_sections WHERE id = $1`, [id]);
+    } catch {}
+
     const memIdx = (memoryStore as any).homepage_sections?.findIndex((s: any) => s.id === id);
     if (memIdx !== -1 && memIdx !== undefined) {
       (memoryStore as any).homepage_sections.splice(memIdx, 1);
     }
 
+    // Strict cache invalidation
     cache.invalidate('cms:homepage');
 
     await logAuditEvent({
@@ -357,8 +580,14 @@ export async function deleteSection(req: Request, res: Response, next: NextFunct
 // ================= BANNERS MANAGEMENT =================
 export async function getBannersAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await db.query(`SELECT * FROM homepage_banners ORDER BY display_order ASC`);
-    sendSuccess(res, 'Homepage banners for admin', result.rows || []);
+    let rows: any[] = [];
+    try {
+      const result = await db.query(`SELECT * FROM homepage_banners ORDER BY display_order ASC`);
+      rows = result.rows || [];
+    } catch {
+      rows = (memoryStore as any).homepage_banners || [];
+    }
+    sendSuccess(res, 'Homepage banners for admin', rows);
   } catch (error) {
     next(error);
   }
@@ -381,30 +610,71 @@ export async function createBannerAdmin(req: Request, res: Response, next: NextF
         image = `/uploads/banners/${req.file.filename}`;
       }
     }
+
+    if (image && !isValidImageUrl(image)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_BANNER_IMAGE',
+        message: 'Invalid banner image URL. Please provide a valid HTTP/HTTPS or uploaded image path.',
+      });
+    }
+
+    if (link && !isValidLinkUrl(link)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_BANNER_LINK',
+        message: 'Invalid banner destination link. Script URLs and dangerous schemes are prohibited.',
+      });
+    }
+
+    const sanitizedTitle = sanitizeText(title) || 'Farm Fresh Banner';
+    const sanitizedSubtitle = sanitizeText(subtitle);
+    const sanitizedBadge = sanitizeText(badge) || 'Fresh Harvest';
+
     let secId = section_id;
     if (!secId || secId === 'sec-hero-01') {
       secId = null;
     }
     const newId = uuidv4();
-    const result = await db.query(
-      `INSERT INTO homepage_banners (id, section_id, title, subtitle, image, link, badge, display_order, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
-      [
-        newId,
-        secId,
-        title,
-        subtitle || '',
-        image,
-        link || '/products',
-        badge || 'Fresh Harvest',
-        display_order !== undefined ? Number(display_order) : 1,
-        status || 'active',
-      ]
-    );
+    const newBanner = {
+      id: newId,
+      section_id: secId,
+      title: sanitizedTitle,
+      subtitle: sanitizedSubtitle,
+      image: image || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=1200',
+      link: link || '/products',
+      badge: sanitizedBadge,
+      display_order: display_order !== undefined ? Number(display_order) : 1,
+      status: status === 'inactive' ? 'inactive' : 'active',
+      created_at: new Date().toISOString(),
+    };
 
+    if (!(memoryStore as any).homepage_banners) {
+      (memoryStore as any).homepage_banners = [];
+    }
+    (memoryStore as any).homepage_banners.push(newBanner);
+
+    try {
+      await db.query(
+        `INSERT INTO homepage_banners (id, section_id, title, subtitle, image, link, badge, display_order, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          newId,
+          secId,
+          newBanner.title,
+          newBanner.subtitle,
+          newBanner.image,
+          newBanner.link,
+          newBanner.badge,
+          newBanner.display_order,
+          newBanner.status,
+        ]
+      );
+    } catch {}
+
+    // Strict cache invalidation
     cache.invalidate('cms:homepage');
-    sendSuccess(res, 'Homepage banner created', result.rows[0], 201);
+    sendSuccess(res, 'Homepage banner created', newBanner, 201);
   } catch (error) {
     next(error);
   }
@@ -429,24 +699,51 @@ export async function updateBannerAdmin(req: Request, res: Response, next: NextF
       }
     }
 
-    const currentBnr = await db.query('SELECT image FROM homepage_banners WHERE id = $1', [id]);
-    const finalImage = image !== undefined ? image : (currentBnr.rows[0]?.image || '');
-
-    const memBnr = (memoryStore as any).homepage_banners?.find((b: any) => b.id === id);
-    if (memBnr) {
-      Object.assign(memBnr, { ...req.body, image: finalImage });
+    if (image && !isValidImageUrl(image)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_BANNER_IMAGE',
+        message: 'Invalid banner image URL. Please provide a valid HTTP/HTTPS or uploaded image path.',
+      });
     }
 
-    const result = await db.query(
-      `UPDATE homepage_banners
-       SET title = $1, subtitle = $2, image = $3, link = $4, badge = $5, status = $6
-       WHERE id = $7
-       RETURNING *`,
-      [title, subtitle, finalImage, link, badge, status, id]
-    );
+    if (link && !isValidLinkUrl(link)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_BANNER_LINK',
+        message: 'Invalid banner destination link. Script URLs and dangerous schemes are prohibited.',
+      });
+    }
 
+    const memBnr = (memoryStore as any).homepage_banners?.find((b: any) => b.id === id);
+    const finalImage = image !== undefined ? image : (memBnr?.image || '');
+
+    const sanitizedTitle = title !== undefined ? sanitizeText(title) : memBnr?.title;
+    const sanitizedSubtitle = subtitle !== undefined ? sanitizeText(subtitle) : memBnr?.subtitle;
+    const sanitizedBadge = badge !== undefined ? sanitizeText(badge) : memBnr?.badge;
+
+    if (memBnr) {
+      Object.assign(memBnr, {
+        ...req.body,
+        title: sanitizedTitle,
+        subtitle: sanitizedSubtitle,
+        badge: sanitizedBadge,
+        image: finalImage,
+      });
+    }
+
+    try {
+      await db.query(
+        `UPDATE homepage_banners
+         SET title = $1, subtitle = $2, image = $3, link = $4, badge = $5, status = $6
+         WHERE id = $7`,
+        [sanitizedTitle, sanitizedSubtitle, finalImage, link, sanitizedBadge, status, id]
+      );
+    } catch {}
+
+    // Strict cache invalidation
     cache.invalidate('cms:homepage');
-    sendSuccess(res, 'Homepage banner updated', result.rows[0] || memBnr);
+    sendSuccess(res, 'Homepage banner updated', memBnr || { id, title: sanitizedTitle, subtitle: sanitizedSubtitle, image: finalImage, link, badge: sanitizedBadge, status });
   } catch (error) {
     next(error);
   }
@@ -455,12 +752,16 @@ export async function updateBannerAdmin(req: Request, res: Response, next: NextF
 export async function deleteBannerAdmin(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    await db.query(`DELETE FROM homepage_banners WHERE id = $1`, [id]);
+    try {
+      await db.query(`DELETE FROM homepage_banners WHERE id = $1`, [id]);
+    } catch {}
+
     const memIdx = (memoryStore as any).homepage_banners?.findIndex((b: any) => b.id === id);
     if (memIdx !== -1 && memIdx !== undefined) {
       (memoryStore as any).homepage_banners.splice(memIdx, 1);
     }
 
+    // Strict cache invalidation
     cache.invalidate('cms:homepage');
     sendSuccess(res, 'Homepage banner deleted', { id });
   } catch (error) {
@@ -470,47 +771,34 @@ export async function deleteBannerAdmin(req: Request, res: Response, next: NextF
 
 export async function getStoreSettings(req: Request, res: Response, next: NextFunction) {
   try {
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS store_settings (
-        id VARCHAR(50) PRIMARY KEY DEFAULT 'global_store_settings',
-        support_phone VARCHAR(50) DEFAULT '+91 8106970384',
-        support_email VARCHAR(100) DEFAULT 'freshvegitables29@gmail.com',
-        announcement_text VARCHAR(255) DEFAULT 'Same-Day Farm Delivery for orders placed before 2:00 PM',
-        store_address VARCHAR(255) DEFAULT 'Hyderabad, Telangana',
-        quality_badge VARCHAR(100) DEFAULT '100% Genuine Certified Organic Harvest',
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `);
-
-    let result = await db.query('SELECT * FROM store_settings WHERE id = $1', ['global_store_settings']);
-    if (result.rows.length === 0) {
-      result = await db.query(`
-        INSERT INTO store_settings (id, support_phone, support_email, announcement_text, store_address, quality_badge)
-        VALUES ('global_store_settings', '+91 8106970384', 'freshvegitables29@gmail.com', 'Same-Day Farm Delivery for orders placed before 2:00 PM', 'Hyderabad, Telangana', '100% Genuine Certified Organic Harvest')
-        RETURNING *
-      `);
-    } else {
-      // Auto-migrate legacy default values to real Hyderabad, Telangana address & genuine email
-      const row = result.rows[0];
-      if (
-        row.support_email === 'care@freshveggies.com' ||
-        !row.store_address ||
-        row.store_address.includes('Sector 14') ||
-        row.store_address.includes('Agro Valley')
-      ) {
-        result = await db.query(`
-          UPDATE store_settings
-          SET support_email = 'freshvegitables29@gmail.com',
-              store_address = 'Hyderabad, Telangana',
-              quality_badge = '100% Genuine Certified Organic Harvest',
-              updated_at = NOW()
-          WHERE id = 'global_store_settings'
-          RETURNING *
-        `);
-      }
+    const cached = cache.get('cms:settings');
+    if (cached) {
+      return sendSuccess(res, 'Store settings (cached)', cached);
     }
 
-    sendSuccess(res, 'Store settings fetched', result.rows[0]);
+    let settingRow: any = null;
+    try {
+      const result = await db.query('SELECT * FROM store_settings WHERE id = $1', ['global_store_settings']);
+      if (result.rows.length > 0) {
+        settingRow = result.rows[0];
+      }
+    } catch {}
+
+    if (!settingRow) {
+      settingRow = {
+        id: 'global_store_settings',
+        support_phone: '+91 8106970384',
+        support_email: 'freshvegitables29@gmail.com',
+        announcement_text: 'Same-Day Farm Delivery for orders placed before 2:00 PM',
+        store_address: 'Hyderabad, Telangana - Two Hub Delivery',
+        quality_badge: '100% Genuine Certified Organic Harvest',
+      };
+    }
+
+    // Cache store settings for 5 minutes
+    cache.set('cms:settings', settingRow, 300);
+
+    sendSuccess(res, 'Store settings fetched', settingRow);
   } catch (error) {
     next(error);
   }
@@ -519,29 +807,54 @@ export async function getStoreSettings(req: Request, res: Response, next: NextFu
 export async function updateStoreSettings(req: Request, res: Response, next: NextFunction) {
   try {
     const { support_phone, support_email, announcement_text, store_address, quality_badge } = req.body;
-    const result = await db.query(`
-      INSERT INTO store_settings (id, support_phone, support_email, announcement_text, store_address, quality_badge, updated_at)
-      VALUES ('global_store_settings', $1, $2, $3, $4, $5, NOW())
-      ON CONFLICT (id) DO UPDATE SET
-        support_phone = COALESCE($1, store_settings.support_phone),
-        support_email = COALESCE($2, store_settings.support_email),
-        announcement_text = COALESCE($3, store_settings.announcement_text),
-        store_address = COALESCE($4, store_settings.store_address),
-        quality_badge = COALESCE($5, store_settings.quality_badge),
-        updated_at = NOW()
-      RETURNING *
-    `, [
-      support_phone || '+91 8106970384',
-      support_email || 'freshvegitables29@gmail.com',
-      announcement_text || 'Same-Day Farm Delivery for orders placed before 2:00 PM',
-      store_address || 'Hyderabad, Telangana',
-      quality_badge || '100% Genuine Certified Organic Harvest'
-    ]);
 
-    sendSuccess(res, 'Store settings updated', result.rows[0]);
+    const sanitizedPhone = sanitizeText(support_phone) || '+91 8106970384';
+    const sanitizedEmail = sanitizeText(support_email) || 'freshvegitables29@gmail.com';
+    const sanitizedAnnouncement = sanitizeText(announcement_text);
+    const sanitizedAddress = sanitizeText(store_address) || 'Hyderabad, Telangana';
+    const sanitizedQuality = sanitizeText(quality_badge) || '100% Genuine Certified Organic Harvest';
+
+    let updated: any = null;
+
+    try {
+      const result = await db.query(`
+        INSERT INTO store_settings (id, support_phone, support_email, announcement_text, store_address, quality_badge, updated_at)
+        VALUES ('global_store_settings', $1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          support_phone = COALESCE($1, store_settings.support_phone),
+          support_email = COALESCE($2, store_settings.support_email),
+          announcement_text = COALESCE($3, store_settings.announcement_text),
+          store_address = COALESCE($4, store_settings.store_address),
+          quality_badge = COALESCE($5, store_settings.quality_badge),
+          updated_at = NOW()
+        RETURNING *
+      `, [
+        sanitizedPhone,
+        sanitizedEmail,
+        sanitizedAnnouncement,
+        sanitizedAddress,
+        sanitizedQuality,
+      ]);
+      updated = result.rows[0];
+    } catch {}
+
+    if (!updated) {
+      updated = {
+        id: 'global_store_settings',
+        support_phone: sanitizedPhone,
+        support_email: sanitizedEmail,
+        announcement_text: sanitizedAnnouncement,
+        store_address: sanitizedAddress,
+        quality_badge: sanitizedQuality,
+      };
+    }
+
+    // Strict cache invalidation
+    cache.invalidate('cms:homepage');
+    cache.invalidate('cms:settings');
+
+    sendSuccess(res, 'Store settings updated', updated);
   } catch (error) {
     next(error);
   }
 }
-
-

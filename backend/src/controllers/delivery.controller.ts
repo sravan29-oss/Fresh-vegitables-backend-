@@ -1,20 +1,50 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 import db from '../config/database';
+import { env } from '../config/env';
 import { AuthRequest } from '../middleware/auth';
 import { sendSuccess } from '../utils/apiResponse';
-import { AppError, NotFoundError, ValidationError } from '../utils/appError';
+import { AppError, NotFoundError, ValidationError, ForbiddenError } from '../utils/appError';
 import { memoryStore } from '../config/mockDb';
 import { logAuditEvent } from '../services/audit.service';
 import { getPersistedDeliverySettings, savePersistedDeliverySettings } from '../services/deliverySettings.service';
-import { checkServiceability, isValidCoordinate, calculateHaversineDistanceKm } from '../services/serviceability.service';
+import { checkServiceability, checkMultiHubServiceability, isValidCoordinate, calculateHaversineDistanceKm } from '../services/serviceability.service';
 import { getPersistedZones } from '../services/zoneStore.service';
+import { getPersistedHubs, getActiveHubs, getHubById, upsertHub, updateHub, DeliveryHub } from '../services/hubStore.service';
+import {
+  getAdminDeliveryDashboard,
+  getDeliveryPersonnel,
+  createDeliveryPersonnel,
+  updateDeliveryPersonnel,
+  assignDeliveryPartnerToOrder,
+  updateDispatchStatus,
+  verifyDeliveryOTPAndComplete,
+  reportFailedDelivery,
+  recordDriverGPS,
+  getCustomerOrderLiveTracking,
+  FailedDeliveryReason,
+  DELIVERY_HUBS_INFO,
+} from '../services/deliveryManagement.service';
+
+// ===================== DISCONTINUED DELIVERY PARTNER HANDLER (HTTP 410 GONE) =====================
+export function discontinuedDeliveryPartnerHandler(req: Request, res: Response) {
+  return res.status(410).json({
+    success: false,
+    statusCode: 410,
+    code: 'DELIVERY_PARTNER_ENDPOINT_DISCONTINUED',
+    message: 'Delivery partner functionality has been discontinued. Fresh Vegetables Organic operates on a direct admin-managed delivery model.',
+    timestamp: new Date().toISOString(),
+  });
+}
 
 // ===================== ADMIN: DELIVERY PARTNERS =====================
 
 export async function getDeliveryPartners(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const result = await db.query('SELECT * FROM delivery_partners');
-    sendSuccess(res, 'Delivery partners fetched', result.rows);
+    const hubId = req.query.hub_id as string | undefined;
+    const partners = await getDeliveryPersonnel(hubId);
+    sendSuccess(res, 'Delivery partners fetched', partners);
   } catch (error) {
     next(error);
   }
@@ -22,19 +52,8 @@ export async function getDeliveryPartners(req: AuthRequest, res: Response, next:
 
 export async function createDeliveryPartner(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { name, phone, email, vehicle_type, vehicle_number } = req.body;
-    if (!name || !phone || !vehicle_number) {
-      throw new ValidationError('Name, phone, and vehicle number are required');
-    }
-
-    const result = await db.query(
-      `INSERT INTO delivery_partners (name, phone, email, vehicle_type, vehicle_number, status)
-       VALUES ($1, $2, $3, $4, $5, 'AVAILABLE')
-       RETURNING *`,
-      [name, phone, email || `${name.toLowerCase().replace(/\s+/g, '.')}@freshveggies.com`, vehicle_type || 'Electric Bike', vehicle_number]
-    );
-
-    sendSuccess(res, 'Delivery partner registered', result.rows[0], 201);
+    const partner = await createDeliveryPersonnel(req.body);
+    sendSuccess(res, 'Delivery partner registered', partner, 201);
   } catch (error) {
     next(error);
   }
@@ -43,14 +62,8 @@ export async function createDeliveryPartner(req: AuthRequest, res: Response, nex
 export async function updateDeliveryPartner(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { status, availability } = req.body;
-
-    const result = await db.query(
-      'UPDATE delivery_partners SET status = $1 WHERE id = $2 RETURNING *',
-      [status, id]
-    );
-
-    sendSuccess(res, 'Delivery partner status updated', result.rows[0]);
+    const partner = await updateDeliveryPersonnel(id, req.body);
+    sendSuccess(res, 'Delivery partner updated', partner);
   } catch (error) {
     next(error);
   }
@@ -60,32 +73,28 @@ export async function deleteDeliveryPartner(req: AuthRequest, res: Response, nex
   try {
     const { id } = req.params;
     try {
-      await db.query('DELETE FROM delivery_assignments WHERE delivery_partner_id = $1', [id]);
+      await db.query('UPDATE delivery_partners SET is_active = false, status = $1 WHERE id = $2', ['SUSPENDED', id]);
     } catch {
-      // ignore if table doesn't have it or already empty
+      const partner = memoryStore.delivery_partners.find((p) => p.id === id);
+      if (partner) {
+        partner.is_active = false;
+        partner.status = 'SUSPENDED';
+      }
     }
-    await db.query('DELETE FROM delivery_partners WHERE id = $1', [id]);
-    sendSuccess(res, 'Delivery partner removed');
+    sendSuccess(res, 'Delivery partner deactivated safely');
   } catch (error) {
     next(error);
   }
 }
 
-// ===================== ADMIN: DISPATCH & ASSIGNMENTS =====================
+// ===================== ADMIN: DISPATCH & DASHBOARD =====================
 
 export async function getDeliveriesDashboard(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const assignmentsRes = await db.query('SELECT * FROM delivery_assignments');
-    const partnersRes = await db.query('SELECT * FROM delivery_partners');
-    const ordersRes = await db.query(
-      "SELECT * FROM orders WHERE order_status IN ('pending', 'confirmed', 'preparing', 'packed', 'out_for_delivery') ORDER BY created_at DESC"
-    );
-
-    sendSuccess(res, 'Deliveries dashboard data', {
-      assignments: assignmentsRes.rows,
-      partners: partnersRes.rows,
-      activeOrders: ordersRes.rows,
-    });
+    const hubId = req.query.hub_id as string | undefined;
+    const status = req.query.status as string | undefined;
+    const data = await getAdminDeliveryDashboard(hubId, status);
+    sendSuccess(res, 'Deliveries dashboard data', data);
   } catch (error) {
     next(error);
   }
@@ -95,89 +104,17 @@ export async function assignDriver(req: AuthRequest, res: Response, next: NextFu
   try {
     const { orderId } = req.params;
     const { delivery_partner_id, notes } = req.body;
-
     if (!delivery_partner_id) throw new ValidationError('delivery_partner_id is required');
 
-    // Resolve order by UUID or order_number or fallback
-    let resolvedOrderId = orderId;
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId || '');
-    if (!isUuid) {
-      try {
-        const numRes = await db.query('SELECT id FROM orders WHERE order_number = $1 LIMIT 1', [orderId]);
-        if (numRes.rows.length > 0) {
-          resolvedOrderId = numRes.rows[0].id;
-        } else {
-          const latestOrder = await db.query('SELECT id FROM orders ORDER BY created_at DESC LIMIT 1');
-          if (latestOrder.rows.length > 0) {
-            resolvedOrderId = latestOrder.rows[0].id;
-          }
-        }
-      } catch {
-        // fallback
-      }
-    }
-
-    let assignRecord: any = null;
-    const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedOrderId || '');
-
-    if (validUuid) {
-      // Check if assignment already exists
-      try {
-        const existingAssign = await db.query('SELECT id FROM delivery_assignments WHERE order_id = $1', [resolvedOrderId]);
-        if (existingAssign.rows.length > 0) {
-          const updateRes = await db.query(
-            'UPDATE delivery_assignments SET delivery_partner_id = $1, notes = $2, status = $3 WHERE order_id = $4 RETURNING *',
-            [delivery_partner_id, notes || '', 'OUT_FOR_DELIVERY', resolvedOrderId]
-          );
-          assignRecord = updateRes.rows[0];
-        } else {
-          const insertRes = await db.query(
-            `INSERT INTO delivery_assignments (order_id, delivery_partner_id, notes, status)
-             VALUES ($1, $2, $3, 'OUT_FOR_DELIVERY')
-             RETURNING *`,
-            [resolvedOrderId, delivery_partner_id, notes || '']
-          );
-          assignRecord = insertRes.rows[0];
-        }
-      } catch {
-        // memoryStore or table error fallback
-      }
-
-      // Update partner status to ON_DELIVERY
-      await db.query("UPDATE delivery_partners SET status = 'ON_DELIVERY' WHERE id = $1", [delivery_partner_id]);
-
-      // Update order status to out_for_delivery
-      await db.query("UPDATE orders SET order_status = 'out_for_delivery' WHERE id = $1", [resolvedOrderId]);
-
-      // Send customer notification
-      try {
-        const order = await db.query('SELECT * FROM orders WHERE id = $1', [resolvedOrderId]);
-        const partner = await db.query('SELECT * FROM delivery_partners WHERE id = $1', [delivery_partner_id]);
-
-        if (order.rows[0]) {
-          await db.query(
-            `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              order.rows[0].user_id,
-              'Delivery Partner Assigned! 🛵',
-              `${partner.rows[0]?.name || 'Your driver'} is assigned to deliver order #${order.rows[0].order_number}.`,
-              'DELIVERY',
-              'order',
-              resolvedOrderId,
-            ]
-          );
-        }
-      } catch {
-        // Notification optional
-      }
-    }
-
-    sendSuccess(res, 'Driver assigned successfully', assignRecord || {
-      order_id: resolvedOrderId,
+    const result = await assignDeliveryPartnerToOrder(
+      orderId,
       delivery_partner_id,
-      status: 'OUT_FOR_DELIVERY',
-    });
+      notes,
+      req.user?.id || 'admin'
+    );
+    // Sanitize API response: never expose customer delivery OTP in production responses
+    const { dev_otp, ...sanitizedResult } = result;
+    sendSuccess(res, 'Driver assigned successfully', sanitizedResult);
   } catch (error) {
     next(error);
   }
@@ -186,360 +123,165 @@ export async function assignDriver(req: AuthRequest, res: Response, next: NextFu
 export async function updateDeliveryStatus(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, notes } = req.body;
+    if (!status) throw new ValidationError('status is required');
 
-    const assignment = memoryStore.delivery_assignments.find((da) => da.id === id || da.order_id === id);
-    if (assignment) {
-      assignment.status = status;
-      if (status === 'DELIVERED') {
-        (assignment as any).delivered_at = new Date().toISOString();
-        // Update driver back to available
-        const partner = memoryStore.delivery_partners.find((dp) => dp.id === assignment.delivery_partner_id);
-        if (partner) {
-          partner.status = 'AVAILABLE';
-          partner.total_deliveries = (partner.total_deliveries || 0) + 1;
-        }
-        // Update order status
-        const ord = memoryStore.orders.find((o) => o.id === assignment.order_id);
-        if (ord) {
-          ord.order_status = 'delivered';
-          if (ord.payment_method === 'cod') {
-            ord.payment_status = 'paid';
-          }
-        }
-      }
-    }
+    const user = {
+      id: req.user?.id || 'admin',
+      role: req.user?.role || 'admin',
+    };
 
+    const assignment = await updateDispatchStatus(id, status, user, notes);
     sendSuccess(res, `Delivery status changed to ${status}`, assignment);
   } catch (error) {
     next(error);
   }
 }
 
-// ===================== CUSTOMER: LIVE TRACKING =====================
-
-export async function getOrderTracking(req: Request, res: Response, next: NextFunction) {
+export async function verifyDeliveryOTP(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
+    const { otp, cod_amount_collected, notes } = req.body;
+    if (!otp) throw new ValidationError('6-digit delivery OTP is required');
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '');
-    let order: any = null;
-    if (isUuid) {
-      try {
-        const orderRes = await db.query('SELECT * FROM orders WHERE id = $1', [id]);
-        if (orderRes.rows.length > 0) order = orderRes.rows[0];
-      } catch {
-        order = null;
-      }
-    }
-    if (!order && id) {
-      try {
-        const numRes = await db.query('SELECT * FROM orders WHERE order_number = $1', [id]);
-        if (numRes.rows.length > 0) order = numRes.rows[0];
-      } catch {
-        order = null;
-      }
-    }
-    if (!order) {
-      // Gracefully fall back to latest order or demo order
-      try {
-        const latestRes = await db.query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 1');
-        if (latestRes.rows.length > 0) order = latestRes.rows[0];
-      } catch {
-        order = null;
-      }
-    }
-    if (!order) {
-      // Fallback demo order with Hyderabad details
-      order = {
-        id: id || 'demo-order',
-        order_number: 'FV-884291',
-        user_id: 'guest',
-        subtotal: 580,
-        delivery_charge: 0,
-        discount: 50,
-        total: 530,
-        payment_method: 'cod',
-        payment_status: 'pending',
-        order_status: 'confirmed',
-        customer_name: 'Customer',
-        customer_mobile: '+91 8106970384',
-        address_snapshot: {
-          house_number: '102',
-          area: 'KPHB Colony',
-          city: 'Hyderabad',
-          state: 'Telangana',
-          pincode: '500072',
-        },
-        delivery_address: {
-          house_number: '102',
-          area: 'KPHB Colony',
-          city: 'Hyderabad',
-          state: 'Telangana',
-          pincode: '500072',
-          full_address: 'Flat 102, KPHB Colony, Hyderabad, Telangana - 500072',
-        },
-        created_at: new Date().toISOString(),
-      };
-    }
-
-    // Parse real address snapshot and resolve customer details
-    let addrSnapshot: any = {};
-    if (order.address_snapshot) {
-      try {
-        addrSnapshot = typeof order.address_snapshot === 'string'
-          ? JSON.parse(order.address_snapshot)
-          : order.address_snapshot;
-      } catch {
-        addrSnapshot = order.address_snapshot || {};
-      }
-    } else if (order.delivery_address) {
-      try {
-        addrSnapshot = typeof order.delivery_address === 'string'
-          ? JSON.parse(order.delivery_address)
-          : order.delivery_address;
-      } catch {
-        addrSnapshot = order.delivery_address || {};
-      }
-    }
-
-    let userObj: any = null;
-    if (order.user_id && order.user_id !== 'guest') {
-      try {
-        const uRes = await db.query('SELECT name, mobile, email FROM users WHERE id = $1', [order.user_id]);
-        if (uRes.rows.length > 0) userObj = uRes.rows[0];
-      } catch {}
-    }
-
-    const customerName = addrSnapshot.full_name || order.customer_name || userObj?.name || 'Customer';
-    const customerMobile = addrSnapshot.phone || order.customer_mobile || userObj?.mobile || '+91 8106970384';
-
-    const fullAddrString = [
-      addrSnapshot.house_number ? (String(addrSnapshot.house_number).toLowerCase().includes('flat') || String(addrSnapshot.house_number).toLowerCase().includes('house') ? addrSnapshot.house_number : `Flat/House ${addrSnapshot.house_number}`) : '',
-      addrSnapshot.street,
-      addrSnapshot.area,
-      addrSnapshot.landmark ? `Near ${addrSnapshot.landmark}` : '',
-      addrSnapshot.city || 'Hyderabad',
-      addrSnapshot.state || 'Telangana',
-      addrSnapshot.pincode ? `- ${addrSnapshot.pincode}` : '',
-    ].filter(Boolean).join(', ');
-
-    const normalizedAddress = {
-      ...addrSnapshot,
-      full_name: customerName,
-      phone: customerMobile,
-      house_number: addrSnapshot.house_number || '',
-      street: addrSnapshot.street || '',
-      area: addrSnapshot.area || addrSnapshot.city || 'KPHB Colony',
-      landmark: addrSnapshot.landmark || '',
-      city: addrSnapshot.city || 'Hyderabad',
-      state: addrSnapshot.state || 'Telangana',
-      pincode: addrSnapshot.pincode || '500072',
-      full_address: fullAddrString || 'KPHB Colony, Hyderabad - 500072',
+    const user = {
+      id: req.user?.id || 'admin',
+      role: req.user?.role || 'admin',
     };
 
-    order.customer_name = customerName;
-    order.customer_mobile = customerMobile;
-    order.delivery_address = normalizedAddress;
-    order.address_snapshot = addrSnapshot;
+    const result = await verifyDeliveryOTPAndComplete(id, otp, user, {
+      cod_amount_collected,
+      notes,
+    });
+    sendSuccess(res, result.message, result.assignment);
+  } catch (error) {
+    next(error);
+  }
+}
 
-    // Fetch items with product images for package contents display
-    let items: any[] = [];
+export async function reportDeliveryFailure(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { reason, notes } = req.body;
+    if (!reason) throw new ValidationError('Failure reason is required');
+
+    const user = {
+      id: req.user?.id || 'admin',
+      role: req.user?.role || 'admin',
+    };
+
+    const assignment = await reportFailedDelivery(id, reason as FailedDeliveryReason, notes, user);
+    sendSuccess(res, 'Delivery failure recorded', assignment);
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ===================== DELIVERY PERSONNEL AUTH & PORTAL =====================
+
+export async function driverLogin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { phone, pin_code, password, pin } = req.body;
+    if (!phone) throw new ValidationError('Phone number is required');
+
+    let partner: any = null;
     try {
-      const itemsRes = await db.query(
-        `SELECT oi.*,
-                COALESCE(oi.product_name_snapshot, p.name, 'Organic Vegetable') as product_name,
-                COALESCE(oi.unit_snapshot, p.unit, '1 unit') as unit,
-                COALESCE(oi.price_snapshot, p.selling_price, 0) as price,
-                COALESCE(oi.total, oi.price_snapshot * oi.quantity, 0) as subtotal,
-                p.images as product_images
-         FROM order_items oi
-         LEFT JOIN products p ON oi.product_id = p.id
-         WHERE oi.order_id = $1`,
-        [order.id]
-      );
-
-      items = (itemsRes.rows || []).map((item: any) => {
-        let images: string[] = [];
-        if (Array.isArray(item.product_images)) {
-          images = item.product_images;
-        } else if (typeof item.product_images === 'string') {
-          if (item.product_images.startsWith('{')) {
-            images = item.product_images.replace(/^\{|\}$/g, '').split(',').map((s: string) => s.replace(/^"|"$/g, ''));
-          } else {
-            images = [item.product_images];
-          }
-        }
-
-        const nameLower = (item.product_name || item.product_name_snapshot || '').toLowerCase();
-        let matchedImg = images[0];
-        if (!matchedImg) {
-          if (nameLower.includes('potato') && !nameLower.includes('sweet')) matchedImg = 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('onion')) matchedImg = 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('tomato') || nameLower.includes('tamato')) matchedImg = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('spinach') || nameLower.includes('palak')) matchedImg = 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('carrot') || nameLower.includes('gajar')) matchedImg = 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('capsicum') || nameLower.includes('bell pepper')) matchedImg = 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('chilli') || nameLower.includes('chili')) matchedImg = 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('cauliflower') || nameLower.includes('gobhi')) matchedImg = 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('cabbage')) matchedImg = 'https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('brinjal') || nameLower.includes('eggplant')) matchedImg = 'https://images.unsplash.com/photo-1659261200832-6bb50e181f72?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('cucumber')) matchedImg = 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('lady finger') || nameLower.includes('bhindi') || nameLower.includes('okra')) matchedImg = 'https://images.unsplash.com/photo-1525607551316-4a8e16d1f9ba?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('coriander') || nameLower.includes('kothimeera')) matchedImg = 'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('broccoli')) matchedImg = 'https://images.unsplash.com/photo-1459411621453-7b03977f4bfc?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('ginger')) matchedImg = 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=500&auto=format&fit=crop';
-          else if (nameLower.includes('garlic')) matchedImg = 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=500&auto=format&fit=crop';
-          else matchedImg = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=500&auto=format&fit=crop';
-        }
-
-        return {
-          ...item,
-          product_name: item.product_name || item.product_name_snapshot || 'Fresh Organic Produce',
-          unit: item.unit || item.unit_snapshot || '1 unit',
-          price: Number(item.price || item.price_snapshot || 0),
-          subtotal: Number(item.subtotal || item.total || ((item.price || item.price_snapshot || 0) * (item.quantity || 1))),
-          image_url: matchedImg,
-          product_images: images.length > 0 ? images : [matchedImg],
-          images: images.length > 0 ? images : [matchedImg],
-        };
-      });
+      const pRes = await db.query('SELECT * FROM delivery_partners WHERE phone = $1 LIMIT 1', [phone.trim()]);
+      if (pRes.rows.length > 0) partner = pRes.rows[0];
     } catch {
-      items = [];
+      partner = memoryStore.delivery_partners.find(
+        (p) => p.phone === phone.trim() || p.phone.replace(/\s+/g, '') === phone.replace(/\s+/g, '')
+      );
     }
 
-    const orderStatus = (order.order_status || 'confirmed').toLowerCase();
-    const isOutForDelivery = orderStatus === 'out_for_delivery' || orderStatus === 'delivered';
-    const isDelivered = orderStatus === 'delivered';
+    if (!partner) {
+      throw new NotFoundError('Delivery partner account not found with this mobile number');
+    }
 
-    let trackingInfo: any = null;
+    if (partner.is_active === false || partner.status === 'SUSPENDED') {
+      throw new ForbiddenError('Delivery partner account is deactivated or suspended. Please contact store management.');
+    }
 
-    // Only assign and expose driver details if out_for_delivery or delivered
-    if (isOutForDelivery) {
-      let assignRows: any[] = [];
-      const orderIdIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.id || '');
-      if (orderIdIsUuid) {
-        try {
-          const assignRes = await db.query(
-            `SELECT da.*, dp.name as partner_name, dp.phone as partner_phone, dp.rating as partner_rating,
-                    dp.vehicle_type, dp.vehicle_number, dp.profile_image, dp.latitude as partner_lat, dp.longitude as partner_lng
-             FROM delivery_assignments da
-             JOIN delivery_partners dp ON da.delivery_partner_id = dp.id
-             WHERE da.order_id = $1`,
-            [order.id]
-          );
-          assignRows = assignRes.rows;
-        } catch {
-          assignRows = [];
-        }
+    // Account Lockout Guard: Check if locked due to 5 consecutive failed attempts
+    if (partner.locked_until && new Date(partner.locked_until) > new Date()) {
+      const mins = Math.ceil((new Date(partner.locked_until).getTime() - Date.now()) / 60000);
+      throw new ForbiddenError(
+        `Account temporarily locked due to 5 consecutive failed login attempts. Please try again after ${mins} minute(s).`
+      );
+    }
+
+    const providedPin = (pin || pin_code || password || '').trim();
+    if (!providedPin) {
+      throw new ValidationError('PIN code or password is required');
+    }
+
+    // Verify PIN securely using salted bcrypt hash (No default 1234 or plaintext)
+    let isPinValid = false;
+    if (partner.pin_hash) {
+      isPinValid = await bcrypt.compare(providedPin, partner.pin_hash);
+    }
+
+    if (!isPinValid) {
+      const failedAttempts = (partner.failed_login_attempts || 0) + 1;
+      const isNowLocked = failedAttempts >= 5;
+      const lockUntil = isNowLocked ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
+
+      try {
+        await db.query(
+          'UPDATE delivery_partners SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3',
+          [failedAttempts, lockUntil, partner.id]
+        );
+      } catch {
+        partner.failed_login_attempts = failedAttempts;
+        partner.locked_until = lockUntil;
       }
 
-      trackingInfo = assignRows.length > 0 ? assignRows[0] : null;
+      if (isNowLocked) {
+        throw new ValidationError(
+          'Account temporarily locked for 15 minutes due to 5 consecutive failed login attempts.'
+        );
+      } else {
+        throw new ValidationError(
+          `Invalid credentials. ${5 - failedAttempts} attempt(s) remaining.`
+        );
+      }
     }
 
-    // Build logistics timeline milestones
-    const createdAt = new Date(order.created_at || Date.now());
-    const orderDateStr = createdAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    const orderTimeStr = createdAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-
-    const isCancelled = orderStatus === 'cancelled';
-    const isConfirmed = !isCancelled && ['confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
-    const isHarvested = !isCancelled && ['preparing', 'packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
-    const isPacked = !isCancelled && ['packed', 'out_for_delivery', 'delivered'].includes(orderStatus);
-
-    const activities = [
-      {
-        id: 'act-1',
-        status: 'pending',
-        title: 'Order Placed & Verified',
-        description: `Order #${order.order_number} received and confirmed with ${order.payment_method?.toUpperCase() || 'COD'} payment mode.`,
-        timestamp: `${orderDateStr}, ${orderTimeStr}`,
-        location: 'Fresh Farm Online Portal',
-        completed: true,
-      },
-    ];
-
-    if (isCancelled) {
-      activities.push({
-        id: 'act-cancelled',
-        status: 'cancelled',
-        title: 'Order Cancelled',
-        description: 'Order was cancelled by store operations. Reserved produce restored to inventory.',
-        timestamp: `${orderDateStr}, ${orderTimeStr}`,
-        location: 'Store Operations Hub, Hyderabad',
-        completed: true,
-      });
-    } else {
-      activities.push(
-        {
-          id: 'act-2',
-          status: 'confirmed',
-          title: 'Order Confirmed',
-          description: 'Order accepted by fulfillment team and scheduled for farm procurement.',
-          timestamp: `${orderDateStr}, ${new Date(createdAt.getTime() + 8 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-          location: 'Fresh Vegetables Hub',
-          completed: isConfirmed,
-        },
-        {
-          id: 'act-3',
-          status: 'preparing',
-          title: 'Harvested Fresh & Quality Graded',
-          description: 'Vegetables harvested fresh from local organic plots. 100% pesticide-free quality check passed.',
-          timestamp: isHarvested ? `${orderDateStr}, ${new Date(createdAt.getTime() + 20 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Expected today',
-          location: 'Harvest & Sorting Hub, Hyderabad',
-          completed: isHarvested,
-        },
-        {
-          id: 'act-4',
-          status: 'packed',
-          title: 'Packed & Prepared for Delivery',
-          description: 'Produce sorted, weighed, and carefully packed for clean, hygienic transit.',
-          timestamp: isPacked ? `${orderDateStr}, ${new Date(createdAt.getTime() + 35 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'In progress',
-          location: 'Packaging Hub, Hyderabad',
-          completed: isPacked,
-        },
-        {
-          id: 'act-5',
-          status: 'out_for_delivery',
-          title: isOutForDelivery ? 'Out for Delivery' : 'Out for Delivery (Upcoming)',
-          description: isOutForDelivery
-            ? 'Package dispatched from store hub and is on the way to your delivery address.'
-            : 'Package will be dispatched as soon as harvesting and packing are completed.',
-          timestamp: isOutForDelivery ? `${orderDateStr}, ${new Date(createdAt.getTime() + 50 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Scheduled upon packing',
-          location: `Local Delivery Zone, ${normalizedAddress.area || 'Hyderabad'}`,
-          completed: isOutForDelivery,
-        },
-        {
-          id: 'act-6',
-          status: 'delivered',
-          title: 'Delivered',
-          description: isDelivered ? 'Package safely delivered to your doorstep.' : 'Expected doorstep delivery shortly.',
-          timestamp: isDelivered ? `${orderDateStr}, ${new Date(createdAt.getTime() + 65 * 60000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Estimated today',
-          location: normalizedAddress.full_address || 'Customer Doorstep',
-          completed: isDelivered,
-        }
+    // On successful authentication, reset failed attempts & lockout
+    try {
+      await db.query(
+        'UPDATE delivery_partners SET failed_login_attempts = 0, locked_until = null WHERE id = $1',
+        [partner.id]
       );
+    } catch {
+      partner.failed_login_attempts = 0;
+      partner.locked_until = null;
     }
 
-    sendSuccess(res, 'Logistics delivery tracking info', {
-      order: {
-        ...order,
-        items,
+    // Generate JWT token with appropriate shift lifetime (12h)
+    const token = jwt.sign(
+      {
+        id: partner.id,
+        name: partner.name,
+        phone: partner.phone,
+        role: 'delivery',
+        assigned_hub_id: partner.assigned_hub_id,
       },
-      tracking: trackingInfo,
-      show_driver: Boolean(trackingInfo?.partner_name),
-      carrier_name: 'Fresh Vegetables Direct Express',
-      tracking_number: `TRK-${(order.order_number || id).replace(/[^A-Za-z0-9]/g, '').slice(-8)}`,
-      expected_delivery: isCancelled ? 'Order Cancelled' : isDelivered ? 'Delivered Today' : 'Today, within estimated delivery slot',
-      logistics_status: orderStatus,
-      fulfillment_center: 'Fresh Vegetables Store & Fulfillment Hub',
-      package_type: 'Fresh Farm Packaging',
-      activities,
-      store_location: { name: 'Fresh Vegetables Hub, KPHB Main Road', latitude: 17.4938, longitude: 78.3995 },
-      destination: {
-        address: normalizedAddress.full_address || 'KPHB Colony, Hyderabad, Telangana',
-        latitude: Number(addrSnapshot.latitude) || 17.4938,
-        longitude: Number(addrSnapshot.longitude) || 78.3995,
+      env.JWT_SECRET,
+      { expiresIn: '12h' }
+    );
+
+    sendSuccess(res, 'Driver signed in successfully', {
+      token,
+      partner: {
+        id: partner.id,
+        name: partner.name,
+        phone: partner.phone,
+        vehicle_type: partner.vehicle_type,
+        vehicle_number: partner.vehicle_number,
+        assigned_hub_id: partner.assigned_hub_id,
+        status: partner.status,
+        rating: partner.rating,
       },
     });
   } catch (error) {
@@ -547,14 +289,108 @@ export async function getOrderTracking(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function updateDriverLocation(req: Request, res: Response) {
-  const { delivery_partner_id, latitude, longitude } = req.body;
-  const partner = memoryStore.delivery_partners.find((dp) => dp.id === delivery_partner_id);
-  if (partner) {
-    partner.latitude = latitude;
-    partner.longitude = longitude;
+export async function getDriverMe(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const driverId = req.user?.id;
+    if (!driverId) throw new ValidationError('Driver identity required');
+
+    let partner: any = null;
+    try {
+      const pRes = await db.query('SELECT * FROM delivery_partners WHERE id = $1 LIMIT 1', [driverId]);
+      if (pRes.rows.length > 0) partner = pRes.rows[0];
+    } catch {
+      partner = memoryStore.delivery_partners.find((p) => p.id === driverId);
+    }
+
+    if (!partner) throw new NotFoundError('Delivery partner profile not found');
+
+    const hubInfo = DELIVERY_HUBS_INFO[partner.assigned_hub_id] || DELIVERY_HUBS_INFO['hub-champapet'];
+
+    sendSuccess(res, 'Driver profile retrieved', {
+      ...partner,
+      assigned_hub_name: hubInfo.name,
+    });
+  } catch (error) {
+    next(error);
   }
-  res.json({ success: true, updated_at: new Date().toISOString() });
+}
+
+export async function getDriverAssignments(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const driverId = req.user?.id;
+    if (!driverId) throw new ValidationError('Driver identity required');
+
+    let assignments: any[] = [];
+    let orders: any[] = [];
+
+    try {
+      const aRes = await db.query('SELECT * FROM delivery_assignments WHERE delivery_partner_id = $1 ORDER BY assigned_at DESC', [driverId]);
+      assignments = aRes.rows;
+      const oRes = await db.query('SELECT * FROM orders');
+      orders = oRes.rows;
+    } catch {
+      assignments = memoryStore.delivery_assignments.filter((a) => a.delivery_partner_id === driverId);
+      orders = memoryStore.orders;
+    }
+
+    const enriched = assignments.map((assign) => {
+      const ord = orders.find((o) => o.id === assign.order_id) || {};
+      let addr = ord.address_snapshot || ord.delivery_address || {};
+      if (typeof addr === 'string') {
+        try { addr = JSON.parse(addr); } catch { addr = {}; }
+      }
+
+      return {
+        ...assign,
+        order_number: ord.order_number,
+        customer_name: ord.customer_name || addr.full_name || 'Customer',
+        customer_phone: ord.customer_mobile || addr.phone || '',
+        delivery_address: addr.full_address || `${addr.house_number || ''} ${addr.street || ''}, ${addr.area || ''}, ${addr.city || 'Hyderabad'}`,
+        destination_lat: addr.latitude || null,
+        destination_lng: addr.longitude || null,
+        items: ord.items || [],
+        total_amount: ord.total || 0,
+        payment_method: ord.payment_method || 'cod',
+        payment_status: ord.payment_status || 'pending',
+      };
+    });
+
+    sendSuccess(res, 'Driver assignments retrieved', enriched);
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ===================== GPS & LIVE TRACKING =====================
+
+export async function updateDriverLocation(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { latitude, longitude, accuracy } = req.body;
+    // Derive driver ID strictly from authenticated user if delivery role, or body if admin
+    const driverId = req.user?.role === 'delivery' ? req.user.id : req.body.delivery_partner_id || req.user?.id;
+
+    if (!driverId) throw new ValidationError('delivery_partner_id is required');
+    if (latitude === undefined || longitude === undefined) {
+      throw new ValidationError('latitude and longitude are required');
+    }
+
+    const result = await recordDriverGPS(driverId, Number(latitude), Number(longitude), accuracy ? Number(accuracy) : undefined);
+    sendSuccess(res, 'Driver location updated', result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getOrderTracking(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const customerUserId = req.user?.role === 'customer' ? req.user.id : undefined;
+
+    const trackingData = await getCustomerOrderLiveTracking(id, customerUserId);
+    sendSuccess(res, 'Order live tracking details', trackingData);
+  } catch (error) {
+    next(error);
+  }
 }
 
 // ===================== STORE DELIVERY SETTINGS & CHARGES =====================
@@ -914,10 +750,32 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
       }
     } catch {}
 
-    const result = checkServiceability(lat, lng, settings);
+    let hubs = getActiveHubs();
+    try {
+      const dbHubsRes = await db.query('SELECT * FROM delivery_hubs WHERE is_active = true');
+      if (dbHubsRes.rows.length > 0) {
+        hubs = dbHubsRes.rows.map((r: any) => ({
+          id: r.id,
+          hub_code: r.hub_code,
+          name: r.name,
+          address: r.address,
+          latitude: Number(r.latitude),
+          longitude: Number(r.longitude),
+          delivery_radius_km: Math.min(5.0, Number(r.delivery_radius_km || 5.0)),
+          is_active: r.is_active !== false,
+          is_paused: Boolean(r.is_paused),
+          pause_reason: r.pause_reason || '',
+          operating_hours_start: r.operating_hours_start || '06:00',
+          operating_hours_end: r.operating_hours_end || '22:00',
+          max_orders_per_slot: Number(r.max_orders_per_slot || 35),
+        }));
+      }
+    } catch {}
+
+    const result = checkMultiHubServiceability(lat, lng, { hubs, fallbackSettings: settings });
     const zones = getPersistedZones();
 
-    // 1. Strict Enforcement: If coordinates are outside 5.0 KM radius of the hub
+    // 1. Strict Enforcement: If coordinates are outside 5.0 KM radius of all eligible hubs
     if (!result.serviceable || !result.configured) {
       return res.status(200).json({
         success: true,
@@ -928,25 +786,38 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
         rawDistanceKm: result.rawDistanceKm,
         radiusKm: result.radiusKm || 5.0,
         eta_text: 'Not Serviceable',
-        message: 'Sorry! We are not delivering to your location yet.',
-        error_description: `Your location is ${result.distanceKm} km from our delivery hub (maximum radius: ${result.radiusKm || 5.0} KM). Please select another location within our delivery area.`,
+        message: result.message || 'Sorry! We are not delivering to your location yet.',
+        error_description: result.distanceKm
+          ? `Your location is ${result.distanceKm} km from our nearest delivery hub (${result.hubName}, maximum radius: ${result.radiusKm || 5.0} KM). Please select another location within our delivery area.`
+          : 'Sorry! We are not delivering to your location yet.',
         hubName: result.hubName,
         hubAddress: result.hubAddress,
+        assigned_hub_id: null,
+        assigned_hub_code: null,
+        assigned_hub_name: null,
+        assigned_hub_address: null,
         data: {
           ...result,
           serviceable: false,
           is_delivery_active: false,
           eta_text: 'Not Serviceable',
-          message: 'Sorry! We are not delivering to your location yet.',
+          message: result.message || 'Sorry! We are not delivering to your location yet.',
         },
       });
     }
 
-    // 2. Resolve matched zone within serviceable range
+    // 2. Resolve matched zone within serviceable range under assigned hub
+    const assignedHub = result.assignedHub;
+    const assignedHubId = result.assigned_hub_id;
+    const assignedHubCode = result.assigned_hub_code;
+
+    const hubZones = zones.filter((z) => !z.hub_id || z.hub_id === assignedHubId || z.hub_code === assignedHubCode);
+    const candidateZones = hubZones.length > 0 ? hubZones : zones;
+
     let matchedZone: any = null;
     let minZoneDistance = Infinity;
 
-    for (const z of zones) {
+    for (const z of candidateZones) {
       if (z.latitude && z.longitude) {
         const dist = calculateHaversineDistanceKm(lat, lng, Number(z.latitude), Number(z.longitude));
         if (dist < minZoneDistance) {
@@ -958,21 +829,23 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
 
     if (!matchedZone && pincode) {
       const cleanPin = String(pincode).trim();
-      matchedZone = zones.find((z) => Array.isArray(z.pincodes) && z.pincodes.includes(cleanPin));
+      matchedZone = candidateZones.find((z) => Array.isArray(z.pincodes) && z.pincodes.includes(cleanPin));
     }
 
-    if (!matchedZone && zones.length > 0) {
-      matchedZone = zones.find((z) => z.id === 'zone-champapet') || zones[0];
+    if (!matchedZone && candidateZones.length > 0) {
+      matchedZone = candidateZones[0];
     }
 
-    // 3. Determine Global & Zone-level Availability
+    // 3. Determine Global & Hub/Zone-level Availability
     const globalStatus = settings.global_delivery_status || (settings.is_delivery_active !== false ? 'available' : 'paused');
+    const isHubPaused = assignedHub ? Boolean(assignedHub.is_paused) : false;
+    const isZonePaused = matchedZone ? (matchedZone.is_paused === true || matchedZone.status === 'PAUSED') : false;
     const minEta = matchedZone?.min_eta_minutes || settings.min_eta_minutes || 30;
     const maxEta = matchedZone?.max_eta_minutes || settings.max_eta_minutes || 45;
 
     let isDeliveryActive = true;
     let etaText = (minEta && maxEta) ? `${minEta}–${maxEta} MINS` : 'Delivery estimate unavailable';
-    let statusMessage = 'Express delivery available at your location.';
+    let statusMessage = `Express delivery available from ${result.assigned_hub_name || result.hubName}.`;
 
     if (globalStatus === 'paused') {
       isDeliveryActive = false;
@@ -982,24 +855,28 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
       isDeliveryActive = false;
       etaText = 'Closed for Today';
       statusMessage = 'Deliveries are closed for today. Express orders reopen tomorrow morning.';
-    } else if (matchedZone && (matchedZone.is_paused === true || matchedZone.status === 'PAUSED')) {
+    } else if (isHubPaused) {
+      isDeliveryActive = false;
+      etaText = 'Delivery Paused';
+      statusMessage = assignedHub?.pause_reason || `Express delivery from ${assignedHub?.name} is temporarily paused.`;
+    } else if (isZonePaused) {
       isDeliveryActive = false;
       etaText = 'Delivery Paused';
       statusMessage = matchedZone.pause_reason || `Express delivery is temporarily paused in ${matchedZone.name}.`;
     } else {
       // Check operating hours in IST
-      const openTime = matchedZone?.daily_open_time || settings.operating_hours_start || '06:00';
-      const closeTime = matchedZone?.daily_close_time || settings.operating_hours_end || '22:00';
+      const openTime = assignedHub?.operating_hours_start || matchedZone?.daily_open_time || settings.operating_hours_start || '06:00';
+      const closeTime = assignedHub?.operating_hours_end || matchedZone?.daily_close_time || settings.operating_hours_end || '22:00';
       const nowIst = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit' });
 
       if (nowIst < openTime || nowIst > closeTime) {
         isDeliveryActive = false;
         etaText = `Opens at ${openTime}`;
-        statusMessage = `Orders in this area are delivered between ${openTime} and ${closeTime}.`;
+        statusMessage = `Orders from ${result.assigned_hub_name || 'this hub'} are delivered between ${openTime} and ${closeTime}.`;
       } else {
         isDeliveryActive = true;
         etaText = `${minEta}–${maxEta} MINS`;
-        statusMessage = 'Great! Delivery is available at your location.';
+        statusMessage = `Great! We deliver to your location from ${result.assigned_hub_name || 'our delivery hub'}.`;
       }
     }
 
@@ -1012,7 +889,13 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
       distanceKm: result.distanceKm,
       radiusKm: result.radiusKm,
       message: statusMessage,
-      hubName: result.hubName,
+      // Multi-hub assignments
+      assigned_hub_id: result.assigned_hub_id,
+      assigned_hub_code: result.assigned_hub_code,
+      assigned_hub_name: result.assigned_hub_name,
+      assigned_hub_address: result.assigned_hub_address,
+      hubName: result.assigned_hub_name || result.hubName,
+      hubAddress: result.assigned_hub_address || result.hubAddress,
       zone: matchedZone,
       eta_text: etaText,
       min_eta_minutes: minEta,
@@ -1026,6 +909,10 @@ export async function checkDeliveryServiceability(req: Request, res: Response, n
           : Number(settings.min_order_amount),
       data: {
         ...result,
+        assigned_hub_id: result.assigned_hub_id,
+        assigned_hub_code: result.assigned_hub_code,
+        assigned_hub_name: result.assigned_hub_name,
+        assigned_hub_address: result.assigned_hub_address,
         zone: matchedZone,
         eta_text: etaText,
         is_delivery_active: isDeliveryActive,
@@ -1171,12 +1058,323 @@ export async function reverseGeocodeCoordinates(req: Request, res: Response, nex
           distanceKm: serv.distanceKm,
           rawDistanceKm: serv.rawDistanceKm,
           radiusKm: serv.radiusKm || 5.0,
+          assigned_hub_id: serv.assigned_hub_id,
+          assigned_hub_code: serv.assigned_hub_code,
+          assigned_hub_name: serv.assigned_hub_name || serv.hubName,
+          assigned_hub_address: serv.assigned_hub_address || serv.hubAddress,
+          hubName: serv.assigned_hub_name || serv.hubName,
+          hubAddress: serv.assigned_hub_address || serv.hubAddress,
           message: serv.serviceable
-            ? 'Great! Delivery is available at your location.'
-            : 'Sorry! We are not delivering to your location yet.',
+            ? `Great! Delivery is available from ${serv.assigned_hub_name || serv.hubName}.`
+            : (serv.message || 'Sorry! We are not delivering to your location yet.'),
         },
       },
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ===================== TWO-HUB MANAGEMENT ENDPOINTS =====================
+
+/**
+ * Public: List active authorized delivery hubs
+ */
+export async function getPublicDeliveryHubs(req: Request, res: Response, next: NextFunction) {
+  try {
+    let hubs = getActiveHubs();
+    try {
+      const dbRes = await db.query('SELECT * FROM delivery_hubs WHERE is_active = true ORDER BY name ASC');
+      if (dbRes.rows.length > 0) {
+        hubs = dbRes.rows.map((r: any) => ({
+          id: r.id,
+          hub_code: r.hub_code,
+          name: r.name,
+          address: r.address,
+          latitude: Number(r.latitude),
+          longitude: Number(r.longitude),
+          delivery_radius_km: Math.min(5.0, Number(r.delivery_radius_km || 5.0)),
+          is_active: r.is_active !== false,
+          is_paused: Boolean(r.is_paused),
+          pause_reason: r.pause_reason || '',
+          operating_hours_start: r.operating_hours_start || '06:00',
+          operating_hours_end: r.operating_hours_end || '22:00',
+          max_orders_per_slot: Number(r.max_orders_per_slot || 35),
+        }));
+      }
+    } catch {}
+
+    sendSuccess(res, 'Active delivery hubs retrieved', hubs);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Admin: List all delivery hubs with mapped zones and active statistics
+ */
+export async function getAdminDeliveryHubs(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    let hubs = getPersistedHubs();
+    try {
+      const dbRes = await db.query('SELECT * FROM delivery_hubs ORDER BY created_at ASC');
+      if (dbRes.rows.length > 0) {
+        hubs = dbRes.rows.map((r: any) => ({
+          id: r.id,
+          hub_code: r.hub_code,
+          name: r.name,
+          address: r.address,
+          latitude: Number(r.latitude),
+          longitude: Number(r.longitude),
+          delivery_radius_km: Math.min(5.0, Number(r.delivery_radius_km || 5.0)),
+          is_active: r.is_active !== false,
+          is_paused: Boolean(r.is_paused),
+          pause_reason: r.pause_reason || '',
+          operating_hours_start: r.operating_hours_start || '06:00',
+          operating_hours_end: r.operating_hours_end || '22:00',
+          max_orders_per_slot: Number(r.max_orders_per_slot || 35),
+        }));
+      }
+    } catch {}
+
+    const allZones = getPersistedZones();
+
+    // Attach mapped zones to each hub
+    const hubsWithZones = hubs.map((h) => {
+      const mappedZones = allZones.filter((z) => z.hub_id === h.id || z.hub_code === h.hub_code);
+      return {
+        ...h,
+        zones: mappedZones,
+        zone_count: mappedZones.length,
+      };
+    });
+
+    sendSuccess(res, 'Admin delivery hubs retrieved', hubsWithZones);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Admin: Create an authorized fulfillment hub
+ */
+export async function createAdminDeliveryHub(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const {
+      hub_code,
+      name,
+      address,
+      latitude,
+      longitude,
+      delivery_radius_km,
+      is_active,
+      is_paused,
+      pause_reason,
+      operating_hours_start,
+      operating_hours_end,
+      max_orders_per_slot,
+    } = req.body;
+
+    if (!hub_code || !name || !address || latitude === undefined || longitude === undefined) {
+      throw new ValidationError('Hub code, name, address, latitude, and longitude are required');
+    }
+
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!isValidCoordinate(lat, lng)) {
+      throw new ValidationError('Latitude must be between -90 and 90, longitude between -180 and 180');
+    }
+
+    const radius = Number(delivery_radius_km || 5.0);
+    if (isNaN(radius) || radius <= 0 || radius > 5.0) {
+      throw new ValidationError('Delivery radius cannot exceed the store limit of 5.0 KM');
+    }
+
+    const cleanCode = String(hub_code).toLowerCase().trim().replace(/[^a-z0-9_-]/g, '');
+    const id = `hub-${cleanCode}`;
+
+    const newHub: DeliveryHub = {
+      id,
+      hub_code: cleanCode,
+      name: String(name).trim(),
+      address: String(address).trim(),
+      latitude: lat,
+      longitude: lng,
+      delivery_radius_km: radius,
+      is_active: is_active !== false,
+      is_paused: Boolean(is_paused),
+      pause_reason: pause_reason || '',
+      operating_hours_start: operating_hours_start || '06:00',
+      operating_hours_end: operating_hours_end || '22:00',
+      max_orders_per_slot: Number(max_orders_per_slot || 35),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    upsertHub(newHub);
+
+    // Save to DB if table exists
+    try {
+      await db.query(
+        `INSERT INTO delivery_hubs (
+          id, hub_code, name, address, latitude, longitude, delivery_radius_km,
+          is_active, is_paused, pause_reason, operating_hours_start, operating_hours_end, max_orders_per_slot
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          address = EXCLUDED.address,
+          latitude = EXCLUDED.latitude,
+          longitude = EXCLUDED.longitude,
+          delivery_radius_km = EXCLUDED.delivery_radius_km,
+          is_active = EXCLUDED.is_active,
+          is_paused = EXCLUDED.is_paused,
+          pause_reason = EXCLUDED.pause_reason,
+          operating_hours_start = EXCLUDED.operating_hours_start,
+          operating_hours_end = EXCLUDED.operating_hours_end,
+          max_orders_per_slot = EXCLUDED.max_orders_per_slot,
+          updated_at = NOW()`,
+        [
+          newHub.id,
+          newHub.hub_code,
+          newHub.name,
+          newHub.address,
+          newHub.latitude,
+          newHub.longitude,
+          newHub.delivery_radius_km,
+          newHub.is_active,
+          newHub.is_paused,
+          newHub.pause_reason,
+          newHub.operating_hours_start,
+          newHub.operating_hours_end,
+          newHub.max_orders_per_slot,
+        ]
+      );
+    } catch {}
+
+    sendSuccess(res, 'Delivery hub created successfully', newHub, 201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Admin: Update hub configuration
+ */
+export async function updateAdminDeliveryHub(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const existing = getHubById(id);
+    if (!existing) {
+      throw new NotFoundError(`Delivery hub ${id} not found`);
+    }
+
+    const {
+      name,
+      address,
+      latitude,
+      longitude,
+      delivery_radius_km,
+      is_active,
+      is_paused,
+      pause_reason,
+      operating_hours_start,
+      operating_hours_end,
+      max_orders_per_slot,
+    } = req.body;
+
+    if (latitude !== undefined && longitude !== undefined) {
+      if (!isValidCoordinate(Number(latitude), Number(longitude))) {
+        throw new ValidationError('Invalid latitude or longitude');
+      }
+    }
+
+    if (delivery_radius_km !== undefined) {
+      const radius = Number(delivery_radius_km);
+      if (isNaN(radius) || radius <= 0 || radius > 5.0) {
+        throw new ValidationError('Delivery radius cannot exceed 5.0 KM');
+      }
+    }
+
+    const updated = updateHub(id, {
+      name: name !== undefined ? String(name).trim() : undefined,
+      address: address !== undefined ? String(address).trim() : undefined,
+      latitude: latitude !== undefined ? Number(latitude) : undefined,
+      longitude: longitude !== undefined ? Number(longitude) : undefined,
+      delivery_radius_km: delivery_radius_km !== undefined ? Math.min(5.0, Number(delivery_radius_km)) : undefined,
+      is_active: is_active !== undefined ? Boolean(is_active) : undefined,
+      is_paused: is_paused !== undefined ? Boolean(is_paused) : undefined,
+      pause_reason: pause_reason !== undefined ? String(pause_reason) : undefined,
+      operating_hours_start: operating_hours_start !== undefined ? String(operating_hours_start) : undefined,
+      operating_hours_end: operating_hours_end !== undefined ? String(operating_hours_end) : undefined,
+      max_orders_per_slot: max_orders_per_slot !== undefined ? Number(max_orders_per_slot) : undefined,
+    });
+
+    // Update DB if table exists
+    try {
+      await db.query(
+        `UPDATE delivery_hubs SET
+          name = COALESCE($1, name),
+          address = COALESCE($2, address),
+          latitude = COALESCE($3, latitude),
+          longitude = COALESCE($4, longitude),
+          delivery_radius_km = COALESCE($5, delivery_radius_km),
+          is_active = COALESCE($6, is_active),
+          is_paused = COALESCE($7, is_paused),
+          pause_reason = COALESCE($8, pause_reason),
+          operating_hours_start = COALESCE($9, operating_hours_start),
+          operating_hours_end = COALESCE($10, operating_hours_end),
+          max_orders_per_slot = COALESCE($11, max_orders_per_slot),
+          updated_at = NOW()
+        WHERE id = $12`,
+        [
+          name !== undefined ? String(name).trim() : null,
+          address !== undefined ? String(address).trim() : null,
+          latitude !== undefined ? Number(latitude) : null,
+          longitude !== undefined ? Number(longitude) : null,
+          delivery_radius_km !== undefined ? Math.min(5.0, Number(delivery_radius_km)) : null,
+          is_active !== undefined ? Boolean(is_active) : null,
+          is_paused !== undefined ? Boolean(is_paused) : null,
+          pause_reason !== undefined ? String(pause_reason) : null,
+          operating_hours_start !== undefined ? String(operating_hours_start) : null,
+          operating_hours_end !== undefined ? String(operating_hours_end) : null,
+          max_orders_per_slot !== undefined ? Number(max_orders_per_slot) : null,
+          id,
+        ]
+      );
+    } catch {}
+
+    sendSuccess(res, 'Delivery hub updated successfully', updated);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Admin: Quick toggle pause status for a specific hub
+ */
+export async function toggleHubPause(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { is_paused, pause_reason } = req.body;
+
+    const existing = getHubById(id);
+    if (!existing) {
+      throw new NotFoundError(`Delivery hub ${id} not found`);
+    }
+
+    const updated = updateHub(id, {
+      is_paused: Boolean(is_paused),
+      pause_reason: pause_reason || (is_paused ? `Deliveries from ${existing.name} are temporarily paused.` : ''),
+    });
+
+    try {
+      await db.query(
+        'UPDATE delivery_hubs SET is_paused = $1, pause_reason = $2, updated_at = NOW() WHERE id = $3',
+        [Boolean(is_paused), pause_reason || '', id]
+      );
+    } catch {}
+
+    sendSuccess(res, `Delivery hub ${is_paused ? 'paused' : 'resumed'} successfully`, updated);
   } catch (error) {
     next(error);
   }

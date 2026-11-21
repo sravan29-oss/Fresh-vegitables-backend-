@@ -5,12 +5,12 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc && node -e \"const fs = require('fs'), path = require('path'); ['delivery_settings.json', 'delivery_zones.json'].forEach(f => { const src = path.join(__dirname, 'src/config', f); const dest = path.join(__dirname, 'dist/config', f); if (fs.existsSync(src)) { fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(src, dest); } });\"",
+    "build": "tsc && node -e \"const fs = require('fs'), path = require('path'); ['delivery_settings.json', 'delivery_zones.json', 'delivery_hubs.json'].forEach(f => { const src = path.join(__dirname, 'src/config', f); const dest = path.join(__dirname, 'dist/config', f); if (fs.existsSync(src)) { fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(src, dest); } });\"",
     "start": "node dist/server.js",
     "db:init": "tsx src/init-db.ts",
     "db:migrate": "tsx src/migrate.ts",
     "db:seed": "tsx src/seed.ts",
-    "test": "tsx src/tests/serviceability.test.ts && tsx src/tests/payment-settings.test.ts && tsx src/tests/whatsapp-webhook.test.ts",
+    "test": "tsx src/tests/serviceability.test.ts && tsx src/tests/payment-settings.test.ts && tsx src/tests/two-hub-serviceability.test.ts && tsx src/tests/address-verification.test.ts && tsx src/tests/admin-managed-delivery.test.ts",
     "test:persistence": "tsx src/verify-persistence.ts",
     "test:webhook": "tsx src/tests/whatsapp-webhook.test.ts"
   },

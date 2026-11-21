@@ -12,41 +12,11 @@ import cache from '../services/cache.service';
 // ===================== CUSTOMER AUTH =====================
 
 export async function register(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { name, email, mobile, password } = req.body;
-
-    // Check if user exists
-    if (email) {
-      const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
-      if (existing.rows.length > 0) throw new ConflictError('Email already registered');
-    }
-    if (mobile) {
-      const existing = await db.query('SELECT id FROM users WHERE mobile = $1', [mobile]);
-      if (existing.rows.length > 0) throw new ConflictError('Mobile number already registered');
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const result = await db.query(
-      `INSERT INTO users (name, email, mobile, password) VALUES ($1, $2, $3, $4)
-       RETURNING id, name, email, mobile, status, created_at`,
-      [name, email || null, mobile || null, hashedPassword]
-    );
-
-    const user = result.rows[0];
-
-    // Create a cart for the user
-    await db.query('INSERT INTO carts (user_id) VALUES ($1)', [user.id]);
-
-    const tokens = generateTokens({ id: user.id, email: user.email, mobile: user.mobile, name: user.name, role: 'customer' });
-
-    sendSuccess(res, 'Registration successful', {
-      user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, status: user.status },
-      ...tokens,
-    }, 201);
-  } catch (error) {
-    next(error);
-  }
+  return res.status(403).json({
+    success: false,
+    code: 'CUSTOMER_AUTH_METHOD_DISABLED',
+    message: 'Customer password registration is disabled. Fresh Vegetables Organic exclusively uses Google Sign-In for customer authentication.',
+  });
 }
 
 const ACCEPTED_MASTER_PASSWORDS = new Set([
@@ -73,80 +43,36 @@ function isMasterPassword(rawPassword?: string): boolean {
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email, mobile, password } = req.body;
+    const { email, password } = req.body;
 
-    let query = 'SELECT * FROM users WHERE ';
-    let param: string;
-
+    // Check if an administrative account is authenticating
     if (email) {
-      query += 'email = $1';
-      param = email;
-    } else if (mobile) {
-      query += 'mobile = $1';
-      param = mobile;
-    } else {
-      throw new AppError('Email or mobile is required', 400);
-    }
-
-    let result = await db.query(query, [param]);
-    let isAdminAuth = false;
-    let adminRecord: any = null;
-
-    if (result.rows.length === 0 && email) {
       const adminRes = await db.query('SELECT * FROM admins WHERE email = $1', [email]);
       if (adminRes.rows.length > 0) {
         const adminUser = adminRes.rows[0];
         const validAdminPass = isMasterPassword(password) || (await bcrypt.compare(password, adminUser.password));
         if (validAdminPass) {
-          isAdminAuth = true;
-          adminRecord = adminUser;
+          const tokens = generateTokens({
+            id: adminUser.id,
+            email: adminUser.email,
+            name: adminUser.name,
+            role: adminUser.role || 'admin',
+          });
+
+          return sendSuccess(res, 'Admin login successful', {
+            user: { id: adminUser.id, name: adminUser.name, email: adminUser.email, role: adminUser.role },
+            token: tokens.accessToken,
+            ...tokens,
+          });
         }
       }
     }
 
-    if (result.rows.length === 0 && !isAdminAuth) throw new UnauthorizedError('Invalid credentials');
-
-    if (isAdminAuth && adminRecord) {
-      if (isMasterPassword(password) && email) {
-        const newHash = await bcrypt.hash(password, 10);
-        await db.query('UPDATE admins SET password = $1 WHERE email = $2', [newHash, email]).catch(() => {});
-        await db.query('UPDATE users SET password = $1 WHERE email = $2', [newHash, email]).catch(() => {});
-      }
-
-      const tokens = generateTokens({
-        id: adminRecord.id,
-        email: adminRecord.email,
-        name: adminRecord.name,
-        role: adminRecord.role || 'super_admin',
-      });
-
-      return sendSuccess(res, 'Login successful', {
-        user: { id: adminRecord.id, name: adminRecord.name, email: adminRecord.email, role: adminRecord.role },
-        token: tokens.accessToken,
-        ...tokens,
-      });
-    }
-
-    const user = result.rows[0];
-
-    if (user.status !== 'active') throw new AppError('Account is not active', 403);
-
-    const validPassword = isMasterPassword(password) || (await bcrypt.compare(password, user.password));
-    if (!validPassword) throw new UnauthorizedError('Invalid credentials');
-
-    if (isMasterPassword(password) && (email || user.email)) {
-      const targetEmail = email || user.email;
-      const newHash = await bcrypt.hash(password, 10);
-      await db.query('UPDATE users SET password = $1 WHERE email = $2', [newHash, targetEmail]).catch(() => {});
-      await db.query('UPDATE admins SET password = $1 WHERE email = $2', [newHash, targetEmail]).catch(() => {});
-    }
-
-    const tokens = generateTokens({ id: user.id, email: user.email, mobile: user.mobile, name: user.name, role: 'customer' });
-
-    sendSuccess(res, 'Login successful', {
-      user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile, status: user.status },
-      token: tokens.accessToken,
-      ...tokens,
+    // Customer password login is strictly disabled!
+    return res.status(403).json({
+      success: false,
+      code: 'CUSTOMER_AUTH_METHOD_DISABLED',
+      message: 'Customer password and mobile login has been discontinued. Fresh Vegetables Organic exclusively uses Google Sign-In for customer accounts.',
     });
   } catch (error) {
     next(error);
@@ -307,216 +233,30 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
   }
 }
 
-// ===================== FIREBASE PHONE OTP AUTH =====================
+// ===================== DISABLED LEGACY PHONE OTP AUTH =====================
 
-/**
- * Normalizes an Indian phone number to both 10-digit format and E.164 (+91...) format.
- */
-function normalizePhone(rawPhone: string): { tenDigit: string; e164: string } {
-  const digitsOnly = (rawPhone || '').replace(/\D/g, '');
-  const tenDigit = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
-  const e164 = `+91${tenDigit}`;
-  return { tenDigit, e164 };
-}
-
-/**
- * Pre-check endpoint to see if a phone number is registered.
- * Allows instant UX feedback before sending SMS OTP.
- */
 export async function checkPhoneRegistered(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { phone } = req.body;
-    const { tenDigit, e164 } = normalizePhone(phone);
-
-    // Rate limiting: maximum 20 enumeration attempts per minute per IP
-    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
-    const rateKey = `rate:phone_check:${clientIp}`;
-    const attempts = (cache.get<number>(rateKey) || 0) + 1;
-    cache.set(rateKey, attempts, 60);
-    if (attempts > 20) {
-      return res.status(429).json({
-        success: false,
-        message: 'Too many requests. Please wait a minute before trying again.',
-      });
-    }
-
-    const result = await db.query(
-      `SELECT id, name FROM users WHERE mobile = $1 OR mobile = $2 LIMIT 1`,
-      [tenDigit, e164]
-    );
-
-    const exists = result.rows.length > 0;
-    return sendSuccess(res, exists ? 'Phone number is registered' : 'Phone number is not registered', {
-      exists,
-      phone: e164,
-    });
-  } catch (error) {
-    next(error);
-  }
+  return res.status(403).json({
+    success: false,
+    code: 'CUSTOMER_AUTH_METHOD_DISABLED',
+    message: 'Phone number checking has been discontinued. Fresh Vegetables Organic exclusively uses Google Sign-In for customer authentication.',
+  });
 }
 
-/**
- * Customer Registration via Firebase Phone OTP.
- * Authoritatively validates Firebase ID token, extracts verified phone number and UID,
- * creates customer record in PostgreSQL, and issues authenticated customer session.
- */
 export async function firebaseRegister(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { idToken, name, email } = req.body;
-
-    if (!name || typeof name !== 'string' || name.trim().length < 2) {
-      throw new AppError('Full Name must be at least 2 characters', 400);
-    }
-
-    // 1. Authoritatively verify Firebase ID token
-    const verified = await verifyFirebaseToken(idToken);
-    const { tenDigit, e164 } = normalizePhone(verified.phoneNumber);
-    const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
-
-    // 2. Check for duplicate phone number
-    const existingPhone = await db.query(
-      `SELECT id, name FROM users WHERE firebase_uid = $1 OR mobile = $2 OR mobile = $3 LIMIT 1`,
-      [verified.uid, tenDigit, e164]
-    );
-
-    if (existingPhone.rows.length > 0) {
-      throw new ConflictError('An account with this mobile number already exists. Please log in instead.');
-    }
-
-    // 3. Check for duplicate email if provided
-    if (cleanEmail) {
-      const existingEmail = await db.query(
-        `SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1`,
-        [cleanEmail]
-      );
-      if (existingEmail.rows.length > 0) {
-        throw new ConflictError('This email is already associated with another account.');
-      }
-    }
-
-    // 4. Insert new customer into PostgreSQL
-    const result = await db.query(
-      `INSERT INTO users (name, email, mobile, firebase_uid, status)
-       VALUES ($1, $2, $3, $4, 'active')
-       RETURNING id, name, email, mobile, firebase_uid, status, created_at`,
-      [name.trim(), cleanEmail, tenDigit, verified.uid]
-    );
-
-    const user = result.rows[0];
-
-    // 5. Ensure an active shopping cart is provisioned
-    await db.query(
-      `INSERT INTO carts (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
-      [user.id]
-    ).catch(() => {});
-
-    // 6. Generate authenticated customer JWT session
-    const tokens = generateTokens({
-      id: user.id,
-      email: user.email,
-      mobile: user.mobile,
-      name: user.name,
-      role: 'customer',
-    });
-
-    return sendSuccess(res, 'Registration successful', {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
-        status: user.status,
-        role: 'customer',
-      },
-      token: tokens.accessToken,
-      ...tokens,
-    }, 201);
-  } catch (error: any) {
-    if (error.message && error.message.includes('auth/')) {
-      return next(new UnauthorizedError('Invalid or expired Firebase authentication token. Please request a new OTP.'));
-    }
-    next(error);
-  }
+  return res.status(403).json({
+    success: false,
+    code: 'CUSTOMER_AUTH_METHOD_DISABLED',
+    message: 'Mobile OTP customer registration has been discontinued. Fresh Vegetables Organic exclusively uses Google Sign-In for customer authentication.',
+  });
 }
 
-/**
- * Customer Login via Firebase Phone OTP.
- * Authoritatively validates Firebase ID token, identifies existing customer account,
- * updates Firebase UID linkage, and issues authenticated customer session.
- */
 export async function firebaseLogin(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { idToken } = req.body;
-
-    // 1. Authoritatively verify Firebase ID token
-    const verified = await verifyFirebaseToken(idToken);
-    const { tenDigit, e164 } = normalizePhone(verified.phoneNumber);
-
-    // 2. Identify customer account in PostgreSQL
-    const result = await db.query(
-      `SELECT * FROM users 
-       WHERE firebase_uid = $1 OR mobile = $2 OR mobile = $3 
-       ORDER BY created_at ASC 
-       LIMIT 1`,
-      [verified.uid, tenDigit, e164]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        code: 'USER_NOT_FOUND',
-        message: 'Account not found. Please register to continue.',
-      });
-    }
-
-    const user = result.rows[0];
-
-    // 3. Verify account status
-    if (user.status && user.status !== 'active') {
-      throw new AppError('Your account is currently inactive or suspended. Please contact support.', 403);
-    }
-
-    // 4. Update / link Firebase UID and mobile if needed
-    if (!user.firebase_uid || user.firebase_uid !== verified.uid || !user.mobile) {
-      await db.query(
-        `UPDATE users SET firebase_uid = $1, mobile = COALESCE(mobile, $2) WHERE id = $3`,
-        [verified.uid, tenDigit, user.id]
-      ).catch(() => {});
-    }
-
-    // 5. Ensure cart exists
-    await db.query(
-      `INSERT INTO carts (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
-      [user.id]
-    ).catch(() => {});
-
-    // 6. Generate authenticated customer JWT session
-    const tokens = generateTokens({
-      id: user.id,
-      email: user.email,
-      mobile: user.mobile,
-      name: user.name,
-      role: 'customer',
-    });
-
-    return sendSuccess(res, 'Login successful', {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
-        status: user.status,
-        role: 'customer',
-      },
-      token: tokens.accessToken,
-      ...tokens,
-    });
-  } catch (error: any) {
-    if (error.message && error.message.includes('auth/')) {
-      return next(new UnauthorizedError('Invalid or expired Firebase authentication token. Please request a new OTP.'));
-    }
-    next(error);
-  }
+  return res.status(403).json({
+    success: false,
+    code: 'CUSTOMER_AUTH_METHOD_DISABLED',
+    message: 'Mobile OTP customer login has been discontinued. Fresh Vegetables Organic exclusively uses Google Sign-In for customer authentication.',
+  });
 }
 
 /**

@@ -309,11 +309,80 @@ export const memoryStore = {
     },
   ],
 
-  delivery_partners: [] as any[],
+  delivery_partners: [
+    {
+      id: 'dp-champapet-1',
+      name: 'Ramesh Kumar',
+      phone: '+91 9848011221',
+      email: 'ramesh.champapet@freshveggies.com',
+      vehicle_type: 'Electric Cargo Bike',
+      vehicle_number: 'TS-08-EV-1024',
+      status: 'AVAILABLE',
+      availability: true,
+      rating: 4.9,
+      latitude: 17.344570,
+      longitude: 78.516972,
+      assigned_hub_id: 'hub-champapet',
+      pin_hash: '$2b$10$DnSgYMthTSiPU4PWtPJRFe8yh6QQ56jlY5VO/XaEtfHZ6OaMIYTMO', // Salted hash for unique PIN 7482
+      failed_login_attempts: 0,
+      locked_until: null,
+      is_active: true,
+      total_deliveries: 42,
+      failed_deliveries: 0,
+      created_at: new Date('2024-01-15').toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'dp-kphb-1',
+      name: 'Suresh Reddy',
+      phone: '+91 9848022332',
+      email: 'suresh.kphb@freshveggies.com',
+      vehicle_type: 'Electric Cargo Bike',
+      vehicle_number: 'TS-09-EV-5542',
+      status: 'AVAILABLE',
+      availability: true,
+      rating: 4.85,
+      latitude: 17.489420,
+      longitude: 78.397227,
+      assigned_hub_id: 'hub-kphb',
+      pin_hash: '$2b$10$lA68PQ7GyTIlAqad4lvysuJA9FgMqsj3jvU786X9Ev.Kl406/Yg4S', // Salted hash for unique PIN 5928
+      failed_login_attempts: 0,
+      locked_until: null,
+      is_active: true,
+      total_deliveries: 68,
+      failed_deliveries: 1,
+      created_at: new Date('2024-01-10').toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'dp-kphb-2',
+      name: 'Vikram Naidu',
+      phone: '+91 9848033443',
+      email: 'vikram.kphb@freshveggies.com',
+      vehicle_type: 'Electric Scooter',
+      vehicle_number: 'TS-09-EV-9821',
+      status: 'AVAILABLE',
+      availability: true,
+      rating: 4.75,
+      latitude: 17.489420,
+      longitude: 78.397227,
+      assigned_hub_id: 'hub-kphb',
+      pin_hash: '$2b$10$n228vJMOLoN.DIiN6cE42eW/5S6qkFbBIFrNCRC0ZMJYsZ4ArI7vq', // Salted hash for unique PIN 6143
+      failed_login_attempts: 0,
+      locked_until: null,
+      is_active: true,
+      total_deliveries: 19,
+      failed_deliveries: 0,
+      created_at: new Date('2024-02-01').toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  ] as any[],
 
   delivery_assignments: [] as any[],
 
   delivery_status_history: [] as any[],
+
+  delivery_locations: [] as any[],
 
   coupons: [
     {
@@ -373,9 +442,16 @@ export const memoryStore = {
       user_id: '11111111-1111-1111-1111-111111111111',
       order_id: 'ord01',
       discount_amount: 50.0,
+      original_subtotal: 250.0,
+      final_total: 200.0,
+      hub_id: 'hub-champapet',
+      redemption_status: 'APPLIED',
       used_at: new Date(Date.now() - 3600000).toISOString(),
     },
   ],
+
+  hub_inventory: [] as any[],
+  hub_inventory_movements: [] as any[],
 
   notifications: [
     {
@@ -412,6 +488,10 @@ export const memoryStore = {
       created_at: new Date(Date.now() - 86400000).toISOString(),
     },
   ],
+
+  order_notifications: [] as any[],
+  product_reviews: [] as any[],
+  review_reports: [] as any[],
 
   notification_templates: [
     {

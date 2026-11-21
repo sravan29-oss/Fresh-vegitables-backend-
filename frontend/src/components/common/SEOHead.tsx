@@ -116,37 +116,6 @@ export const SEOHead: React.FC<SEOProps> = ({
             availableLanguage: ['English', 'Telugu', 'Hindi'],
           },
         },
-        {
-          '@type': 'LocalBusiness',
-          '@id': `${BASE_URL}/#store`,
-          name: 'Fresh Vegetables Organic',
-          image: `${BASE_URL}/logo.png`,
-          url: `${BASE_URL}/`,
-          telephone: '+91 8106970384',
-          priceRange: '₹₹',
-          address: {
-            '@type': 'PostalAddress',
-            streetAddress: 'Flat/House 9-153/4 Raji reddy nagar colony, Champapet',
-            addressLocality: 'Hyderabad',
-            addressRegion: 'Telangana',
-            postalCode: '500059',
-            addressCountry: 'IN',
-          },
-          geo: {
-            '@type': 'GeoCoordinates',
-            latitude: 17.34457,
-            longitude: 78.516972,
-          },
-          areaServed: {
-            '@type': 'GeoCircle',
-            geoMidpoint: {
-              '@type': 'GeoCoordinates',
-              latitude: 17.34457,
-              longitude: 78.516972,
-            },
-            geoRadius: '5000',
-          },
-        },
       ],
     };
 

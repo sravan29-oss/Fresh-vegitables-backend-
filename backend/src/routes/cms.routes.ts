@@ -36,6 +36,7 @@ router.post('/sections', authenticateAdmin, createSectionAdmin);
 router.put('/sections/:id', authenticateAdmin, updateSectionAdmin);
 router.patch('/sections/:id/toggle', authenticateAdmin, toggleSectionStatus);
 router.post('/sections/reorder', authenticateAdmin, reorderSections);
+router.put('/sections/reorder', authenticateAdmin, reorderSections);
 router.delete('/sections/:id', authenticateAdmin, deleteSection);
 
 // Admin routes for Hero & Promotional Banners

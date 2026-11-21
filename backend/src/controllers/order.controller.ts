@@ -7,8 +7,9 @@ import { generateOrderNumber, parsePaginationParams } from '../utils/helpers';
 import { v4 as uuidv4 } from 'uuid';
 import { memoryStore } from '../config/mockDb';
 import { getPersistedDeliverySettings } from '../services/deliverySettings.service';
-import { checkServiceability, isValidCoordinate, calculateHaversineDistanceKm } from '../services/serviceability.service';
+import { checkServiceability, checkMultiHubServiceability, isValidCoordinate, calculateHaversineDistanceKm } from '../services/serviceability.service';
 import { getPersistedZones } from '../services/zoneStore.service';
+import { getActiveHubs, getPersistedHubs, DeliveryHub } from '../services/hubStore.service';
 import { getPersistedPaymentSettings } from '../services/paymentSettings.service';
 import { createAdminNotification, logPaymentTransaction } from './payment.controller';
 import {
@@ -26,6 +27,8 @@ import {
   handleAdminLiveStream,
 } from '../services/adminNotification.service';
 import { resolveCustomerUserId } from '../services/customerUser.service';
+import { deductHubStockForOrder, restoreHubStockForOrder } from '../services/hubInventory.service';
+import { calculateCouponDiscount } from './coupon.controller';
 
 // ===================== CUSTOMER =====================
 
@@ -35,15 +38,27 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     await client.query('BEGIN');
 
     const userId = await resolveCustomerUserId(req.user!);
-    const { address_id, payment_method, notes, customer_email, email } = req.body;
+    const { address_id, payment_method, notes, coupon_code } = req.body;
 
-    // Validate customer email address for order confirmation & receipt
-    const resolvedCustomerEmail = (customer_email || email || req.user?.email || '').trim().toLowerCase();
-    if (!resolvedCustomerEmail || !isValidEmail(resolvedCustomerEmail)) {
-      throw new ValidationError('A valid email address is required to receive your order confirmation.');
+    // Validate customer identity authoritatively from authenticated account & trusted database profile
+    // Never trust request-body email fields as a fallback for authenticated customer identity
+    let resolvedCustomerEmail = (req.user?.email || '').trim().toLowerCase();
+    if (!resolvedCustomerEmail) {
+      try {
+        const userRes = await client.query('SELECT email FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length > 0 && userRes.rows[0].email) {
+          resolvedCustomerEmail = userRes.rows[0].email.trim().toLowerCase();
+        }
+      } catch (dbErr) {
+        console.warn('Could not query trusted user email from database:', dbErr);
+      }
     }
 
-    // 1. Verify address
+    if (!resolvedCustomerEmail || !isValidEmail(resolvedCustomerEmail)) {
+      throw new ValidationError('A verified email address is required on your account to place an order.');
+    }
+
+    // 1. Verify address ownership
     const addressResult = await client.query(
       'SELECT * FROM addresses WHERE id = $1 AND user_id = $2',
       [address_id, userId]
@@ -52,49 +67,46 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     const address = addressResult.rows[0];
 
     // MANDATORY BACKEND LOCATION-BASED SERVICEABILITY VALIDATION
-    // Resolve delivery coordinates from address or request body
-    let deliveryLat: number | null = null;
-    let deliveryLng: number | null = null;
+    // Treat saved verified database coordinates as authoritative.
+    // Frontend coordinates are never allowed to replace or override verified saved coordinates.
+    // If the customer wants to change their location, require an explicit address re-verification flow.
+    if (
+      address.latitude === null ||
+      address.latitude === undefined ||
+      address.longitude === null ||
+      address.longitude === undefined ||
+      !isValidCoordinate(address.latitude, address.longitude)
+    ) {
+      throw new ValidationError(
+        'Delivery address requires verified geographic coordinates. Please select an exact location on the map to verify delivery availability.'
+      );
+    }
 
+    const deliveryLat = Number(address.latitude);
+    const deliveryLng = Number(address.longitude);
+
+    // If client provided coordinates, verify they do not conflict with authoritative saved coordinates
     if (req.body.latitude !== undefined && req.body.longitude !== undefined) {
-      if (isValidCoordinate(req.body.latitude, req.body.longitude)) {
-        deliveryLat = Number(req.body.latitude);
-        deliveryLng = Number(req.body.longitude);
-      }
-    }
-
-    if (deliveryLat === null && address.latitude !== null && address.latitude !== undefined) {
-      if (isValidCoordinate(address.latitude, address.longitude)) {
-        deliveryLat = Number(address.latitude);
-        deliveryLng = Number(address.longitude);
-      }
-    }
-
-    // 1. Resolve coordinates or fallback to hub coordinates if in local service area
-    if (deliveryLat === null || deliveryLng === null) {
-      const addrText = `${address.house_number || ''} ${address.street || ''} ${address.area || ''} ${address.landmark || ''} ${address.city || ''}`.toLowerCase();
-      const isLocalArea =
-        String(address.pincode || '').trim() === '500059' ||
-        addrText.includes('champapet') ||
-        addrText.includes('rajireddy') ||
-        addrText.includes('raji reddy') ||
-        addrText.includes('saroornagar') ||
-        addrText.includes('saidabad') ||
-        addrText.includes('santoshnagar') ||
-        addrText.includes('karmanghat');
-
-      if (isLocalArea) {
-        const hubSettings = getPersistedDeliverySettings();
-        deliveryLat = Number(hubSettings.hub_latitude || 17.34457);
-        deliveryLng = Number(hubSettings.hub_longitude || 78.516972);
-      } else {
+      const clientLat = Number(req.body.latitude);
+      const clientLng = Number(req.body.longitude);
+      // Disallow frontend coordinates from replacing or deviating from verified saved coordinates
+      // Allow only negligible micro-jitter (<= 0.00001 deg ~ 1 metre)
+      if (Math.abs(clientLat - deliveryLat) > 0.00001 || Math.abs(clientLng - deliveryLng) > 0.00001) {
         throw new ValidationError(
-          'Delivery address does not have verified geographic coordinates. Please select an exact location on the map.'
+          'Submitted coordinates do not match the verified address location. If you want to change your delivery location, please update the address using the map verification flow.'
         );
       }
     }
 
-    // 2. Authoritatively evaluate serviceability against configured delivery hub
+    // Authoritative requirement: verified GPS coordinates must be valid geographic values.
+    // Never substitute delivery hub coordinates for an unknown or unverified customer location.
+    if (!isValidCoordinate(deliveryLat, deliveryLng)) {
+      throw new ValidationError(
+        'Delivery address requires verified geographic coordinates. Please select an exact location on the map to verify delivery availability.'
+      );
+    }
+
+    // 2. Authoritatively evaluate multi-hub serviceability against active fulfillment hubs
     let deliverySettings = getPersistedDeliverySettings();
     try {
       const dbSettingsRes = await client.query("SELECT * FROM delivery_settings WHERE id = 'global_delivery_settings' LIMIT 1");
@@ -113,23 +125,62 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       }
     } catch {}
 
-    const serviceability = checkServiceability(deliveryLat, deliveryLng, deliverySettings);
+    let hubs = getActiveHubs();
+    try {
+      const dbHubsRes = await client.query('SELECT * FROM delivery_hubs WHERE is_active = true');
+      if (dbHubsRes.rows.length > 0) {
+        hubs = dbHubsRes.rows.map((r: any) => ({
+          id: r.id,
+          hub_code: r.hub_code,
+          name: r.name,
+          address: r.address,
+          latitude: Number(r.latitude),
+          longitude: Number(r.longitude),
+          delivery_radius_km: Math.min(5.0, Number(r.delivery_radius_km || 5.0)),
+          is_active: r.is_active !== false,
+          is_paused: Boolean(r.is_paused),
+          pause_reason: r.pause_reason || '',
+          operating_hours_start: r.operating_hours_start || '06:00',
+          operating_hours_end: r.operating_hours_end || '22:00',
+          max_orders_per_slot: Number(r.max_orders_per_slot || 35),
+        }));
+      }
+    } catch {}
 
-    // 3. Reject order if delivery hub is not configured or serviceability disabled
+    const serviceability = checkMultiHubServiceability(deliveryLat, deliveryLng, { hubs, fallbackSettings: deliverySettings });
+
+    // 3. Reject order if delivery hubs are not configured or serviceability disabled
     if (!serviceability.configured) {
       throw new ValidationError(
         serviceability.message || 'Delivery availability is being configured. Please try again shortly.'
       );
     }
 
-    // 4. Reject order if location is outside the service area (> 5 km)
-    if (!serviceability.serviceable) {
+    // 4. Reject order if location is outside the service area (> 5 km from all eligible hubs)
+    if (!serviceability.serviceable || !serviceability.assignedHub) {
       throw new ValidationError(
-        `Sorry! Delivery is not available at this location. Your address is ${serviceability.distanceKm} km from our ${serviceability.hubName || 'Champapet hub'} (maximum permitted delivery radius: ${serviceability.radiusKm} KM). Please choose another location within our delivery area.`
+        serviceability.distanceKm
+          ? `Sorry! Delivery is not available at this location. Your address is ${serviceability.distanceKm} km from our nearest delivery hub (${serviceability.hubName || 'delivery hub'}, maximum permitted delivery radius: ${serviceability.radiusKm || 5.0} KM). Please choose another location within our delivery area.`
+          : 'Sorry! Delivery is not available at this location. Please choose another location within our delivery area.'
       );
     }
 
-    // 5. Authoritatively revalidate Global & Zone Delivery Availability
+    const assignedHub = serviceability.assignedHub;
+
+    // Check if assigned hub is paused
+    if (assignedHub.is_paused) {
+      throw new ValidationError(assignedHub.pause_reason || `Express deliveries from ${assignedHub.name} are temporarily paused.`);
+    }
+
+    // Check hub operating hours in IST
+    const hubOpenTime = assignedHub.operating_hours_start || '06:00';
+    const hubCloseTime = assignedHub.operating_hours_end || '22:00';
+    const nowIst = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit' });
+    if (nowIst < hubOpenTime || nowIst > hubCloseTime) {
+      throw new ValidationError(`Express deliveries from ${assignedHub.name} operate between ${hubOpenTime} and ${hubCloseTime}.`);
+    }
+
+    // 5. Authoritatively revalidate Global Delivery Status
     const globalStatus = deliverySettings.global_delivery_status || (deliverySettings.is_delivery_active !== false ? 'available' : 'paused');
     if (globalStatus === 'paused') {
       throw new ValidationError(deliverySettings.global_pause_reason || 'Express deliveries are temporarily paused. Please try again in a few minutes.');
@@ -138,11 +189,14 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       throw new ValidationError('Express deliveries are closed for today. Orders reopen tomorrow morning.');
     }
 
-    // Resolve matching zone for customer
+    // Resolve matching zone under assigned hub
     const zones = getPersistedZones();
+    const hubZones = zones.filter((z) => !z.hub_id || z.hub_id === assignedHub.id || z.hub_code === assignedHub.hub_code);
+    const candidateZones = hubZones.length > 0 ? hubZones : zones;
+
     let matchedZone: any = null;
     let minZoneDistance = Infinity;
-    for (const z of zones) {
+    for (const z of candidateZones) {
       if (z.latitude && z.longitude) {
         const dist = calculateHaversineDistanceKm(deliveryLat, deliveryLng, Number(z.latitude), Number(z.longitude));
         if (dist < minZoneDistance) {
@@ -153,10 +207,10 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     }
     if (!matchedZone && address.pincode) {
       const cleanPin = String(address.pincode).trim();
-      matchedZone = zones.find((z) => Array.isArray(z.pincodes) && z.pincodes.includes(cleanPin));
+      matchedZone = candidateZones.find((z) => Array.isArray(z.pincodes) && z.pincodes.includes(cleanPin));
     }
-    if (!matchedZone && zones.length > 0) {
-      matchedZone = zones.find((z) => z.id === 'zone-champapet') || zones[0];
+    if (!matchedZone && candidateZones.length > 0) {
+      matchedZone = candidateZones[0];
     }
 
     // Check if zone is paused
@@ -165,17 +219,16 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     }
 
     // Check zone operating hours in IST
-    const openTime = matchedZone?.daily_open_time || deliverySettings.operating_hours_start || '06:00';
-    const closeTime = matchedZone?.daily_close_time || deliverySettings.operating_hours_end || '22:00';
-    const nowIst = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit' });
-    if (nowIst < openTime || nowIst > closeTime) {
-      throw new ValidationError(`Express deliveries in ${matchedZone?.name || 'your area'} operate between ${openTime} and ${closeTime}.`);
+    const zoneOpenTime = matchedZone?.daily_open_time || deliverySettings.operating_hours_start || '06:00';
+    const zoneCloseTime = matchedZone?.daily_close_time || deliverySettings.operating_hours_end || '22:00';
+    if (nowIst < zoneOpenTime || nowIst > zoneCloseTime) {
+      throw new ValidationError(`Express deliveries in ${matchedZone?.name || 'your area'} operate between ${zoneOpenTime} and ${zoneCloseTime}.`);
     }
 
     const minEta = matchedZone?.min_eta_minutes || deliverySettings.min_eta_minutes || 30;
     const maxEta = matchedZone?.max_eta_minutes || deliverySettings.max_eta_minutes || 45;
     const confirmedEta = `${minEta}–${maxEta} MINS`;
-    const zoneName = matchedZone?.name || deliverySettings.hub_name || 'Champapet & Saroornagar Zone';
+    const zoneName = matchedZone?.name || assignedHub.name || 'Champapet & Saroornagar Zone';
 
     // Persist coordinates to address record if previously missing
     if (address.latitude === null || address.longitude === null) {
@@ -249,17 +302,23 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
         total: itemTotal,
       });
 
-      // 4. Deduct stock
+      // 4. Atomic Deduct stock with concurrency guard to prevent overselling
       if (item.variant_id) {
-        await client.query(
-          'UPDATE product_variants SET stock_quantity = stock_quantity - $1 WHERE id = $2',
+        const updateRes = await client.query(
+          'UPDATE product_variants SET stock_quantity = stock_quantity - $1 WHERE id = $2 AND stock_quantity >= $1 RETURNING stock_quantity',
           [item.quantity, item.variant_id]
         );
+        if (updateRes.rows.length === 0) {
+          throw new ValidationError(`Insufficient stock for "${productName}". Please adjust quantity before placing your order.`);
+        }
       } else {
-        await client.query(
-          'UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2',
+        const updateRes = await client.query(
+          'UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2 AND stock_quantity >= $1 RETURNING stock_quantity',
           [item.quantity, item.product_id]
         );
+        if (updateRes.rows.length === 0) {
+          throw new ValidationError(`Insufficient stock for "${productName}". Please adjust quantity before placing your order.`);
+        }
       }
     }
 
@@ -316,7 +375,93 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
     const isFree = enableFreeDelivery && subtotal >= freeThreshold;
     const deliveryCharge = isFree ? 0 : Math.round((applicableDeliveryFee + surgeCharge) * 100) / 100;
     const codFee = isCod && paymentSettings.cod_fee > 0 ? Number(paymentSettings.cod_fee) : 0;
-    const discount = 0; // Can be extended with coupon system
+
+    // MANDATORY BACKEND COUPON VALIDATION & CALCULATION (Phase 10)
+    let appliedCoupon: any = null;
+    let couponDiscount = 0;
+
+    let targetCouponCode = (coupon_code || '').trim().toUpperCase();
+    if (!targetCouponCode && notes && notes.includes('[Coupon:')) {
+      const match = notes.match(/\[Coupon:\s*([^\]]+)\]/i);
+      if (match) targetCouponCode = match[1].trim().toUpperCase();
+    }
+
+    if (targetCouponCode) {
+      try {
+        const cRes = await client.query(
+          'SELECT * FROM coupons WHERE UPPER(code) = $1 FOR UPDATE',
+          [targetCouponCode]
+        );
+        if (cRes.rows.length > 0) {
+          appliedCoupon = cRes.rows[0];
+        }
+      } catch {
+        // Mock fallback
+        appliedCoupon = (memoryStore.coupons || []).find(
+          (c: any) => c.code.toUpperCase() === targetCouponCode
+        );
+      }
+
+      if (!appliedCoupon) {
+        throw new ValidationError(`Coupon "${targetCouponCode}" is invalid or does not exist`);
+      }
+      if (appliedCoupon.status !== 'active') {
+        throw new ValidationError(`Coupon "${appliedCoupon.code}" is currently inactive or expired`);
+      }
+      const now = new Date();
+      if (appliedCoupon.start_date && new Date(appliedCoupon.start_date) > now) {
+        throw new ValidationError(`Coupon "${appliedCoupon.code}" is not yet active`);
+      }
+      if (appliedCoupon.end_date && new Date(appliedCoupon.end_date) < now) {
+        throw new ValidationError(`Coupon "${appliedCoupon.code}" has expired`);
+      }
+      if (subtotal < Number(appliedCoupon.minimum_order_amount || 0)) {
+        throw new ValidationError(
+          `Minimum order amount of ₹${appliedCoupon.minimum_order_amount} required to use coupon "${appliedCoupon.code}"`
+        );
+      }
+      if (appliedCoupon.usage_limit && Number(appliedCoupon.usage_count || 0) >= Number(appliedCoupon.usage_limit)) {
+        throw new ValidationError(`Coupon "${appliedCoupon.code}" has reached its maximum total usage limit`);
+      }
+      if (appliedCoupon.per_customer_limit) {
+        try {
+          const uRes = await client.query(
+            "SELECT COUNT(*)::int as count FROM coupon_usage WHERE coupon_id = $1 AND user_id = $2 AND redemption_status != 'CANCELLED_REFUNDED'",
+            [appliedCoupon.id, userId]
+          );
+          if (Number(uRes.rows[0]?.count || 0) >= Number(appliedCoupon.per_customer_limit)) {
+            throw new ValidationError(`You have already used coupon "${appliedCoupon.code}" the maximum allowed times`);
+          }
+        } catch (e: any) {
+          if (e instanceof ValidationError) throw e;
+        }
+      }
+      if (appliedCoupon.first_order_only) {
+        try {
+          const ordCount = await client.query(
+            "SELECT COUNT(*)::int as count FROM orders WHERE user_id = $1 AND order_status != 'cancelled'",
+            [userId]
+          );
+          if (Number(ordCount.rows[0]?.count || 0) > 0) {
+            throw new ValidationError(`Coupon "${appliedCoupon.code}" is exclusively for your first order`);
+          }
+        } catch (e: any) {
+          if (e instanceof ValidationError) throw e;
+        }
+      }
+      if (appliedCoupon.applicable_hub_id && serviceability.assigned_hub_id) {
+        if (appliedCoupon.applicable_hub_id !== serviceability.assigned_hub_id) {
+          const hubName = appliedCoupon.applicable_hub_id === 'hub-champapet' ? 'Champapet Hub' : 'KPHB Hub';
+          throw new ValidationError(
+            `Coupon "${appliedCoupon.code}" is only valid for orders fulfilled by ${hubName}`
+          );
+        }
+      }
+
+      couponDiscount = calculateCouponDiscount(appliedCoupon, subtotal);
+    }
+
+    const discount = couponDiscount;
     const tax = 0;
     const total = Math.round((subtotal + deliveryCharge + codFee - discount + tax) * 100) / 100;
 
@@ -336,8 +481,15 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       latitude: deliveryLat,
       longitude: deliveryLng,
       distance_km: serviceability.distanceKm,
+      assigned_hub_id: serviceability.assigned_hub_id,
+      assigned_hub_code: serviceability.assigned_hub_code,
+      assigned_hub_name: serviceability.assigned_hub_name,
+      assigned_hub_address: serviceability.assigned_hub_address,
+      assigned_hub_latitude: serviceability.assignedHub?.latitude ? Number(serviceability.assignedHub.latitude) : null,
+      assigned_hub_longitude: serviceability.assignedHub?.longitude ? Number(serviceability.assignedHub.longitude) : null,
       confirmed_eta: confirmedEta,
       delivery_zone_name: zoneName,
+      delivery_fee: deliveryCharge,
       min_eta_minutes: minEta,
       max_eta_minutes: maxEta,
     };
@@ -355,6 +507,29 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
       [orderNumber, userId, resolvedCustomerEmail, JSON.stringify(addressSnapshot), subtotal, deliveryCharge + codFee,
        discount, tax, total, payment_method, initialPaymentStatus, 'pending', notes || null, confirmedEta, zoneName]
     );
+
+    // If new delivery hub columns exist on orders table, backfill them safely
+    try {
+      await client.query(
+        `UPDATE orders SET
+          assigned_hub_id = $1,
+          assigned_hub_code = $2,
+          assigned_hub_name = $3,
+          assigned_hub_address = $4,
+          hub_distance_km = $5
+         WHERE id = $6`,
+        [
+          serviceability.assigned_hub_id,
+          serviceability.assigned_hub_code,
+          serviceability.assigned_hub_name,
+          serviceability.assigned_hub_address,
+          serviceability.distanceKm,
+          orderResult.rows[0].id,
+        ]
+      );
+    } catch {
+      // Non-blocking: table might not have migration 011 applied yet
+    }
 
     // Update user profile email if missing
     try {
@@ -376,6 +551,60 @@ export async function createOrder(req: AuthRequest, res: Response, next: NextFun
          item.product_name_snapshot, item.unit_snapshot, item.price_snapshot,
          item.mrp_snapshot, item.quantity, item.total]
       );
+    }
+
+    // Phase 9: Atomically deduct stock from the assigned fulfillment hub
+    if (serviceability.assigned_hub_id) {
+      await deductHubStockForOrder(
+        client,
+        serviceability.assigned_hub_id,
+        orderItems,
+        orderResult.rows[0].id
+      );
+    }
+
+    // Phase 10: Record coupon usage & increment usage counter inside transaction
+    if (appliedCoupon) {
+      try {
+        await client.query(
+          `UPDATE orders SET coupon_id = $1, coupon_code = $2 WHERE id = $3`,
+          [appliedCoupon.id, appliedCoupon.code, orderResult.rows[0].id]
+        );
+        await client.query(
+          `UPDATE coupons SET usage_count = usage_count + 1 WHERE id = $1`,
+          [appliedCoupon.id]
+        );
+        await client.query(
+          `INSERT INTO coupon_usage (id, coupon_id, user_id, order_id, discount_amount, original_subtotal, final_total, hub_id, redemption_status, used_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'APPLIED', NOW())`,
+          [
+            uuidv4(),
+            appliedCoupon.id,
+            userId,
+            orderResult.rows[0].id,
+            couponDiscount,
+            subtotal,
+            total,
+            serviceability.assigned_hub_id || null,
+          ]
+        );
+      } catch (cuErr) {
+        // Fallback for mock/memory store or schema without Phase 10 columns yet
+        appliedCoupon.usage_count = (appliedCoupon.usage_count || 0) + 1;
+        if (!memoryStore.coupon_usage) memoryStore.coupon_usage = [];
+        memoryStore.coupon_usage.push({
+          id: uuidv4(),
+          coupon_id: appliedCoupon.id,
+          user_id: userId,
+          order_id: orderResult.rows[0].id,
+          discount_amount: couponDiscount,
+          original_subtotal: subtotal,
+          final_total: total,
+          hub_id: serviceability.assigned_hub_id || '',
+          redemption_status: 'APPLIED',
+          used_at: new Date().toISOString(),
+        });
+      }
     }
 
     // 9. Create payment record
@@ -847,15 +1076,42 @@ export async function adminGetOrderById(req: AuthRequest, res: Response, next: N
 export async function updateOrderStatus(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { order_status, payment_status, cancellation_reason } = req.body;
+    const { order_status, payment_status, cancellation_reason, delivery_notes, notes } = req.body;
 
     const existing = await db.query('SELECT * FROM orders WHERE id = $1', [id]);
     if (existing.rows.length === 0) throw new NotFoundError('Order not found');
     const prevOrder = existing.rows[0];
 
-    // Business rule: If order is already delivered, do not allow cancellation
-    if (order_status === 'cancelled' && prevOrder.order_status === 'delivered') {
-      throw new ValidationError('Delivered orders cannot be cancelled');
+    // Backend Status Transition Validation
+    // Valid delivery workflow: Order Placed -> Order Confirmed -> Preparing -> Ready for Delivery -> Out for Delivery -> Delivered
+    if (order_status && order_status !== prevOrder.order_status) {
+      const validTransitions: Record<string, string[]> = {
+        pending: ['confirmed', 'cancelled'],
+        confirmed: ['preparing', 'cancelled'],
+        preparing: ['ready_for_delivery', 'packed', 'cancelled'],
+        ready_for_delivery: ['out_for_delivery', 'cancelled'],
+        packed: ['out_for_delivery', 'cancelled'],
+        out_for_delivery: ['delivered'],
+        delivered: [], // Terminal delivery state
+        cancelled: [], // Terminal state
+      };
+
+      const allowedNext = validTransitions[prevOrder.order_status] || [];
+      if (!allowedNext.includes(order_status)) {
+        throw new ValidationError(
+          `Invalid delivery status transition from "${prevOrder.order_status.replace(/_/g, ' ')}" to "${order_status.replace(/_/g, ' ')}".`
+        );
+      }
+    }
+
+    // Business rule: If order is out for delivery or delivered, do not allow cancellation
+    if (
+      order_status === 'cancelled' &&
+      (prevOrder.order_status === 'delivered' || prevOrder.order_status === 'out_for_delivery')
+    ) {
+      throw new ValidationError(
+        `Orders that are ${prevOrder.order_status.replace(/_/g, ' ')} cannot be cancelled`
+      );
     }
 
     const fields: string[] = [];
@@ -864,6 +1120,13 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
 
     if (order_status) { fields.push(`order_status = $${idx++}`); values.push(order_status); }
     if (payment_status) { fields.push(`payment_status = $${idx++}`); values.push(payment_status); }
+    if (delivery_notes !== undefined) {
+      fields.push(`notes = $${idx++}`);
+      values.push(delivery_notes);
+    } else if (notes !== undefined && order_status !== 'cancelled') {
+      fields.push(`notes = $${idx++}`);
+      values.push(notes);
+    }
     if (order_status === 'cancelled') {
       const reasonToSave = cancellation_reason || req.body.notes || 'Cancelled by store operations';
       fields.push(`cancellation_reason = $${idx++}`);
@@ -875,6 +1138,18 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
     // If cancelling, restore stock
     if (order_status === 'cancelled' && prevOrder.order_status !== 'cancelled') {
       const items = await db.query('SELECT * FROM order_items WHERE order_id = $1', [id]);
+
+      // Phase 9: Restore hub inventory with idempotency protection
+      if (prevOrder.assigned_hub_id) {
+        await restoreHubStockForOrder(
+          db,
+          prevOrder.assigned_hub_id,
+          items.rows,
+          id,
+          cancellation_reason || 'Order cancelled'
+        );
+      }
+
       for (const item of items.rows) {
         if (item.variant_id) {
           await db.query(
@@ -888,6 +1163,22 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
           );
         }
       }
+
+      // Phase 10: Refund coupon usage if order used a coupon
+      try {
+        if (prevOrder.coupon_id) {
+          await db.query(
+            'UPDATE coupons SET usage_count = GREATEST(0, usage_count - 1) WHERE id = $1',
+            [prevOrder.coupon_id]
+          );
+          await db.query(
+            "UPDATE coupon_usage SET redemption_status = 'CANCELLED_REFUNDED' WHERE order_id = $1",
+            [id]
+          );
+        }
+      } catch (cErr) {
+        console.warn('Could not restore coupon usage on cancellation:', cErr);
+      }
     }
 
     values.push(id);
@@ -895,42 +1186,6 @@ export async function updateOrderStatus(req: AuthRequest, res: Response, next: N
       `UPDATE orders SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
       values
     );
-
-    // Update payment status if order delivered and COD
-    if (order_status === 'delivered' && prevOrder.payment_method === 'cod') {
-      try {
-        await db.query(
-          "UPDATE payments SET status = 'paid', updated_at = NOW() WHERE order_id = $1",
-          [id]
-        );
-      } catch (payErr: any) {
-        console.warn('[OrderController] Could not update payment status:', payErr?.message);
-      }
-
-      try {
-        await db.query(
-          "UPDATE orders SET payment_status = 'cod_collected', updated_at = NOW() WHERE id = $1",
-          [id]
-        );
-      } catch (ordPayErr: any) {
-        console.warn('[OrderController] Could not update order payment status:', ordPayErr?.message);
-      }
-
-      try {
-        await logPaymentTransaction(
-          id,
-          'cod',
-          Number(prevOrder.total),
-          prevOrder.payment_status,
-          'cod_collected',
-          req.user?.name || req.user?.email || 'DELIVERY_PARTNER',
-          `COD-DEL-${Date.now()}`,
-          'COD payment collected upon final doorstep delivery'
-        );
-      } catch (logErr: any) {
-        console.warn('[OrderController] Could not log payment transaction:', logErr?.message);
-      }
-    }
 
     // Trigger automated email and admin notifications ONLY when genuinely transitioning
     if (order_status === 'cancelled' && prevOrder.order_status !== 'cancelled') {

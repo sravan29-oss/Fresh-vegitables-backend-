@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import confetti from 'canvas-confetti';
 import {
   MapPin,
   Plus,
@@ -22,6 +23,8 @@ import {
   Loader2,
   Mail,
   User,
+  Building2,
+  Info,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Address, CouponValidationResult } from '../../types';
@@ -29,6 +32,7 @@ import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { SEOHead } from '../../components/common/SEOHead';
 import { getRealtimeDeliverySlots } from '../../utils/deliverySlots';
+import { InteractiveLocationMap, AddressDetails } from '../../components/common/InteractiveLocationMap';
 
 export const CheckoutPage: React.FC = () => {
   const { cart, fetchCart, deliverySettings, deliveryEstimate } = useCart();
@@ -46,6 +50,7 @@ export const CheckoutPage: React.FC = () => {
   const [emailError, setEmailError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
 
   // Auto-populate customer email from authenticated user
   useEffect(() => {
@@ -82,7 +87,7 @@ export const CheckoutPage: React.FC = () => {
     online_message: string;
   }>({
     cod_enabled: true,
-    cod_message: 'Pay with cash or UPI QR upon delivery',
+    cod_message: 'Pay with cash or UPI upon delivery',
     cod_min_amount: 0,
     cod_max_amount: 5000,
     cod_fee: 0,
@@ -91,21 +96,16 @@ export const CheckoutPage: React.FC = () => {
     online_message: 'Pay securely using UPI, Cards, or NetBanking',
   });
 
-  // Phase 10: Coupon States
+  // Coupon States
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
 
-  // Phase 7: Payment Modal State
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  // Payment State (Cash on Delivery confirmed; authentic gateway in progress)
   const [pendingOrderId, setPendingOrderId] = useState<string>('');
-  const [paymentStep, setPaymentStep] = useState<'SELECT' | 'PROCESSING' | 'SUCCESS' | 'FAILED'>('SELECT');
-  const [selectedOnlineOption, setSelectedOnlineOption] = useState<'upi' | 'card' | 'netbanking'>('upi');
-  const [upiId, setUpiId] = useState('customer@okhdfcbank');
-  const [selectedBank, setSelectedBank] = useState('HDFC');
 
-  // New Address Modal state
+  // Add/Edit Address Modal state
   const [isAddAddressModalOpen, setIsAddAddressModalOpen] = useState(false);
   const [newAddress, setNewAddress] = useState<{
     full_name: string;
@@ -117,17 +117,17 @@ export const CheckoutPage: React.FC = () => {
     city: string;
     state: string;
     pincode: string;
-    latitude?: number;
-    longitude?: number;
+    latitude?: number | null;
+    longitude?: number | null;
     address_type: 'home' | 'work' | 'other';
     is_default: boolean;
   }>(() => {
     let initLat: number | undefined;
     let initLng: number | undefined;
     try {
-      const savedZone = localStorage.getItem('fresh_delivery_zone');
-      if (savedZone) {
-        const parsed = JSON.parse(savedZone);
+      const savedCoords = localStorage.getItem('fresh_delivery_coords');
+      if (savedCoords) {
+        const parsed = JSON.parse(savedCoords);
         if (parsed.latitude && parsed.longitude) {
           initLat = Number(parsed.latitude);
           initLng = Number(parsed.longitude);
@@ -144,7 +144,7 @@ export const CheckoutPage: React.FC = () => {
       landmark: '',
       city: 'Hyderabad',
       state: 'Telangana',
-      pincode: '500072',
+      pincode: '500059',
       latitude: initLat,
       longitude: initLng,
       address_type: 'home',
@@ -157,7 +157,6 @@ export const CheckoutPage: React.FC = () => {
     let name = user?.name || '';
     let phone = user?.mobile || '';
 
-    // If context doesn't have details, fetch latest from /auth/profile
     if (!name || !phone) {
       try {
         const res = await api.get('/auth/profile');
@@ -166,7 +165,7 @@ export const CheckoutPage: React.FC = () => {
           name = name || profile.name || '';
           phone = phone || profile.mobile || '';
         }
-      } catch (err) {
+      } catch {
         // non-blocking
       }
     }
@@ -180,26 +179,29 @@ export const CheckoutPage: React.FC = () => {
     }));
   }, [user]);
 
-  // Auto-sync whenever user state updates
   useEffect(() => {
     if (user?.name || user?.mobile) {
       fetchUserBasicDetails();
     }
   }, [user, fetchUserBasicDetails]);
 
-  // When opening the Add Address modal, ensure user basic details are fresh and populated
   const handleOpenAddAddressModal = () => {
+    setEditingAddressId(null);
     fetchUserBasicDetails();
     setIsAddAddressModalOpen(true);
   };
 
-  // Address Location Auto-fetch & Zone Serviceability State
+  // Address Location Auto-fetch & Two-Hub Serviceability State
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [zoneServiceability, setZoneServiceability] = useState<{
     checked: boolean;
     serviceable: boolean;
+    requiresPin?: boolean;
     configured?: boolean;
     zoneName?: string;
+    assignedHubName?: string;
+    assignedHubAddress?: string;
+    assignedHubCode?: string;
     distanceKm?: number;
     radiusKm?: number;
     deliveryFee?: number;
@@ -210,120 +212,124 @@ export const CheckoutPage: React.FC = () => {
     min_order_amount?: number;
   }>({ checked: false, serviceable: true, radiusKm: 5.0 });
 
-  const checkAddressCoordsServiceability = useCallback(async (addr: Address) => {
-    let lat: number | null = addr.latitude !== null && addr.latitude !== undefined ? Number(addr.latitude) : null;
-    let lng: number | null = addr.longitude !== null && addr.longitude !== undefined ? Number(addr.longitude) : null;
+  const checkAddressCoordsServiceability = useCallback(
+    async (addr: Address) => {
+      const lat: number | null =
+        addr.latitude !== null && addr.latitude !== undefined && !isNaN(Number(addr.latitude))
+          ? Number(addr.latitude)
+          : null;
+      const lng: number | null =
+        addr.longitude !== null && addr.longitude !== undefined && !isNaN(Number(addr.longitude))
+          ? Number(addr.longitude)
+          : null;
 
-    if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
-      // 1. Try to get coordinates from saved localStorage zone
-      try {
-        const savedZone = localStorage.getItem('fresh_delivery_zone');
-        if (savedZone) {
-          const parsed = JSON.parse(savedZone);
-          if (parsed.latitude && parsed.longitude) {
-            lat = Number(parsed.latitude);
-            lng = Number(parsed.longitude);
-          }
-        }
-      } catch {}
-
-      // 2. Check if address text or pincode is in the local hub service area (Champapet / 500059)
-      const addrText = `${addr.house_number || ''} ${addr.street || ''} ${addr.area || ''} ${addr.landmark || ''} ${addr.city || ''}`.toLowerCase();
-      const isLocalArea =
-        String(addr.pincode || '').trim() === '500059' ||
-        addrText.includes('champapet') ||
-        addrText.includes('rajireddy') ||
-        addrText.includes('raji reddy') ||
-        addrText.includes('saroornagar') ||
-        addrText.includes('saidabad') ||
-        addrText.includes('santoshnagar') ||
-        addrText.includes('karmanghat');
-
-      if ((lat === null || lng === null) && isLocalArea) {
-        lat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
-        lng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
+      // Rule 1 & Rule 3: Never substitute hub coordinates for an unverified customer address.
+      if (lat === null || lng === null) {
+        setZoneServiceability({
+          checked: true,
+          configured: true,
+          serviceable: false,
+          requiresPin: true,
+          zoneName: addr.area || 'Address Unverified',
+          assignedHubName: '',
+          message: 'Exact GPS location is required to verify delivery availability.',
+          deliveryFee: 10,
+          estimatedDelivery: 'Location verification required',
+          isDeliveryActive: false,
+          isPaused: false,
+        });
+        return;
       }
-    }
 
-    if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
       try {
         const res = await api.post('/delivery/check-serviceability', {
-          latitude: Number(lat),
-          longitude: Number(lng),
+          latitude: lat,
+          longitude: lng,
         });
         const data = res.data?.data || res.data;
-        const dynamicEta = data.eta_text || data.zone?.estimated_delivery_time || (deliverySettings?.estimated_delivery_time && deliverySettings.estimated_delivery_time !== '30–45 mins' ? deliverySettings.estimated_delivery_time : 'Delivery estimate unavailable');
-        const isPaused = Boolean(data.is_delivery_active === false || data.global_status === 'paused' || data.zone?.is_paused);
+        const dynamicEta =
+          data.eta_text ||
+          data.zone?.estimated_delivery_time ||
+          (deliverySettings?.estimated_delivery_time && deliverySettings.estimated_delivery_time !== '30–45 mins'
+            ? deliverySettings.estimated_delivery_time
+            : '25–35 mins');
+        const isPaused = Boolean(
+          data.is_delivery_active === false || data.global_status === 'paused' || data.zone?.is_paused || data.is_paused
+        );
+
         setZoneServiceability({
           checked: true,
           configured: Boolean(data.configured),
-          serviceable: Boolean(data.serviceable),
+          serviceable: Boolean(data.serviceable) && !isPaused,
           distanceKm: data.distanceKm,
           radiusKm: data.radiusKm || 5.0,
-          zoneName: data.zone?.name || data.hubName,
-          deliveryFee: data.delivery_fee !== undefined ? data.delivery_fee : 20,
+          zoneName: data.zone?.name || data.assigned_hub_name || data.hubName,
+          assignedHubName: data.assigned_hub_name || data.hubName,
+          assignedHubAddress: data.assigned_hub_address || data.hubAddress,
+          assignedHubCode: data.assigned_hub_code,
+          deliveryFee: data.delivery_fee !== undefined ? data.delivery_fee : 10,
           estimatedDelivery: dynamicEta,
           isDeliveryActive: !isPaused,
           isPaused,
           message: data.message,
-          min_order_amount: data.min_order_amount !== undefined ? Number(data.min_order_amount) : (deliverySettings?.min_order_amount ? Number(deliverySettings.min_order_amount) : 10),
+          min_order_amount:
+            data.min_order_amount !== undefined
+              ? Number(data.min_order_amount)
+              : deliverySettings?.min_order_amount
+              ? Number(deliverySettings.min_order_amount)
+              : 10,
         });
-      } catch (err: any) {
-        // Resilient client-side Haversine verification
+      } catch {
+        // Resilient client-side Haversine verification against BOTH active hubs: Champapet & KPHB
         const toRad = (d: number) => (d * Math.PI) / 180;
-        const hubLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
-        const hubLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
-        const radius = Number(deliverySettings?.delivery_radius_km) || 5.0;
-        const dLat = toRad(Number(lat) - hubLat);
-        const dLon = toRad(Number(lng) - hubLng);
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(toRad(hubLat)) * Math.cos(toRad(Number(lat))) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const dist = Number((6371 * c).toFixed(2));
-        // Strict unrounded comparison: distance <= 5.0 KM
-        const inZone = dist <= radius;
+        const hubs = [
+          { name: 'Fresh Vegetables Champapet Hub', code: 'champapet', lat: 17.34457, lng: 78.516972 },
+          { name: 'Fresh Vegetables KPHB Hub', code: 'kphb', lat: 17.48942, lng: 78.397227 },
+        ];
+        let minDist = Infinity;
+        let matchedHub = hubs[0];
+        for (const h of hubs) {
+          const dLat = toRad(lat - h.lat);
+          const dLon = toRad(lng - h.lng);
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toRad(h.lat)) * Math.cos(toRad(lat)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+          const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          if (dist < minDist) {
+            minDist = dist;
+            matchedHub = h;
+          }
+        }
+        const dist = Number(minDist.toFixed(2));
+        const inZone = dist <= 5.0;
 
         setZoneServiceability({
           checked: true,
           configured: true,
           serviceable: inZone,
           distanceKm: dist,
-          radiusKm: radius,
-          zoneName: deliverySettings?.hub_name || 'Fresh Vegetables Champapet Hub',
+          radiusKm: 5.0,
+          zoneName: matchedHub.name,
+          assignedHubName: matchedHub.name,
+          assignedHubCode: matchedHub.code,
           deliveryFee: 10,
-          estimatedDelivery: (deliverySettings?.estimated_delivery_time && deliverySettings.estimated_delivery_time !== '30–45 mins') ? deliverySettings.estimated_delivery_time : 'Delivery estimate unavailable',
+          estimatedDelivery: '25–35 mins',
           message: inZone
-            ? 'Great! Delivery is available at your location.'
-            : 'Sorry! We are not delivering to your location yet.',
+            ? `Great! Delivery is available at your location (${dist} km from ${matchedHub.name}).`
+            : `Sorry! Location is ${dist} km away (maximum radius: 5.0 KM from ${matchedHub.name}).`,
           min_order_amount: deliverySettings?.min_order_amount ? Number(deliverySettings.min_order_amount) : 10,
         });
       }
-    } else {
-      setZoneServiceability({
-        checked: true,
-        configured: true,
-        serviceable: false,
-        radiusKm: 5.0,
-        message: 'This delivery address does not have verified GPS coordinates. Please update address location on map.',
-      });
-    }
-  }, [deliverySettings]);
-
-  const checkPincodeServiceability = async (pincodeToCheck: string) => {
-    // If coords already exist, coordinate check takes authoritative precedence
-    if (newAddress.latitude && newAddress.longitude) {
-      await checkAddressCoordsServiceability(newAddress as Address);
-      return;
-    }
-  };
+    },
+    [deliverySettings]
+  );
 
   const detectCurrentLocation = () => {
     if (!navigator.geolocation) {
       setZoneServiceability({
         checked: true,
         serviceable: false,
-        message: 'Geolocation is not supported by your browser.',
+        message: 'Geolocation is not supported by your browser. Please tap your location on the map.',
       });
       return;
     }
@@ -333,79 +339,47 @@ export const CheckoutPage: React.FC = () => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
+        const validLat = Number(latitude.toFixed(6));
+        const validLng = Number(longitude.toFixed(6));
 
         let detectedPincode = '';
         let detectedArea = '';
-        let detectedCity = '';
-        let detectedState = '';
+        let detectedCity = 'Hyderabad';
+        let detectedState = 'Telangana';
         let detectedHouse = '';
 
         try {
-          const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-          if (apiKey) {
-            const gRes = await fetch(
-              `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}`
-            );
-            const gData = await gRes.json();
-            if (gData.results && gData.results.length > 0) {
-              const result = gData.results[0];
-              for (const comp of result.address_components) {
-                if (comp.types.includes('postal_code')) detectedPincode = comp.long_name;
-                if (comp.types.includes('sublocality_level_1') || comp.types.includes('sublocality')) {
-                  detectedArea = comp.long_name;
-                }
-                if (comp.types.includes('locality')) detectedCity = comp.long_name;
-                if (comp.types.includes('administrative_area_level_1')) detectedState = comp.long_name;
-                if (comp.types.includes('premise') || comp.types.includes('street_number')) {
-                  detectedHouse = comp.long_name;
-                }
-              }
-            }
+          const res = await api.post('/delivery/reverse-geocode', {
+            latitude: validLat,
+            longitude: validLng,
+          });
+          const d = res.data?.data;
+          if (d) {
+            detectedArea = d.colony || d.area || '';
+            detectedPincode = d.pincode || '';
+            detectedHouse = d.house_number || '';
           }
-        } catch (e) {
-          console.warn('Google reverse geocode error:', e);
-        }
-
-        if (!detectedPincode || !detectedArea) {
+        } catch {
+          // OpenStreetMap Nominatim fallback
           try {
             const nomRes = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${validLat}&lon=${validLng}`
             );
             const nomData = await nomRes.json();
             if (nomData?.address) {
               const a = nomData.address;
-              if (!detectedPincode && a.postcode) detectedPincode = a.postcode.replace(/\D/g, '').slice(0, 6);
-              if (!detectedArea) detectedArea = a.suburb || a.neighbourhood || a.road || '';
-              if (!detectedCity) detectedCity = a.city || a.town || a.county || '';
-              if (!detectedState) detectedState = a.state || '';
+              if (a.postcode) detectedPincode = a.postcode.replace(/\D/g, '').slice(0, 6);
+              detectedArea = a.suburb || a.neighbourhood || a.road || '';
+              detectedCity = a.city || a.town || 'Hyderabad';
+              detectedState = a.state || 'Telangana';
             }
-          } catch (e) {
-            console.warn('Nominatim reverse geocode error:', e);
-          }
-        }
-
-        const isNearHyderabad = latitude >= 17.1 && latitude <= 17.7 && longitude >= 78.1 && longitude <= 78.7;
-        const isNearAhmedabad = latitude >= 22.8 && latitude <= 23.3 && longitude >= 72.3 && longitude <= 72.8;
-
-        if (!detectedPincode) {
-          if (isNearHyderabad) detectedPincode = '500081';
-          else if (isNearAhmedabad) detectedPincode = '380015';
-        }
-
-        if (!detectedCity) {
-          if (isNearHyderabad) detectedCity = 'Hyderabad';
-          else if (isNearAhmedabad) detectedCity = 'Ahmedabad';
-        }
-
-        if (!detectedState) {
-          if (isNearHyderabad) detectedState = 'Telangana';
-          else if (isNearAhmedabad) detectedState = 'Gujarat';
+          } catch {}
         }
 
         setNewAddress((prev) => ({
           ...prev,
-          latitude: Number(latitude.toFixed(6)),
-          longitude: Number(longitude.toFixed(6)),
+          latitude: validLat,
+          longitude: validLng,
           house_number: detectedHouse || prev.house_number,
           area: detectedArea || prev.area,
           city: detectedCity || prev.city,
@@ -413,8 +387,6 @@ export const CheckoutPage: React.FC = () => {
           pincode: detectedPincode || prev.pincode,
         }));
 
-        const validLat = Number(latitude.toFixed(6));
-        const validLng = Number(longitude.toFixed(6));
         setIsDetectingLocation(false);
         checkAddressCoordsServiceability({
           ...newAddress,
@@ -422,13 +394,13 @@ export const CheckoutPage: React.FC = () => {
           longitude: validLng,
         } as Address);
       },
-      (err) => {
+      () => {
         setIsDetectingLocation(false);
         if (newAddress.latitude && newAddress.longitude) {
           checkAddressCoordsServiceability(newAddress as Address);
         }
       },
-      { timeout: 8000, enableHighAccuracy: true }
+      { timeout: 10000, enableHighAccuracy: true }
     );
   };
 
@@ -440,14 +412,6 @@ export const CheckoutPage: React.FC = () => {
       }
     }
   }, [selectedAddressId, addresses, checkAddressCoordsServiceability]);
-
-  useEffect(() => {
-    if (isAddAddressModalOpen) {
-      detectCurrentLocation();
-    } else {
-      setZoneServiceability({ checked: false, serviceable: true });
-    }
-  }, [isAddAddressModalOpen]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -495,7 +459,7 @@ export const CheckoutPage: React.FC = () => {
 
     loadAddresses();
     loadPaymentSettings();
-  }, [user, navigate]);
+  }, [user, navigate, authLoading, fetchUserBasicDetails]);
 
   const handleApplyCoupon = async (codeToApply?: string) => {
     const code = (codeToApply || couponCode).trim().toUpperCase();
@@ -506,7 +470,9 @@ export const CheckoutPage: React.FC = () => {
       setCouponError('');
       const res = await api.post('/coupons/apply', {
         code,
-        order_amount: cart?.total || 0,
+        order_amount: cart?.subtotal || cart?.total || 0,
+        hub_id: (zoneServiceability as any)?.assignedHubId || (zoneServiceability as any)?.assigned_hub_id || null,
+        items: cart?.items || [],
       });
 
       if (res.data?.data) {
@@ -514,7 +480,7 @@ export const CheckoutPage: React.FC = () => {
         setCouponCode(code);
       }
     } catch (err: any) {
-      setCouponError(err.response?.data?.message || 'Invalid or expired coupon code');
+      setCouponError(err.response?.data?.message || 'Invalid or expired promotion code');
     } finally {
       setCouponLoading(false);
     }
@@ -526,36 +492,89 @@ export const CheckoutPage: React.FC = () => {
     setCouponError('');
   };
 
+  // Phase 10: Auto-apply coupon from URL if passed from Cart Page or marketing links
+  useEffect(() => {
+    const urlCoupon = new URLSearchParams(window.location.search).get('coupon');
+    if (urlCoupon && !appliedCoupon && cart?.subtotal) {
+      handleApplyCoupon(urlCoupon);
+    }
+  }, [cart?.subtotal]);
+
+  const handleOpenPinModalForAddress = (addr: Address) => {
+    setEditingAddressId(addr.id);
+    setNewAddress({
+      full_name: addr.full_name || user?.name || '',
+      phone: addr.phone || user?.mobile || '',
+      house_number: addr.house_number || '',
+      street: addr.street || '',
+      area: addr.area || '',
+      landmark: addr.landmark || '',
+      city: addr.city || 'Hyderabad',
+      state: addr.state || 'Telangana',
+      pincode: addr.pincode || '',
+      latitude: addr.latitude ? Number(addr.latitude) : null,
+      longitude: addr.longitude ? Number(addr.longitude) : null,
+      address_type: addr.address_type || 'home',
+      is_default: addr.is_default || false,
+    });
+    setIsAddAddressModalOpen(true);
+    if (addr.latitude && addr.longitude) {
+      checkAddressCoordsServiceability(addr);
+    } else {
+      detectCurrentLocation();
+    }
+  };
+
+  // Map pin placement in address modal
+  const handleAddressMapChange = (lat: number, lng: number, details?: AddressDetails) => {
+    setNewAddress((prev) => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng,
+      area: details?.colony || details?.area || prev.area,
+      pincode: details?.pincode || prev.pincode,
+    }));
+    checkAddressCoordsServiceability({
+      ...newAddress,
+      latitude: lat,
+      longitude: lng,
+    } as Address);
+  };
+
   const handleCreateAddress = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newAddress.latitude || !newAddress.longitude) {
+      alert('Please detect your GPS location or tap your building on the map before saving this address.');
+      return;
+    }
     if (zoneServiceability.checked && !zoneServiceability.serviceable) {
       alert(
         zoneServiceability.message ||
-          'Currently Unavailable: Delivery is not available to this address as it is out of the service zone.'
+          'Delivery is not available to this location as it is outside our 5.0 KM delivery radius.'
       );
       return;
     }
     try {
       const payload = { ...newAddress };
-      if (!payload.latitude || !payload.longitude) {
-        try {
-          const savedZone = localStorage.getItem('fresh_delivery_zone');
-          if (savedZone) {
-            const parsed = JSON.parse(savedZone);
-            if (parsed.latitude && parsed.longitude) {
-              payload.latitude = Number(parsed.latitude);
-              payload.longitude = Number(parsed.longitude);
-            }
-          }
-        } catch {}
-      }
-
-      const res = await api.post('/addresses', payload);
-      if (res.data?.data) {
-        const created = res.data.data;
-        setAddresses([created, ...addresses]);
-        setSelectedAddressId(created.id);
-        setIsAddAddressModalOpen(false);
+      if (editingAddressId) {
+        const res = await api.put(`/addresses/${editingAddressId}`, payload);
+        if (res.data?.data) {
+          const updated = res.data.data;
+          setAddresses((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+          setSelectedAddressId(updated.id);
+          setIsAddAddressModalOpen(false);
+          setEditingAddressId(null);
+          checkAddressCoordsServiceability(updated);
+        }
+      } else {
+        const res = await api.post('/addresses', payload);
+        if (res.data?.data) {
+          const created = res.data.data;
+          setAddresses((prev) => [created, ...prev]);
+          setSelectedAddressId(created.id);
+          setIsAddAddressModalOpen(false);
+          checkAddressCoordsServiceability(created);
+        }
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to save address');
@@ -568,16 +587,25 @@ export const CheckoutPage: React.FC = () => {
     (cart?.total || 0) + codFee - (appliedCoupon ? appliedCoupon.discount_amount : 0)
   );
 
+  // Authoritative Order Placement (Rule B: Backend remains authoritative, prevents duplicate submissions)
   const handleInitiateOrder = async () => {
+    if (isSubmitting) return; // Prevent duplicate submissions
+
+    // Offline Safety Guard: Never permit offline order submission attempts
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setErrorMsg('You are currently offline. Orders cannot be placed without an active internet connection. Please check your network and try again.');
+      return;
+    }
+
     // Payment availability validation
     if (!paymentSettings.cod_enabled && !paymentSettings.online_enabled) {
-      setErrorMsg('Sorry, we are temporarily not accepting orders. Please check again later.');
+      setErrorMsg('Sorry, deliveries are temporarily unavailable. Please check again shortly.');
       return;
     }
 
     if (paymentMethod === 'cod') {
       if (!paymentSettings.cod_enabled) {
-        setErrorMsg('Cash on Delivery is currently unavailable. Please select an online payment method.');
+        setErrorMsg('Cash on Delivery is currently unavailable. Please select an online payment option.');
         return;
       }
       if (paymentSettings.cod_min_amount > 0 && (cart?.subtotal || 0) < paymentSettings.cod_min_amount) {
@@ -598,8 +626,8 @@ export const CheckoutPage: React.FC = () => {
     // Customer confirmation email validation
     const trimmedEmail = (customerEmail || '').trim().toLowerCase();
     if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setEmailError('Please enter a valid email address to receive your order confirmation.');
-      setErrorMsg('Please enter a valid email address to receive your order confirmation.');
+      setEmailError('Please enter a valid email address to receive your order confirmation receipt.');
+      setErrorMsg('Please enter a valid email address to receive your order confirmation receipt.');
       return;
     }
     setEmailError('');
@@ -614,59 +642,29 @@ export const CheckoutPage: React.FC = () => {
 
     const selectedAddr = addresses.find((a) => a.id === selectedAddressId);
     if (!selectedAddr) {
-      setErrorMsg('Selected delivery address not found.');
+      setErrorMsg('Selected delivery address was not found.');
+      return;
+    }
+
+    const orderLat: number | null =
+      selectedAddr.latitude !== null && selectedAddr.latitude !== undefined && !isNaN(Number(selectedAddr.latitude))
+        ? Number(selectedAddr.latitude)
+        : null;
+    const orderLng: number | null =
+      selectedAddr.longitude !== null && selectedAddr.longitude !== undefined && !isNaN(Number(selectedAddr.longitude))
+        ? Number(selectedAddr.longitude)
+        : null;
+
+    if (orderLat === null || orderLng === null) {
+      setErrorMsg('Selected address requires a verified GPS pin on the map to confirm delivery eligibility.');
+      handleOpenPinModalForAddress(selectedAddr);
       return;
     }
 
     if (zoneServiceability.checked && !zoneServiceability.serviceable) {
       setErrorMsg(
         zoneServiceability.message ||
-        'Cannot place order: Selected address is outside our 5 km delivery service area.'
-      );
-      return;
-    }
-
-    let orderLat: number | null = selectedAddr.latitude !== null && selectedAddr.latitude !== undefined ? Number(selectedAddr.latitude) : null;
-    let orderLng: number | null = selectedAddr.longitude !== null && selectedAddr.longitude !== undefined ? Number(selectedAddr.longitude) : null;
-
-    if (orderLat === null || orderLng === null || isNaN(orderLat) || isNaN(orderLng)) {
-      try {
-        const savedZone = localStorage.getItem('fresh_delivery_zone');
-        if (savedZone) {
-          const parsed = JSON.parse(savedZone);
-          if (parsed.latitude && parsed.longitude) {
-            orderLat = Number(parsed.latitude);
-            orderLng = Number(parsed.longitude);
-          }
-        }
-      } catch {}
-
-      const addrText = `${selectedAddr.house_number || ''} ${selectedAddr.street || ''} ${selectedAddr.area || ''} ${selectedAddr.landmark || ''} ${selectedAddr.city || ''}`.toLowerCase();
-      const isLocalArea =
-        String(selectedAddr.pincode || '').trim() === '500059' ||
-        addrText.includes('champapet') ||
-        addrText.includes('rajireddy') ||
-        addrText.includes('raji reddy') ||
-        addrText.includes('saroornagar') ||
-        addrText.includes('saidabad') ||
-        addrText.includes('santoshnagar') ||
-        addrText.includes('karmanghat');
-
-      if ((orderLat === null || orderLng === null) && isLocalArea) {
-        orderLat = deliverySettings?.hub_latitude ? Number(deliverySettings.hub_latitude) : 17.34457;
-        orderLng = deliverySettings?.hub_longitude ? Number(deliverySettings.hub_longitude) : 78.516972;
-      }
-    }
-
-    if (!orderLat || !orderLng) {
-      setErrorMsg('Selected address does not have verified GPS coordinates. Please update address on map.');
-      return;
-    }
-
-    if (zoneServiceability.checked && !zoneServiceability.serviceable) {
-      setErrorMsg(
-        zoneServiceability.message ||
-        'Sorry! Delivery is not available at this location (outside 5.0 KM delivery radius). Please select another location.'
+          'Delivery is not available at this address (outside our 5.0 KM delivery radius). Please select another location.'
       );
       return;
     }
@@ -682,23 +680,34 @@ export const CheckoutPage: React.FC = () => {
         : Number(deliverySettings?.min_order_amount || 0);
 
     if (effectiveMinOrder > 0 && (cart.subtotal || 0) < effectiveMinOrder) {
-      setErrorMsg(`Minimum order amount for delivery is ₹${effectiveMinOrder}. Please add ₹${(effectiveMinOrder - (cart.subtotal || 0)).toFixed(0)} more of fresh produce.`);
+      setErrorMsg(
+        `Minimum order amount for delivery is ₹${effectiveMinOrder}. Please add ₹${(
+          effectiveMinOrder - (cart.subtotal || 0)
+        ).toFixed(0)} more of fresh produce.`
+      );
       return;
     }
 
     const isAreaPaused = Boolean(
       deliveryEstimate?.isPaused ||
-      zoneServiceability?.isPaused ||
-      zoneServiceability?.isDeliveryActive === false ||
-      deliverySettings?.global_delivery_status === 'paused' ||
-      deliverySettings?.global_delivery_status === 'closed_for_today' ||
-      deliverySettings?.is_delivery_active === false
+        zoneServiceability?.isPaused ||
+        zoneServiceability?.isDeliveryActive === false ||
+        deliverySettings?.global_delivery_status === 'paused' ||
+        deliverySettings?.global_delivery_status === 'closed_for_today' ||
+        deliverySettings?.is_delivery_active === false
     );
     if (isAreaPaused) {
       setErrorMsg(
         deliveryEstimate?.pauseReason ||
-        deliveryEstimate?.statusMessage ||
-        'Deliveries are temporarily paused for your selected area. Please try again later.'
+          zoneServiceability?.message ||
+          'Express deliveries are temporarily paused for your selected area. Orders will resume shortly.'
+      );
+      return;
+    }
+
+    if (paymentMethod === 'online' || paymentMethod === 'upi') {
+      setErrorMsg(
+        'Online payment gateway integration is currently in progress. Please choose Cash on Delivery (cash or UPI QR upon delivery) for instant confirmed order placement.'
       );
       return;
     }
@@ -715,6 +724,7 @@ export const CheckoutPage: React.FC = () => {
         payment_method: paymentMethod,
         latitude: orderLat,
         longitude: orderLng,
+        coupon_code: appliedCoupon ? appliedCoupon.coupon.code : undefined,
         discount: (cart.discount || 0) + (appliedCoupon ? appliedCoupon.discount_amount : 0),
         notes: `Slot: ${deliverySlot}. ${orderNotes} ${appliedCoupon ? `[Coupon: ${appliedCoupon.coupon.code}]` : ''}`.trim(),
       });
@@ -723,23 +733,25 @@ export const CheckoutPage: React.FC = () => {
         const order = res.data.data;
         setPendingOrderId(order.id);
 
-        if (paymentMethod === 'cod') {
-          // COD directly completes and moves to tracking
-          await fetchCart();
-          navigate(`/orders/${order.id}/track`);
-        } else if (paymentMethod === 'wallet') {
-          // Deduct from digital wallet balance securely on backend
+        if (paymentMethod === 'wallet') {
           await api.post('/loyalty/wallet/pay', {
             order_id: order.id,
             amount: finalPayableTotal,
           });
-          await fetchCart();
-          navigate(`/orders/${order.id}/track`);
-        } else {
-          // Online or UPI opens Payment Gateway modal
-          setIsPaymentModalOpen(true);
-          setPaymentStep('SELECT');
         }
+
+        try {
+          confetti({
+            particleCount: 75,
+            spread: 60,
+            origin: { y: 0.6 },
+            colors: ['#123d2b', '#2e8b57', '#a3d977', '#f2a93b'],
+            disableForReducedMotion: true,
+          });
+        } catch {}
+
+        await fetchCart();
+        navigate(`/orders/${order.id}/track`);
       }
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Failed to place order. Please try again.');
@@ -748,179 +760,223 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  // Phase 7: Complete Simulated Payment Verification
-  const handleVerifyPayment = async (status: 'PAID' | 'FAILED') => {
-    try {
-      setPaymentStep('PROCESSING');
-
-      // 1. Create Payment Record
-      const payRes = await api.post('/payments/create', {
-        order_id: pendingOrderId,
-        amount: finalPayableTotal,
-        payment_method: selectedOnlineOption,
-      });
-
-      const payment = payRes.data?.data;
-
-      // 2. Verify Payment
-      await api.post('/payments/verify', {
-        payment_id: payment?.id,
-        status,
-        gateway_payment_id: `pay_${Date.now()}`,
-      });
-
-      if (status === 'PAID') {
-        setPaymentStep('SUCCESS');
-        await fetchCart();
-        setTimeout(() => {
-          navigate(`/orders/${pendingOrderId}/track`);
-        }, 1500);
-      } else {
-        setPaymentStep('FAILED');
-      }
-    } catch (err: any) {
-      setPaymentStep('FAILED');
-    }
-  };
-
   if (!cart?.items || cart.items.length === 0) {
     return (
       <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
-        <div className="text-6xl">🛒</div>
-        <h2 className="text-2xl font-bold text-slate-800">Your Cart is Empty</h2>
-        <p className="text-xs text-slate-500">Add fresh farm produce to checkout.</p>
-        <Link to="/products" className="inline-block bg-brand-600 text-white font-bold text-xs px-6 py-3 rounded-xl">
-          Browse Vegetables
+        <div className="w-16 h-16 rounded-3xl bg-sage-100 text-forest-700 mx-auto flex items-center justify-center text-3xl shadow-soft">
+          🧺
+        </div>
+        <h2 className="font-serif font-black text-2xl text-ink-900">Your Basket is Empty</h2>
+        <p className="text-sm text-ink-500">Add fresh organic farm produce to your basket before checking out.</p>
+        <Link
+          to="/products"
+          className="inline-flex items-center gap-2 bg-forest-900 hover:bg-forest-800 text-cream-50 font-bold text-xs px-6 py-3 rounded-2xl shadow-soft transition-colors"
+        >
+          <span>Explore Fresh Harvest</span>
+          <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 pb-28 md:pb-12">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 pb-28 md:pb-12 animate-fade-in">
       <SEOHead title="Secure Checkout | Fresh Vegetables Organic" noindex={true} />
-      <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-5 sm:mb-8">
-        Secure Checkout & Payment
-      </h1>
+
+      <div className="mb-6 sm:mb-8">
+        <span className="text-xs uppercase tracking-widest font-black text-forest-700 bg-sage-100 px-3 py-1 rounded-full border border-leaf-500/20">
+          Doorstep Delivery
+        </span>
+        <h1 className="font-serif font-black text-2xl sm:text-3xl text-ink-900 tracking-tight mt-2">
+          Secure Organic Checkout
+        </h1>
+        <p className="text-xs sm:text-sm text-ink-500 mt-1">
+          Two-Hub Fulfillment • Dispatched fresh within 5 km of our Champapet and KPHB hubs
+        </p>
+      </div>
 
       {errorMsg && (
-        <div className="mb-5 p-3.5 sm:p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
-          ⚠️ {errorMsg}
+        <div className="mb-6 p-4 rounded-2xl bg-tomato-50 border border-tomato-200 text-tomato-900 text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-xs">
+          <AlertCircle className="w-5 h-5 text-tomato-600 shrink-0" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10">
-        {/* Left Column: Delivery Address, Slot, Payment Mode */}
+        {/* Left Column: Address, Slot, Confirmation Email, Payment */}
         <div className="lg:col-span-8 space-y-6 sm:space-y-8">
           {/* 1. Delivery Address Card */}
-          <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm space-y-4 sm:space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-brand-600" />
-                <h3 className="text-lg font-bold text-slate-900">1. Delivery Address</h3>
+          <div className="bg-surface p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-800 flex items-center justify-center">
+                  <MapPin className="w-4 h-4 text-forest-700" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900">
+                    1. Delivery Address
+                  </h3>
+                  <span className="text-[11px] text-ink-500">Requires verified GPS pin within 5 km</span>
+                </div>
               </div>
               <button
                 onClick={handleOpenAddAddressModal}
-                className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-forest-800 hover:text-forest-950 bg-cream-100 hover:bg-cream-200 px-3 py-1.5 rounded-xl border border-line flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <Plus className="w-4 h-4" />
-                <span>Add New Address</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Address</span>
               </button>
             </div>
 
             {addresses.length === 0 ? (
-              <div className="p-6 text-center border-2 border-dashed border-slate-200 rounded-2xl">
-                <p className="text-xs text-slate-500 mb-3">No delivery address saved yet.</p>
+              <div className="p-8 text-center border-2 border-dashed border-line rounded-2xl space-y-3 bg-cream-50/50">
+                <MapPin className="w-8 h-8 text-ink-300 mx-auto" />
+                <p className="text-xs text-ink-500">No delivery address saved yet.</p>
                 <button
                   onClick={handleOpenAddAddressModal}
-                  className="bg-brand-600 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
+                  className="bg-forest-900 text-cream-50 text-xs font-bold px-5 py-2.5 rounded-xl shadow-soft hover:bg-forest-800 transition-colors cursor-pointer"
                 >
-                  Add Address
+                  Add Your Address
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {addresses.map((addr) => (
-                  <div
-                    key={addr.id}
-                    onClick={() => {
-                      setSelectedAddressId(addr.id);
-                      const locName = addr.area || addr.street || addr.city;
-                      if (locName) {
-                        localStorage.setItem('fresh_delivery_colony', locName);
-                        localStorage.setItem(
-                          'fresh_delivery_address',
-                          `${addr.house_number || ''} ${addr.street || ''}, ${addr.area || ''}, ${addr.city} - ${addr.pincode}`.trim()
-                        );
-                        window.dispatchEvent(
-                          new CustomEvent('fresh_delivery_location_changed', {
-                            detail: { colony: locName, address: `${addr.area || addr.street}, ${addr.city}` },
-                          })
-                        );
-                      }
-                    }}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                      selectedAddressId === addr.id
-                        ? 'border-brand-600 bg-brand-50/50 shadow-sm ring-2 ring-brand-500/20'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start mb-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-xs uppercase tracking-wider text-slate-900">
-                          {addr.address_type}
-                        </span>
-                        {addr.latitude && addr.longitude ? (
-                          <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full border border-emerald-200">
-                            GPS Pin
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {addresses.map((addr) => {
+                  const isSelected = selectedAddressId === addr.id;
+                  const hasCoords = addr.latitude && addr.longitude;
+
+                  return (
+                    <div
+                      key={addr.id}
+                      onClick={() => {
+                        setSelectedAddressId(addr.id);
+                        const locName = addr.area || addr.street || addr.city;
+                        if (locName) {
+                          localStorage.setItem('fresh_delivery_colony', locName);
+                          localStorage.setItem(
+                            'fresh_delivery_address',
+                            `${addr.house_number || ''} ${addr.street || ''}, ${addr.area || ''}, ${addr.city} - ${addr.pincode}`.trim()
+                          );
+                          window.dispatchEvent(
+                            new CustomEvent('fresh_delivery_location_changed', {
+                              detail: { colony: locName, address: `${addr.area || addr.street}, ${addr.city}` },
+                            })
+                          );
+                        }
+                      }}
+                      className={`p-4 rounded-2xl border cursor-pointer transition-all relative ${
+                        isSelected
+                          ? 'border-forest-700 bg-sage-50/60 shadow-soft ring-2 ring-leaf-500/20'
+                          : 'border-line bg-surface hover:border-ink-300'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[10px] uppercase tracking-wider bg-cream-100 text-ink-700 px-2 py-0.5 rounded-md border border-line">
+                            {addr.address_type}
                           </span>
-                        ) : (
-                          <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded-full border border-emerald-200">
-                            Hub Verified
-                          </span>
-                        )}
+                          {hasCoords ? (
+                            <span className="text-[9px] font-bold bg-sage-100 text-forest-800 px-2 py-0.5 rounded-full border border-leaf-500/20">
+                              ✓ Verified Pin
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-bold bg-marigold-100 text-marigold-800 px-2 py-0.5 rounded-full border border-marigold-200 flex items-center gap-1">
+                              <AlertCircle className="w-2.5 h-2.5" />
+                              <span>Pin Required</span>
+                            </span>
+                          )}
+                        </div>
+                        {isSelected && <CheckCircle className="w-4 h-4 text-forest-700" />}
                       </div>
-                      {selectedAddressId === addr.id && (
-                        <CheckCircle className="w-4 h-4 text-brand-600" />
+
+                      <p className="font-bold text-xs text-ink-900">
+                        {addr.full_name} • <span className="font-mono text-ink-600">{addr.phone}</span>
+                      </p>
+                      <p className="text-xs text-ink-500 mt-1 line-clamp-2">
+                        {[addr.house_number, addr.street, addr.area, addr.landmark, addr.city, addr.pincode]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </p>
+
+                      {/* Unverified Address Action: Set GPS Pin */}
+                      {!hasCoords && (
+                        <div className="mt-2.5 pt-2 border-t border-marigold-200/80 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-marigold-800 font-bold flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-marigold-600 shrink-0" />
+                            <span>GPS pin required</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenPinModalForAddress(addr);
+                            }}
+                            className="px-2.5 py-1 bg-marigold-600 hover:bg-marigold-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shrink-0 cursor-pointer shadow-xs transition-colors"
+                          >
+                            <MapPin className="w-3 h-3" />
+                            <span>Pin on Map</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Selected Address Serviceability Status */}
+                      {isSelected && zoneServiceability.checked && (
+                        <div className="mt-2.5 pt-2 border-t border-line">
+                          {zoneServiceability.requiresPin ? (
+                            <span className="text-[10px] font-bold text-marigold-800 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-marigold-500 animate-pulse"></span>
+                              <span>Map pin required to verify 5.0 KM serviceability</span>
+                            </span>
+                          ) : zoneServiceability.serviceable ? (
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-bold text-forest-800 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-leaf-500"></span>
+                                <span>
+                                  {zoneServiceability.distanceKm !== undefined
+                                    ? `${zoneServiceability.distanceKm} km from ${zoneServiceability.assignedHubName || 'Hub'} • In Service Zone`
+                                    : 'Delivery Available'}
+                                </span>
+                              </span>
+                              <p className="text-[9px] text-forest-700">
+                                Estimated delivery: {zoneServiceability.estimatedDelivery || '25–35 mins'}
+                              </p>
+                            </div>
+                          ) : !zoneServiceability.configured ? (
+                            <span className="text-[10px] font-bold text-marigold-800 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-marigold-500"></span>
+                              <span>Delivery availability configuring</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-tomato-700 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-tomato-500"></span>
+                              <span>
+                                {zoneServiceability.distanceKm !== undefined
+                                  ? `${zoneServiceability.distanceKm} km • Outside 5.0 KM zone`
+                                  : 'Outside delivery zone'}
+                              </span>
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <p className="font-semibold text-xs text-slate-800">{addr.full_name} • {addr.phone}</p>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                      {[addr.house_number, addr.street, addr.area, addr.landmark, addr.city, addr.pincode]
-                        .filter(Boolean)
-                        .join(', ')}
-                    </p>
-                    {selectedAddressId === addr.id && zoneServiceability.checked && (
-                      <div className="mt-2 pt-2 border-t border-slate-200/60">
-                        {zoneServiceability.serviceable ? (
-                          <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                            <span>{zoneServiceability.distanceKm !== undefined ? `${zoneServiceability.distanceKm} km from hub • Serviceable` : 'Delivery available'}</span>
-                          </span>
-                        ) : !zoneServiceability.configured ? (
-                          <span className="text-[10px] font-bold text-amber-700 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                            <span>Delivery availability configuring</span>
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-rose-600 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                            <span>{zoneServiceability.distanceKm !== undefined ? `${zoneServiceability.distanceKm} km • Outside 5 km zone` : 'Outside delivery zone'}</span>
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
           {/* 2. Delivery Slot Card */}
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex items-center gap-2">
-              <Truck className="w-5 h-5 text-brand-600" />
-              <h3 className="text-lg font-bold text-slate-900">2. Delivery Preference</h3>
+          <div className="bg-surface p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-line">
+              <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-800 flex items-center justify-center">
+                <Truck className="w-4 h-4 text-forest-700" />
+              </div>
+              <div>
+                <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900">
+                  2. Delivery Preference
+                </h3>
+                <span className="text-[11px] text-ink-500">Fresh morning, express, and evening harvest dispatches</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -938,99 +994,114 @@ export const CheckoutPage: React.FC = () => {
                     }}
                     className={`p-4 rounded-2xl border transition-all relative ${
                       !isAvailable
-                        ? 'opacity-60 bg-slate-50 border-slate-200 cursor-not-allowed select-none'
+                        ? 'opacity-60 bg-cream-100/60 border-line cursor-not-allowed select-none'
                         : isSelected
-                        ? 'border-brand-600 bg-brand-50/70 font-bold text-brand-900 shadow-sm ring-1 ring-brand-500 cursor-pointer'
-                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 cursor-pointer'
+                        ? 'border-forest-700 bg-sage-50/70 font-bold text-forest-900 shadow-soft ring-1 ring-leaf-500 cursor-pointer'
+                        : 'border-line text-ink-700 hover:bg-cream-50 cursor-pointer'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1 mb-1">
                       <p className="font-bold text-xs">{slot.title}</p>
                       {slot.tag && (
-                        <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${slot.badgeColor || 'bg-slate-100 text-slate-600'}`}>
+                        <span
+                          className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            slot.badgeColor || 'bg-cream-100 text-ink-600'
+                          }`}
+                        >
                           {slot.tag}
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-500">{slot.sub}</p>
+                    <p className="text-[11px] text-ink-500">{slot.sub}</p>
                   </div>
                 );
               })}
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
+              <label className="block text-xs font-bold text-ink-700 mb-1.5">
                 Delivery Instructions (Optional):
               </label>
               <input
                 type="text"
-                placeholder="e.g. Ring the doorbell twice, leave at reception"
+                placeholder="e.g. Ring the doorbell twice, leave with security gate"
                 value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
-                className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full text-xs bg-cream-50 border border-line rounded-xl px-3.5 py-2.5 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
               />
             </div>
           </div>
 
-          {/* 3. Order Confirmation & Updates Email Card */}
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
-            <div className="flex items-center gap-2">
-              <Mail className="w-5 h-5 text-brand-600" />
-              <h3 className="text-lg font-bold text-slate-900">3. Order Confirmation Email</h3>
+          {/* 3. Order Confirmation & Receipt Email Card */}
+          <div className="bg-surface p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-3">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-line">
+              <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-800 flex items-center justify-center">
+                <Mail className="w-4 h-4 text-forest-700" />
+              </div>
+              <div>
+                <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900">
+                  3. Order Confirmation Receipt Email
+                </h3>
+                <span className="text-[11px] text-ink-500">Itemized bill, order updates, and live dispatch link</span>
+              </div>
             </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              We'll send your verified order confirmation receipt, itemized produce breakdown, and live doorstep tracking updates to this email address.
-            </p>
+
             <div>
               <div className="relative">
                 <input
                   type="email"
-                  placeholder="Enter your email address (e.g. name@gmail.com)"
+                  placeholder="Enter email (e.g. yourname@gmail.com)"
                   value={customerEmail}
                   onChange={(e) => {
                     setCustomerEmail(e.target.value);
                     if (emailError) setEmailError('');
                   }}
-                  className={`w-full text-xs sm:text-sm bg-slate-50 border rounded-2xl pl-10 pr-4 py-3.5 focus:outline-none focus:ring-2 transition-all ${
+                  className={`w-full text-xs sm:text-sm bg-cream-50 border rounded-2xl pl-10 pr-4 py-3 focus:bg-surface focus:outline-none focus:ring-2 transition-all ${
                     emailError
-                      ? 'border-rose-400 focus:ring-rose-500/20 bg-rose-50/20 text-rose-900'
-                      : 'border-slate-200 focus:ring-brand-500/20 focus:border-brand-600 text-slate-800'
+                      ? 'border-tomato-400 focus:ring-tomato-500/20 bg-tomato-50/20 text-tomato-900'
+                      : 'border-line focus:ring-leaf-500/20 focus:border-forest-700 text-ink-900'
                   }`}
                 />
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Mail className="w-4 h-4 text-ink-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
               {emailError ? (
-                <p className="text-[11px] text-rose-600 font-semibold mt-1.5 flex items-center gap-1">
+                <p className="text-[11px] text-tomato-700 font-semibold mt-1.5 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>{emailError}</span>
                 </p>
               ) : (
-                <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>No spam guaranteed. Used strictly for order confirmations, invoices & delivery updates.</span>
+                <p className="text-[11px] text-ink-500 mt-1.5 flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-forest-700 shrink-0" />
+                  <span>Strictly zero spam. Used solely for invoices, delivery milestones, and customer receipts.</span>
                 </p>
               )}
             </div>
           </div>
 
-          {/* 4. Payment Method Card (Admin-Controlled COD & Online Gateway) */}
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Banknote className="w-5 h-5 text-brand-600" />
-                <h3 className="text-lg font-bold text-slate-900">4. Payment Mode</h3>
+          {/* 4. Payment Mode Card */}
+          <div className="bg-surface p-5 sm:p-7 rounded-3xl border border-line shadow-soft space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-800 flex items-center justify-center">
+                  <Banknote className="w-4 h-4 text-forest-700" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900">
+                    4. Payment Mode
+                  </h3>
+                  <span className="text-[11px] text-ink-500">Cash on Delivery, UPI QR, or Secure Online</span>
+                </div>
               </div>
             </div>
 
-            {/* Scenario 4: If both methods are disabled by admin */}
             {!paymentSettings.cod_enabled && !paymentSettings.online_enabled ? (
-              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2.5">
-                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-                <span>Sorry, we are temporarily not accepting orders. Please check again later.</span>
+              <div className="p-4 rounded-2xl bg-tomato-50 border border-tomato-200 text-tomato-900 text-xs font-bold flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 text-tomato-600 shrink-0" />
+                <span>Orders are temporarily not being accepted. Please check back shortly.</span>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Cash on Delivery (COD) Option */}
+                {/* Cash on Delivery (COD) */}
                 {paymentSettings.cod_enabled && (
                   <div
                     onClick={() => {
@@ -1039,108 +1110,138 @@ export const CheckoutPage: React.FC = () => {
                         return;
                       }
                       if (paymentSettings.cod_max_amount > 0 && (cart?.subtotal || 0) > paymentSettings.cod_max_amount) {
-                        alert(`Maximum order amount for Cash on Delivery is ₹${paymentSettings.cod_max_amount}. Please pay online.`);
+                        alert(`Maximum order amount for Cash on Delivery is ₹${paymentSettings.cod_max_amount}. Please choose online payment.`);
                         return;
                       }
                       setPaymentMethod('cod');
+                      setErrorMsg('');
                     }}
                     className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all relative ${
                       paymentMethod === 'cod'
-                        ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                        ? 'border-forest-700 bg-sage-50/70 font-bold text-forest-900 ring-2 ring-leaf-500/20 shadow-soft'
+                        : 'border-line text-ink-700 hover:bg-cream-50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Banknote className="w-4 h-4 text-emerald-600" />
-                        <span className="font-bold">Cash on Delivery (COD)</span>
+                        <Banknote className="w-4 h-4 text-forest-700" />
+                        <span className="font-bold">Cash on Delivery</span>
                       </div>
-                      {paymentSettings.cod_fee > 0 && (
-                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                          +₹{paymentSettings.cod_fee} fee
-                        </span>
-                      )}
+                      <span className="text-[10px] font-bold text-forest-800 bg-leaf-100 px-2 py-0.5 rounded-full">
+                        Recommended
+                      </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1.5">
-                      {paymentSettings.cod_message || 'Pay with cash upon home delivery'}
+                    <p className="text-[11px] text-ink-500 mt-1.5">
+                      {paymentSettings.cod_message || 'Pay with cash or UPI QR upon delivery'}
                     </p>
-                    <div className="mt-2 text-[10px] text-emerald-700 font-bold flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" />
-                      <span>Due upon delivery</span>
+                    <div className="mt-2 text-[10px] text-forest-800 font-bold flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3 text-leaf-600" />
+                      <span>Instant Order Confirmation</span>
                     </div>
                   </div>
                 )}
 
-                {/* Instant UPI / QR Option */}
-                {paymentSettings.online_enabled && (
-                  <div
-                    onClick={() => setPaymentMethod('upi')}
-                    className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
-                      paymentMethod === 'upi'
-                        ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
+                {/* Instant UPI / QR */}
+                <div
+                  onClick={() => {
+                    setPaymentMethod('upi');
+                  }}
+                  className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all relative ${
+                    paymentMethod === 'upi'
+                      ? 'border-marigold-500 bg-marigold-50/60 font-bold text-ink-900 ring-2 ring-marigold-400/20 shadow-soft'
+                      : 'border-line text-ink-700 hover:bg-cream-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <QrCode className="w-4 h-4 text-purple-600" />
+                      <QrCode className="w-4 h-4 text-forest-700" />
                       <span className="font-bold">Instant UPI / QR</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1.5">Google Pay, PhonePe, Paytm, BHIM</p>
-                    <div className="mt-2 text-[10px] text-purple-700 font-bold flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" />
-                      <span>Instant Verification</span>
-                    </div>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                      Gateway In Progress
+                    </span>
                   </div>
-                )}
+                  <p className="text-[11px] text-ink-500 mt-1.5">GPay, PhonePe, Paytm, BHIM</p>
+                  <div className="mt-2 text-[10px] text-amber-800 font-medium flex items-center gap-1">
+                    <Info className="w-3 h-3 text-amber-600" />
+                    <span>Pay via UPI QR on delivery</span>
+                  </div>
+                </div>
 
-                {/* Cards & NetBanking Option */}
-                {paymentSettings.online_enabled && (
-                  <div
-                    onClick={() => setPaymentMethod('online')}
-                    className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all ${
-                      paymentMethod === 'online'
-                        ? 'border-brand-600 bg-brand-50/60 font-bold text-brand-900 ring-2 ring-brand-500/20'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
+                {/* Cards & NetBanking */}
+                <div
+                  onClick={() => {
+                    setPaymentMethod('online');
+                  }}
+                  className={`p-4 rounded-2xl border cursor-pointer text-xs transition-all relative ${
+                    paymentMethod === 'online'
+                      ? 'border-marigold-500 bg-marigold-50/60 font-bold text-ink-900 ring-2 ring-marigold-400/20 shadow-soft'
+                      : 'border-line text-ink-700 hover:bg-cream-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-sky-600" />
-                      <span className="font-bold">Cards &amp; Net Banking</span>
+                      <CreditCard className="w-4 h-4 text-forest-700" />
+                      <span className="font-bold">Cards &amp; NetBanking</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1.5">
-                      {paymentSettings.online_message || 'Visa, Mastercard, RuPay, Net Banking'}
-                    </p>
-                    <div className="mt-2 text-[10px] text-sky-700 font-bold flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" />
-                      <span>{paymentSettings.online_gateway_name || 'Secure Gateway'}</span>
-                    </div>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                      Gateway In Progress
+                    </span>
                   </div>
-                )}
+                  <p className="text-[11px] text-ink-500 mt-1.5">
+                    {paymentSettings.online_message || 'Visa, Mastercard, RuPay'}
+                  </p>
+                  <div className="mt-2 text-[10px] text-amber-800 font-medium flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-amber-600" />
+                    <span>Gateway integration in progress</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(paymentMethod === 'upi' || paymentMethod === 'online') && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold">Production Payment Gateway In Progress</p>
+                  <p className="text-amber-800 text-[11px]">
+                    To maintain secure transactions, online cards and in-app UPI payments are awaiting production gateway activation. You can select{' '}
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('cod')}
+                      className="font-bold underline text-forest-800 hover:text-forest-900 cursor-pointer"
+                    >
+                      Cash on Delivery
+                    </button>{' '}
+                    to pay safely via cash or scan any UPI QR code upon arrival.
+                  </p>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Column: Order Summary & Dynamic Coupon Box (Phase 10) */}
+        {/* Right Column: Order Summary & Promotions */}
         <div className="lg:col-span-4 space-y-6">
           {/* Coupon Code Card */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
-            <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-brand-600" />
-              <h4 className="font-bold text-sm text-slate-900">Have a coupon code?</h4>
+          <div className="bg-surface p-5 sm:p-6 rounded-3xl border border-line shadow-soft space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-line">
+              <Tag className="w-4 h-4 text-forest-700" />
+              <h4 className="font-serif font-bold text-sm text-ink-900">Apply Organic Promo</h4>
             </div>
 
             {appliedCoupon ? (
-              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
+              <div className="p-3 rounded-2xl bg-sage-100 border border-leaf-500/30 flex items-center justify-between text-xs">
                 <div>
-                  <p className="font-black text-emerald-800 flex items-center gap-1">
-                    <Check className="w-4 h-4" /> {appliedCoupon.coupon.code} Applied!
+                  <p className="font-bold text-forest-900 flex items-center gap-1">
+                    <Check className="w-4 h-4 text-leaf-600" /> {appliedCoupon.coupon.code} Applied!
                   </p>
-                  <p className="text-[11px] text-emerald-600 mt-0.5">{appliedCoupon.savings_message}</p>
+                  <p className="text-[11px] text-forest-700 mt-0.5">{appliedCoupon.savings_message}</p>
                 </div>
                 <button
                   onClick={handleRemoveCoupon}
-                  className="p-1 rounded-lg hover:bg-emerald-100 text-emerald-700"
+                  className="p-1 rounded-lg hover:bg-sage-200 text-forest-800 cursor-pointer"
+                  title="Remove coupon"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1153,36 +1254,35 @@ export const CheckoutPage: React.FC = () => {
                     placeholder="e.g. WELCOME50"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    className="flex-1 uppercase font-bold text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="flex-1 uppercase font-bold text-xs bg-cream-50 border border-line rounded-xl px-3 py-2.5 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
                   />
                   <button
                     onClick={() => handleApplyCoupon()}
                     disabled={couponLoading || !couponCode.trim()}
-                    className="bg-slate-900 hover:bg-brand-600 disabled:bg-slate-200 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all"
+                    className="bg-forest-900 hover:bg-forest-800 disabled:bg-cream-200 disabled:text-ink-400 text-cream-50 font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-soft"
                   >
                     {couponLoading ? '...' : 'APPLY'}
                   </button>
                 </div>
 
                 {couponError && (
-                  <p className="text-[11px] font-semibold text-rose-600">{couponError}</p>
+                  <p className="text-[11px] font-semibold text-tomato-700">{couponError}</p>
                 )}
 
-                {/* Available Quick Coupons */}
+                {/* Available Suggestions */}
                 <div className="pt-2">
-                  <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
-                    Suggested Promotions:
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-ink-400 mb-1.5">
+                    Available Offers:
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {[
                       { code: 'WELCOME50', label: '₹50 OFF (Min ₹299)' },
-                      { code: 'FRESH10', label: '10% OFF Greens' },
-                      { code: 'VEGGIE100', label: '₹100 OFF (Min ₹699)' },
+                      { code: 'FRESH10', label: '10% OFF' },
                     ].map((c) => (
                       <button
                         key={c.code}
                         onClick={() => handleApplyCoupon(c.code)}
-                        className="text-[11px] font-bold bg-slate-50 hover:bg-brand-50 border border-slate-200 hover:border-brand-300 text-slate-700 hover:text-brand-700 px-2.5 py-1 rounded-lg transition-all"
+                        className="text-[11px] font-bold bg-cream-100 hover:bg-cream-200 border border-line text-ink-700 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
                       >
                         {c.code}
                       </button>
@@ -1194,97 +1294,107 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           {/* Order Summary Card */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-6 sticky top-24">
-            <h3 className="font-black text-lg text-slate-900 border-b border-slate-100 pb-3">
-              Order Summary
-            </h3>
+          <div className="bg-surface p-5 sm:p-6 rounded-3xl border border-line shadow-soft space-y-5 sticky top-24">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="font-serif font-black text-lg text-ink-900">
+                Order Summary
+              </h3>
+              <span className="text-xs bg-sage-100 text-forest-800 font-bold px-2 py-0.5 rounded-full border border-leaf-500/20">
+                {cart.items.length} {cart.items.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
 
-            {/* Items list */}
+            {/* Produce item list */}
             <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
               {cart.items.map((item) => (
                 <div key={item.id} className="flex justify-between items-center text-xs">
-                  <div className="truncate max-w-[180px]">
-                    <span className="font-bold text-slate-800">{item.name}</span>
-                    <span className="text-slate-400 block text-[11px]">
+                  <div className="truncate max-w-[190px]">
+                    <span className="font-bold text-ink-900">{item.name}</span>
+                    <span className="text-ink-400 block text-[11px]">
                       {item.quantity} × {item.variant_name || item.unit}
                     </span>
                   </div>
-                  <span className="font-extrabold text-slate-900">₹{item.item_total}</span>
+                  <span className="font-bold text-ink-900">₹{item.item_total}</span>
                 </div>
               ))}
             </div>
 
             {/* Cost Breakdown */}
-            <div className="space-y-2 text-xs border-t border-slate-100 pt-4 text-slate-600">
+            <div className="space-y-2 text-xs border-t border-line pt-4 text-ink-600">
               <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>₹{cart.subtotal}</span>
+                <span>Produce Subtotal</span>
+                <span className="font-semibold text-ink-900">₹{cart.subtotal}</span>
               </div>
-              <div className="flex justify-between text-emerald-600 font-semibold">
-                <span>Vegetable Savings</span>
-                <span>-₹{cart.discount}</span>
-              </div>
+              {cart.discount > 0 && (
+                <div className="flex justify-between text-forest-700 font-semibold">
+                  <span>Farm Savings</span>
+                  <span>-₹{cart.discount}</span>
+                </div>
+              )}
               {appliedCoupon && (
-                <div className="flex justify-between text-brand-600 font-bold">
+                <div className="flex justify-between text-forest-700 font-bold">
                   <span>Coupon Discount ({appliedCoupon.coupon.code})</span>
                   <span>-₹{appliedCoupon.discount_amount}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span>Delivery Charge</span>
+                <span>Express Delivery</span>
                 <span>
                   {cart.delivery_charge === 0 ? (
-                    <span className="font-bold text-emerald-600">FREE</span>
+                    <span className="font-bold text-forest-700 bg-sage-100 px-1.5 py-0.5 rounded border border-leaf-500/20">
+                      FREE
+                    </span>
                   ) : (
                     `₹${cart.delivery_charge}`
                   )}
                 </span>
               </div>
               {paymentMethod === 'cod' && paymentSettings.cod_fee > 0 && (
-                <div className="flex justify-between text-amber-700 font-bold">
+                <div className="flex justify-between text-marigold-800 font-bold">
                   <span>COD Handling Fee</span>
                   <span>+₹{paymentSettings.cod_fee}</span>
                 </div>
               )}
-              <div className="flex justify-between font-extrabold text-base text-slate-900 border-t border-slate-200 pt-3">
-                <span>Total Amount</span>
-                <span className="text-brand-700">₹{finalPayableTotal}</span>
+              <div className="flex justify-between font-serif font-black text-base text-ink-900 border-t border-line pt-3">
+                <span>Payable Amount</span>
+                <span className="text-forest-900">₹{finalPayableTotal}</span>
               </div>
             </div>
 
-            {/* Outside 5 km Service Area Checkout Guard */}
+            {/* Outside 5 km Service Area Guard */}
             {zoneServiceability.checked && !zoneServiceability.serviceable && (
-              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 space-y-2">
+              <div className="p-3.5 rounded-2xl bg-tomato-50 border border-tomato-200 text-tomato-950 space-y-2">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-                  <h4 className="font-black text-xs sm:text-sm">Sorry, we are currently unavailable in your area.</h4>
+                  <AlertCircle className="w-5 h-5 text-tomato-600 shrink-0" />
+                  <h4 className="font-bold text-xs">Address Outside 5.0 KM Radius</h4>
                 </div>
-                <p className="text-[11px] text-rose-800 leading-relaxed">
-                  Your selected address is outside our 5 km delivery zone. Choose a different location to check availability and place your order.
+                <p className="text-[11px] text-tomato-800 leading-relaxed">
+                  Your selected address is {zoneServiceability.distanceKm ? `${zoneServiceability.distanceKm} km away` : 'outside our service boundary'}. Delivery is available within 5.0 KM from our Champapet and KPHB hubs.
                 </p>
                 <button
                   type="button"
                   onClick={handleOpenAddAddressModal}
-                  className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                  className="w-full py-2 bg-tomato-700 hover:bg-tomato-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
                 >
-                  Choose a Different Location
+                  Choose a Serviceable Location
                 </button>
               </div>
             )}
 
-            {/* Deliveries Paused Alert Banner */}
+            {/* Deliveries Paused Alert */}
             {(deliveryEstimate.isPaused || zoneServiceability.isPaused || zoneServiceability.isDeliveryActive === false) && (
-              <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-2 text-amber-900 animate-in fade-in">
+              <div className="p-4 bg-marigold-50 border border-marigold-300 rounded-2xl space-y-2 text-marigold-900 animate-in fade-in">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <h4 className="font-black text-xs sm:text-sm">Deliveries Paused for Selected Area</h4>
+                  <AlertTriangle className="w-5 h-5 text-marigold-600 shrink-0" />
+                  <h4 className="font-bold text-xs">Deliveries Paused for Selected Area</h4>
                 </div>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
+                <p className="text-[11px] text-marigold-800 leading-relaxed">
                   {deliveryEstimate.pauseReason || zoneServiceability.message || 'Express deliveries in this area are temporarily paused. Orders will resume shortly.'}
                 </p>
               </div>
             )}
 
+            {/* Primary Submit Order Button */}
             <button
               onClick={handleInitiateOrder}
               disabled={
@@ -1295,242 +1405,79 @@ export const CheckoutPage: React.FC = () => {
                 zoneServiceability.isPaused ||
                 zoneServiceability.isDeliveryActive === false
               }
-              className="w-full bg-brand-600 hover:bg-brand-700 active:scale-98 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-4 px-6 rounded-2xl shadow-xl shadow-brand-600/25 disabled:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full bg-forest-900 hover:bg-forest-800 active:scale-98 disabled:bg-cream-200 disabled:text-ink-400 disabled:cursor-not-allowed text-cream-50 font-bold py-3.5 px-6 rounded-2xl shadow-soft disabled:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               {isSubmitting ? (
-                <span>Placing Order...</span>
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-cream-50" />
+                  <span>Placing Order...</span>
+                </>
               ) : !paymentSettings.cod_enabled && !paymentSettings.online_enabled ? (
                 <span>Orders Temporarily Unavailable</span>
               ) : zoneServiceability.checked && !zoneServiceability.serviceable ? (
-                <span>Delivery Unavailable at Selected Address</span>
+                <span>Outside 5.0 KM Zone</span>
               ) : deliveryEstimate.isPaused || zoneServiceability.isPaused || zoneServiceability.isDeliveryActive === false ? (
-                <span>Deliveries Paused for Selected Area</span>
+                <span>Deliveries Paused</span>
               ) : (
                 <>
                   <span>
                     {paymentMethod === 'cod' ? 'Confirm COD Order' : `Pay ₹${finalPayableTotal} & Place Order`}
                   </span>
-                  <ArrowRight className="w-5 h-5" />
+                  <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
 
-            <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium pt-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Safe & Encrypted Checkout • 100% Quality Guarantee</span>
+            <div className="flex items-center justify-center gap-2 text-[11px] text-ink-500 font-medium pt-1">
+              <ShieldCheck className="w-4 h-4 text-forest-700" />
+              <span>Two-Hub Certified Organic Delivery Guarantee</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Phase 7: Interactive Payment Processing Modal */}
-      {isPaymentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-brand-600" />
-                <h3 className="font-black text-slate-900">Secure Payment Gateway</h3>
-              </div>
-              <button
-                onClick={() => setIsPaymentModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            {paymentStep === 'SELECT' && (
-              <div className="space-y-4">
-                <div className="bg-brand-50 p-3.5 rounded-2xl text-center">
-                  <p className="text-xs text-brand-700 font-medium">Payable Amount</p>
-                  <p className="text-2xl font-black text-brand-900">₹{finalPayableTotal}</p>
-                </div>
 
-                <div className="flex gap-2 border-b border-slate-100 pb-2">
-                  <button
-                    onClick={() => setSelectedOnlineOption('upi')}
-                    className={`flex-1 text-xs font-bold py-2 rounded-xl transition-all ${
-                      selectedOnlineOption === 'upi' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    ⚡ UPI / QR
-                  </button>
-                  <button
-                    onClick={() => setSelectedOnlineOption('card')}
-                    className={`flex-1 text-xs font-bold py-2 rounded-xl transition-all ${
-                      selectedOnlineOption === 'card' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    💳 Card
-                  </button>
-                  <button
-                    onClick={() => setSelectedOnlineOption('netbanking')}
-                    className={`flex-1 text-xs font-bold py-2 rounded-xl transition-all ${
-                      selectedOnlineOption === 'netbanking' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    🏦 Net Banking
-                  </button>
-                </div>
-
-                {selectedOnlineOption === 'upi' && (
-                  <div className="text-center space-y-3 py-2">
-                    <div className="w-36 h-36 bg-slate-100 mx-auto rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center p-2">
-                      <QrCode className="w-20 h-20 text-slate-800" />
-                      <span className="text-[10px] font-bold text-slate-500 mt-1">Scan to Pay</span>
-                    </div>
-                    <div className="text-left">
-                      <label className="text-[11px] font-bold text-slate-600">Or enter UPI ID / VPA:</label>
-                      <input
-                        type="text"
-                        value={upiId}
-                        onChange={(e) => setUpiId(e.target.value)}
-                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 mt-1 font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {selectedOnlineOption === 'card' && (
-                  <div className="space-y-2 text-left">
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600">Card Number</label>
-                      <input
-                        type="text"
-                        defaultValue="4111 2222 3333 4444"
-                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 mt-1 font-mono"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-600">Valid Thru</label>
-                        <input
-                          type="text"
-                          defaultValue="12/28"
-                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 mt-1 font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-600">CVV</label>
-                        <input
-                          type="password"
-                          defaultValue="888"
-                          maxLength={3}
-                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 mt-1 font-mono"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedOnlineOption === 'netbanking' && (
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-600">Select Popular Bank:</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['HDFC Bank', 'ICICI Bank', 'State Bank of India', 'Axis Bank'].map((b) => (
-                        <button
-                          key={b}
-                          onClick={() => setSelectedBank(b)}
-                          className={`text-xs p-2.5 rounded-xl border text-left font-bold ${
-                            selectedBank === b ? 'border-brand-600 bg-brand-50 text-brand-900' : 'border-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {b}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Gateway Verification Simulation Actions */}
-                <div className="pt-3 space-y-2">
-                  <button
-                    onClick={() => handleVerifyPayment('PAID')}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-3.5 rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-1.5 transition-all"
-                  >
-                    <CheckCircle className="w-4 h-4" /> Simulate Successful Payment (₹{finalPayableTotal})
-                  </button>
-                  <button
-                    onClick={() => handleVerifyPayment('FAILED')}
-                    className="w-full bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold text-xs py-2 rounded-xl transition-all"
-                  >
-                    Simulate Payment Failure
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {paymentStep === 'PROCESSING' && (
-              <div className="text-center py-8 space-y-3">
-                <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto"></div>
-                <h4 className="font-bold text-slate-900">Verifying Payment with Gateway...</h4>
-                <p className="text-xs text-slate-500">Communicating with bank 3D secure network</p>
-              </div>
-            )}
-
-            {paymentStep === 'SUCCESS' && (
-              <div className="text-center py-6 space-y-3 animate-in zoom-in-95">
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-2xl font-black">
-                  ✓
-                </div>
-                <h4 className="font-black text-emerald-900 text-lg">Payment Verified & Received!</h4>
-                <p className="text-xs text-slate-500">Redirecting to live harvest dispatch tracking...</p>
-              </div>
-            )}
-
-            {paymentStep === 'FAILED' && (
-              <div className="text-center py-6 space-y-3 animate-in zoom-in-95">
-                <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-2xl font-black">
-                  ✕
-                </div>
-                <h4 className="font-black text-rose-900 text-lg">Payment Declined or Cancelled</h4>
-                <p className="text-xs text-slate-500">Your bank reported a timeout or authorization issue.</p>
-                <button
-                  onClick={() => setPaymentStep('SELECT')}
-                  className="bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl"
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Add Address Modal */}
+      {/* Add / Edit Address Modal with Embedded Map Pinning */}
       {isAddAddressModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5 my-auto max-h-[92vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-surface rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl border border-line space-y-4 my-auto max-h-[92vh] overflow-y-auto animate-fade-in">
+            <div className="flex justify-between items-center border-b border-line pb-3">
               <div>
-                <h3 className="font-black text-xl text-slate-900">Add Delivery Address</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Auto-fetches your location & verifies delivery zone</p>
+                <h3 className="font-serif font-bold text-xl text-ink-900">
+                  {editingAddressId ? 'Verify Exact GPS Pin' : 'Add Delivery Address'}
+                </h3>
+                <p className="text-xs text-ink-500 mt-0.5">
+                  Orders must be located within 5.0 KM of our Champapet or KPHB fulfillment hubs.
+                </p>
               </div>
               <button
-                onClick={() => setIsAddAddressModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors"
+                onClick={() => {
+                  setIsAddAddressModalOpen(false);
+                  setEditingAddressId(null);
+                }}
+                className="w-8 h-8 rounded-full bg-cream-100 hover:bg-cream-200 text-ink-500 hover:text-ink-800 flex items-center justify-center transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            {/* GPS Auto-Detect Banner */}
-            <div className="flex items-center justify-between p-3 bg-brand-50/80 border border-brand-200 rounded-2xl">
+            {/* GPS Auto-Detect Bar */}
+            <div className="flex items-center justify-between p-3 bg-cream-50 border border-line rounded-2xl">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-brand-500 text-white flex items-center justify-center shadow-sm">
+                <div className="w-8 h-8 rounded-xl bg-forest-900 text-cream-50 flex items-center justify-center shadow-xs">
                   {isDetectingLocation ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin text-cream-50" />
                   ) : (
                     <Navigation className="w-4 h-4 fill-current" />
                   )}
                 </div>
                 <div>
-                  <p className="font-bold text-xs text-slate-900">
-                    {isDetectingLocation ? 'Detecting your GPS location...' : 'Current Location Auto-Fetch'}
+                  <p className="font-bold text-xs text-ink-900">
+                    {isDetectingLocation ? 'Detecting device GPS...' : 'Device GPS Location'}
                   </p>
-                  <p className="text-[11px] text-slate-500">
-                    {isDetectingLocation ? 'Reverse-geocoding coordinates' : 'Synced with your device GPS'}
+                  <p className="text-[11px] text-ink-500">
+                    {isDetectingLocation ? 'Acquiring coordinates' : 'High-accuracy geolocation'}
                   </p>
                 </div>
               </div>
@@ -1538,176 +1485,180 @@ export const CheckoutPage: React.FC = () => {
                 type="button"
                 onClick={detectCurrentLocation}
                 disabled={isDetectingLocation}
-                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-brand-700 text-xs font-bold rounded-xl border border-brand-300 shadow-sm transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                className="px-3 py-1.5 bg-surface hover:bg-cream-100 text-forest-800 text-xs font-bold rounded-xl border border-line shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
               >
                 <MapPin className="w-3.5 h-3.5" />
-                <span>Re-Detect</span>
+                <span>Auto-Detect</span>
               </button>
             </div>
 
-            {/* Zone Serviceability Warning / Status */}
+            {/* Interactive Location Map inside Address Modal */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-bold text-ink-700">
+                <span>Pinpoint Building on Map:</span>
+                {newAddress.latitude && newAddress.longitude && (
+                  <span className="font-mono text-forest-700">
+                    {newAddress.latitude.toFixed(4)}, {newAddress.longitude.toFixed(4)}
+                  </span>
+                )}
+              </div>
+              <div className="rounded-xl overflow-hidden border border-line">
+                <InteractiveLocationMap
+                  initialCenter={
+                    newAddress.latitude && newAddress.longitude
+                      ? [newAddress.latitude, newAddress.longitude]
+                      : [17.3850, 78.4867]
+                  }
+                  markerPosition={
+                    newAddress.latitude && newAddress.longitude
+                      ? [newAddress.latitude, newAddress.longitude]
+                      : null
+                  }
+                  onPositionChange={handleAddressMapChange}
+                  height="220px"
+                  showSearchBar={true}
+                  placeholder="Search Hyderabad colony or landmark..."
+                />
+              </div>
+            </div>
+
+            {/* Serviceability Status Banner */}
             {zoneServiceability.checked && !zoneServiceability.serviceable && (
-              <div className="p-3.5 bg-rose-50 border-2 border-rose-300 rounded-2xl flex items-start gap-2.5 text-rose-800 animate-fade-in shadow-sm">
-                <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-black text-xs uppercase tracking-wider text-rose-700">
-                    Currently Unavailable for Delivery
-                  </p>
-                  <p className="text-xs text-rose-600 mt-0.5 leading-relaxed font-medium">
-                    {zoneServiceability.message ||
-                      `We do not deliver to this location yet. Express farm delivery is currently available across Hyderabad and Ahmedabad.`}
-                  </p>
-                </div>
+              <div className="p-3 bg-tomato-50 border border-tomato-200 rounded-xl flex items-start gap-2 text-tomato-900 text-xs font-medium">
+                <AlertCircle className="w-4 h-4 text-tomato-600 shrink-0 mt-0.5" />
+                <span>
+                  {zoneServiceability.message ||
+                    'This location is outside our 5.0 KM delivery radius from our nearest hub.'}
+                </span>
               </div>
             )}
-
             {zoneServiceability.checked && zoneServiceability.serviceable && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2 text-emerald-800 animate-fade-in text-xs font-bold">
-                <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                <span>{zoneServiceability.message || `✓ Serviceable Delivery Zone: ${zoneServiceability.zoneName}`}</span>
+              <div className="p-3 bg-sage-50 border border-leaf-500/20 rounded-xl flex items-center gap-2 text-forest-900 text-xs font-bold">
+                <CheckCircle className="w-4 h-4 text-leaf-600 shrink-0" />
+                <span>
+                  ✓ Within 5.0 KM of {zoneServiceability.assignedHubName || 'Fulfillment Hub'}
+                </span>
               </div>
             )}
 
-            <form onSubmit={handleCreateAddress} className="space-y-4 text-xs">
-              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                <span className="font-bold text-slate-700">Recipient Details</span>
-                <button
-                  type="button"
-                  onClick={fetchUserBasicDetails}
-                  className="text-[11px] font-bold text-[#0c831f] hover:underline flex items-center gap-1 cursor-pointer"
-                  title="Auto-fetch your profile details"
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Fetch My Details</span>
-                </button>
-              </div>
-
+            <form onSubmit={handleCreateAddress} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Full Name <span className="text-rose-500">*</span>
+                  <label className="font-bold text-ink-700 block mb-1">
+                    Full Name <span className="text-tomato-600">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Rahul Sharma"
+                    placeholder="e.g. Manav Sharma"
                     value={newAddress.full_name}
                     onChange={(e) => setNewAddress({ ...newAddress, full_name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500 font-medium text-slate-800"
+                    className="w-full bg-cream-50 border border-line rounded-xl px-3 py-2 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Mobile Number <span className="text-rose-500">*</span>
+                  <label className="font-bold text-ink-700 block mb-1">
+                    Mobile Number <span className="text-tomato-600">*</span>
                   </label>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-extrabold text-slate-600 text-[11px] select-none bg-slate-200/80 px-1.5 py-0.5 rounded border border-slate-200">
-                      +91
-                    </span>
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      placeholder="9876543210"
-                      value={newAddress.phone}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/\D/g, '');
-                        const clean = raw.length === 12 && raw.startsWith('91') ? raw.slice(2) : raw.slice(0, 10);
-                        setNewAddress({ ...newAddress, phone: clean });
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-13 pr-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500 font-medium text-slate-800 tracking-wider"
-                    />
-                  </div>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    placeholder="9876543210"
+                    value={newAddress.phone}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setNewAddress({ ...newAddress, phone: clean });
+                    }}
+                    className="w-full bg-cream-50 border border-line rounded-xl px-3 py-2 font-mono focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">House / Flat No.</label>
+                  <label className="font-bold text-ink-700 block mb-1">House / Flat No.</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Flat 304, Green Heights"
+                    placeholder="e.g. Flat 302, Green Valley"
                     value={newAddress.house_number}
                     onChange={(e) => setNewAddress({ ...newAddress, house_number: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-cream-50 border border-line rounded-xl px-3 py-2 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Area / Locality</label>
+                  <label className="font-bold text-ink-700 block mb-1">Area / Locality</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Madhapur, Hitech City"
+                    placeholder="e.g. Champapet, Saroornagar"
                     value={newAddress.area}
                     onChange={(e) => setNewAddress({ ...newAddress, area: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-cream-50 border border-line rounded-xl px-3 py-2 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">City</label>
+                  <label className="font-bold text-ink-700 block mb-1">City</label>
                   <input
                     type="text"
                     required
                     value={newAddress.city}
                     onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-cream-50 border border-line rounded-xl px-3 py-2 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">State</label>
+                  <label className="font-bold text-ink-700 block mb-1">State</label>
                   <input
                     type="text"
                     required
                     value={newAddress.state}
                     onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:bg-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-cream-50 border border-line rounded-xl px-3 py-2 focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Pincode</label>
+                  <label className="font-bold text-ink-700 block mb-1">Pincode</label>
                   <input
                     type="text"
                     required
                     maxLength={6}
                     value={newAddress.pincode}
-                    onChange={(e) => {
-                      const pin = e.target.value;
-                      setNewAddress({ ...newAddress, pincode: pin });
-                      if (pin.length === 6) {
-                        checkPincodeServiceability(pin);
-                      } else {
-                        setZoneServiceability({ checked: false, serviceable: true });
-                      }
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 font-mono focus:bg-white focus:outline-none focus:border-brand-500"
+                    onChange={(e) => setNewAddress({ ...newAddress, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                    className="w-full bg-cream-50 border border-line rounded-xl px-3 py-2 font-mono focus:bg-surface focus:outline-none focus:border-forest-700 text-ink-900"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-line">
                 <button
                   type="button"
-                  onClick={() => setIsAddAddressModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-colors"
+                  onClick={() => {
+                    setIsAddAddressModalOpen(false);
+                    setEditingAddressId(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-ink-600 font-bold hover:bg-cream-100 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={zoneServiceability.checked && !zoneServiceability.serviceable}
-                  className={`font-black text-xs px-5 py-2.5 rounded-xl transition-all ${
+                  className={`font-bold text-xs px-5 py-2.5 rounded-xl transition-all ${
                     zoneServiceability.checked && !zoneServiceability.serviceable
-                      ? 'bg-rose-100 text-rose-500 border border-rose-300 cursor-not-allowed opacity-70'
-                      : 'bg-brand-600 hover:bg-brand-700 text-white shadow-md shadow-brand-600/20 cursor-pointer'
+                      ? 'bg-cream-200 text-ink-400 border border-line cursor-not-allowed opacity-70'
+                      : 'bg-forest-900 hover:bg-forest-800 text-cream-50 shadow-soft cursor-pointer'
                   }`}
                 >
                   {zoneServiceability.checked && !zoneServiceability.serviceable
-                    ? 'Currently Unavailable - Out of Zone'
-                    : 'Save Address'}
+                    ? 'Outside 5.0 KM Zone'
+                    : editingAddressId
+                    ? 'Save Verified Pin'
+                    : 'Save Delivery Address'}
                 </button>
               </div>
             </form>
@@ -1717,4 +1668,5 @@ export const CheckoutPage: React.FC = () => {
     </div>
   );
 };
+
 export default CheckoutPage;

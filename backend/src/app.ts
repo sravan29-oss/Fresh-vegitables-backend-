@@ -40,10 +40,23 @@ app.use(
   })
 );
 
-// Body parsers with raw body retention for HMAC signature verification
+// Standard HTTP Security Headers (OWASP Recommended)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+  if (env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
+// Body parsers with safe request size limit and raw body retention for HMAC signature verification
 app.use(
   express.json({
-    limit: '50mb',
+    limit: '2mb',
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
     },
@@ -52,7 +65,7 @@ app.use(
 app.use(
   express.urlencoded({
     extended: true,
-    limit: '50mb',
+    limit: '2mb',
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
     },
@@ -153,8 +166,32 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'Fresh Vegetables API', timestamp: new Date().toISOString() });
 });
 
+// Database Readiness probe
+app.get('/ready', async (req, res) => {
+  try {
+    await db.query('SELECT 1');
+    res.json({ status: 'ready', database: 'connected', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'unready', database: 'disconnected', error: 'Database service unavailable', timestamp: new Date().toISOString() });
+  }
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', service: 'Fresh Vegetables API', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/ready', async (req, res) => {
+  try {
+    await db.query('SELECT 1');
+    res.json({ status: 'ready', database: 'connected', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'unready', database: 'disconnected', error: 'Database service unavailable', timestamp: new Date().toISOString() });
+  }
+});
+
 // Root SEO Feeds
-import { getSitemapXml, getRobotsTxt } from './controllers/feed.controller';
+import { getGoogleShoppingFeed, getSitemapXml, getRobotsTxt } from './controllers/feed.controller';
+app.get('/google-shopping.xml', getGoogleShoppingFeed);
 app.get('/sitemap.xml', getSitemapXml);
 app.get('/robots.txt', getRobotsTxt);
 

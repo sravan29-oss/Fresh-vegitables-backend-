@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   Sparkles,
-  Award,
   ShieldCheck,
   Truck,
   Star,
@@ -12,6 +11,9 @@ import {
   Leaf,
   CheckCircle2,
   AlertCircle,
+  MapPin,
+  Clock,
+  ChevronRight,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Product, Category, HomepageSection, HomepageBanner } from '../../types';
@@ -19,9 +21,10 @@ import { ProductCard } from '../../components/product/ProductCard';
 import { ProductGridSkeleton } from '../../components/product/ProductGridSkeleton';
 import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { SEOHead } from '../../components/common/SEOHead';
+import { Hero3DSection } from '../../components/3d/Hero3DSection';
+import { FarmExperienceSection } from '../../components/3d/FarmExperienceSection';
 import { useCart } from '../../context/CartContext';
 import { getProductImageUrl } from '../../utils/imageUrl';
-
 import { useHomepageCMS } from '../../hooks/useHomepageCMS';
 import { useQuery } from '@tanstack/react-query';
 
@@ -46,29 +49,29 @@ const BannerSlider: React.FC<BannerSliderProps> = ({ banners }) => {
   const bannerImg = getProductImageUrl(currentBanner.image, currentBanner.title);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl mx-3 sm:mx-6 lg:mx-8 mt-3 sm:mt-5 shadow-lg border border-slate-200/80 bg-slate-900 group h-[220px] sm:h-[340px] md:h-[400px]">
+    <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl mx-3 sm:mx-6 lg:mx-8 mt-3 sm:mt-5 shadow-soft-lg border border-line bg-forest-950 group h-[220px] sm:h-[340px] md:h-[400px]">
       <img
         src={bannerImg}
         alt={currentBanner.title}
-        className="w-full h-full object-cover transition-all duration-700 brightness-[0.85] group-hover:scale-102"
+        className="w-full h-full object-cover transition-all duration-700 brightness-[0.82] group-hover:scale-102"
         onError={(e) => {
           e.currentTarget.src =
             'https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200&auto=format&fit=crop&q=80';
         }}
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/50 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-r from-forest-950/90 via-forest-950/45 to-transparent" />
 
-      <div className="absolute inset-0 z-10 flex flex-col justify-center px-6 sm:px-12 md:px-16 max-w-2xl text-white space-y-2 sm:space-y-4">
+      <div className="absolute inset-0 z-10 flex flex-col justify-center px-6 sm:px-12 md:px-16 max-w-2xl text-cream-50 space-y-2 sm:space-y-4">
         {currentBanner.badge && (
-          <span className="self-start text-[10px] sm:text-xs font-black uppercase tracking-wider bg-brand-500 text-slate-950 px-2.5 sm:px-3 py-1 rounded-full shadow-md">
+          <span className="self-start text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-marigold-500 text-forest-950 px-3 py-1 rounded-full shadow-soft">
             {currentBanner.badge}
           </span>
         )}
-        <h2 className="text-xl sm:text-3xl md:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
+        <h2 className="font-serif text-xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-tight text-cream-50 drop-shadow-sm">
           {currentBanner.title}
         </h2>
         {currentBanner.subtitle && (
-          <p className="text-xs sm:text-sm md:text-base text-slate-200 line-clamp-2 max-w-xl font-medium drop-shadow">
+          <p className="text-xs sm:text-sm md:text-base text-forest-200/90 line-clamp-2 max-w-xl font-sans leading-relaxed">
             {currentBanner.subtitle}
           </p>
         )}
@@ -76,7 +79,7 @@ const BannerSlider: React.FC<BannerSliderProps> = ({ banners }) => {
           <div className="pt-1 sm:pt-2">
             <Link
               to={currentBanner.link}
-              className="inline-flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition-transform hover:-translate-y-0.5 active:scale-95"
+              className="inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-full bg-leaf-500 hover:bg-leaf-400 text-forest-950 font-bold text-xs sm:text-sm shadow-soft transition-transform hover:-translate-y-0.5 active:scale-95"
             >
               <span>Shop Now</span>
               <ArrowRight className="w-4 h-4" />
@@ -88,15 +91,17 @@ const BannerSlider: React.FC<BannerSliderProps> = ({ banners }) => {
       {banners.length > 1 && (
         <>
           <button
+            type="button"
             onClick={() => setCurrentIdx((prev) => (prev === 0 ? banners.length - 1 : prev - 1))}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-opacity opacity-0 group-hover:opacity-100 cursor-pointer text-lg font-bold"
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-forest-950/60 hover:bg-forest-900 text-cream-100 flex items-center justify-center backdrop-blur-md transition-opacity opacity-0 group-hover:opacity-100 cursor-pointer text-xl font-bold border border-forest-800"
             aria-label="Previous Banner"
           >
             ‹
           </button>
           <button
+            type="button"
             onClick={() => setCurrentIdx((prev) => (prev + 1) % banners.length)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-opacity opacity-0 group-hover:opacity-100 cursor-pointer text-lg font-bold"
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-forest-950/60 hover:bg-forest-900 text-cream-100 flex items-center justify-center backdrop-blur-md transition-opacity opacity-0 group-hover:opacity-100 cursor-pointer text-xl font-bold border border-forest-800"
             aria-label="Next Banner"
           >
             ›
@@ -104,10 +109,11 @@ const BannerSlider: React.FC<BannerSliderProps> = ({ banners }) => {
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
             {banners.map((_, idx) => (
               <button
+                type="button"
                 key={idx}
                 onClick={() => setCurrentIdx(idx)}
                 className={`h-2 rounded-full transition-all cursor-pointer ${
-                  idx === currentIdx ? 'w-6 bg-brand-400' : 'w-2 bg-white/50 hover:bg-white/80'
+                  idx === currentIdx ? 'w-6 bg-leaf-400' : 'w-2 bg-cream-100/40 hover:bg-cream-100/70'
                 }`}
                 aria-label={`Go to slide ${idx + 1}`}
               />
@@ -143,9 +149,9 @@ export const HomePage: React.FC = () => {
     staleTime: 60000,
   });
 
-  const isServerFailure = Boolean(error && (!(error as any)?.response || ((error as any)?.response?.status >= 500)));
+  const isServerFailure = Boolean(error);
 
-  if (isServerFailure && fallbackProducts.length === 0) {
+  if (isServerFailure) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <ServerMaintenance onRetry={async () => { await refetch(); }} />
@@ -153,15 +159,15 @@ export const HomePage: React.FC = () => {
     );
   }
 
-  // Only show loading if we don't even have fallback data yet
-  if (isCmsLoading && fallbackProducts.length === 0 && fallbackCategories.length === 0) {
+  // Preserve skeleton loading state during initial data fetching
+  if (isCmsLoading && (!sections || sections.length === 0)) {
     return (
-      <div className="space-y-12 pb-24">
+      <div className="space-y-8 sm:space-y-12 pb-24">
         {banners.length > 0 && <BannerSlider banners={banners} />}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 pt-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-32 bg-white/60 rounded-3xl animate-pulse border border-white/50" />
+              <div key={i} className="h-32 bg-cream-100 rounded-3xl animate-pulse border border-line" />
             ))}
           </div>
           <ProductGridSkeleton count={4} />
@@ -177,40 +183,45 @@ export const HomePage: React.FC = () => {
         return null; // Default banner removed from customer website
 
       case 'categories': {
-        const catList: Category[] = (section.categories && section.categories.length > 0) ? section.categories : fallbackCategories;
+        const catList: Category[] = (
+          (section.categories && section.categories.length > 0)
+            ? section.categories
+            : fallbackCategories
+        ).filter((c: Category) => c.status === 'active');
         return (
-          <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="flex items-center justify-between mb-4 sm:mb-8">
+          <section id="categories-section" key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up scroll-mt-20">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
               <div>
-                <span className="text-[#0c831f] font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
+                <span className="text-leaf-700 font-bold text-[11px] sm:text-xs uppercase tracking-wider font-sans flex items-center gap-1.5">
+                  <Leaf className="w-3.5 h-3.5 text-leaf-500" />
                   {section.subtitle || 'Organized Harvest'}
                 </span>
-                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                <h2 className="font-serif text-xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-0.5">
                   {section.title}
                 </h2>
               </div>
               <Link
                 to={section.button_link || '/products'}
-                className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
+                className="text-xs sm:text-sm font-semibold text-forest-700 hover:text-forest-900 flex items-center gap-1 transition-colors group/link py-1 min-h-[44px]"
               >
                 <span>{section.button_text || 'View All'}</span>
-                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/link:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
-            <div className="flex overflow-x-auto no-scrollbar gap-3 pb-3 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-5">
+            <div className="flex overflow-x-auto no-scrollbar gap-3 pb-3 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-4 lg:gap-5">
               {catList.map((cat: Category) => (
                 <Link
                   key={cat.id}
                   to={`/categories/${cat.slug}`}
-                  className="group shrink-0 w-44 sm:w-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
+                  className="card-organic group shrink-0 w-36 xs:w-40 sm:w-auto p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-surface border border-line hover:border-leaf-500 shadow-soft hover:shadow-soft-md flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
                 >
-                  <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
+                  <div className="w-24 h-24 xs:w-28 xs:h-28 sm:w-36 sm:h-36 lg:w-40 lg:h-40 rounded-2xl bg-cream-100/80 group-hover:bg-sage-100/60 flex items-center justify-center overflow-hidden mb-2.5 sm:mb-3 transition-all duration-300 border border-line/60 shadow-soft">
                     {cat.image ? (
                       <img
                         src={getProductImageUrl(cat.image, cat.name)}
                         alt={cat.name}
-                        className="w-full h-full object-cover rounded-2xl sm:rounded-3xl group-hover:scale-108 transition-transform duration-500 ease-out"
+                        className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500 ease-out"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                         }}
@@ -231,10 +242,12 @@ export const HomePage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <h3 className="font-black text-slate-900 text-sm sm:text-base lg:text-lg group-hover:text-[#0c831f] transition-colors truncate max-w-full tracking-tight">
+                  <h3 className="font-serif font-bold text-ink-900 text-sm sm:text-base group-hover:text-forest-900 transition-colors truncate max-w-full tracking-tight">
                     {cat.name}
                   </h3>
-                  <span className="text-[10px] sm:text-xs text-slate-400 group-hover:text-emerald-600 mt-1 font-semibold transition-colors">Fresh Harvest</span>
+                  <span className="text-[10px] sm:text-xs text-ink-500 group-hover:text-leaf-700 mt-0.5 font-sans font-medium transition-colors">
+                    Fresh Harvest
+                  </span>
                 </Link>
               ))}
             </div>
@@ -244,34 +257,43 @@ export const HomePage: React.FC = () => {
 
       case 'fresh_arrivals':
       case 'featured_products': {
-        const prodList: Product[] = (section.products && section.products.length > 0) ? section.products : fallbackProducts;
+        // Only active products from database catalog; no hardcoded/fake demo fallback
+        const prodList: Product[] = (
+          (section.products && section.products.length > 0)
+            ? section.products
+            : fallbackProducts.filter((p: Product) => p.featured)
+        ).filter((p: Product) => p.status === 'active');
         return (
           <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="flex items-center justify-between mb-4 sm:mb-8">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
               <div>
-                <span className="text-[#0c831f] font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
+                <span className="text-leaf-700 font-bold text-[11px] sm:text-xs uppercase tracking-wider font-sans flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-leaf-500" />
                   {section.subtitle || 'Hand-Picked At Dawn'}
                 </span>
-                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                <h2 className="font-serif text-xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-0.5">
                   {section.title}
                 </h2>
               </div>
               <Link
                 to={section.button_link || '/products'}
-                className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
+                className="text-xs sm:text-sm font-semibold text-forest-700 hover:text-forest-900 flex items-center gap-1 transition-colors group/link py-1 min-h-[44px]"
               >
                 <span>{section.button_text || 'Explore'}</span>
-                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/link:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
             {prodList.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2 shadow-xs">
-                <p className="text-sm font-bold text-slate-700">Fresh Harvest Coming Soon</p>
-                <p className="text-xs text-slate-400">Our farmers are currently preparing fresh seasonal vegetables for this rail.</p>
+              <div className="bg-surface rounded-2xl border border-line p-8 text-center space-y-2 shadow-soft max-w-md mx-auto">
+                <div className="w-10 h-10 rounded-full bg-sage-100 text-forest-700 flex items-center justify-center mx-auto mb-2">
+                  <Leaf className="w-5 h-5 text-forest-700" />
+                </div>
+                <p className="font-serif font-bold text-sm text-ink-900">Fresh Harvest Coming Soon</p>
+                <p className="text-xs text-ink-500 font-sans leading-relaxed">Our partner growers are currently preparing fresh seasonal vegetables for this rail.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
                 {prodList.map((p: Product) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
@@ -282,43 +304,48 @@ export const HomePage: React.FC = () => {
       }
 
       case 'best_sellers': {
-        const bestProds = fallbackProducts.filter((p: Product) => p.best_seller);
-        const prodList: Product[] = (section.products && section.products.length > 0)
-          ? section.products
-          : (bestProds.length > 0 ? bestProds : fallbackProducts);
+        // Only active products from database catalog; no hardcoded/fake demo fallback
+        const prodList: Product[] = (
+          (section.products && section.products.length > 0)
+            ? section.products
+            : fallbackProducts.filter((p: Product) => p.best_seller)
+        ).filter((p: Product) => p.status === 'active');
         return (
           <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="flex items-center justify-between mb-4 sm:mb-8">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
               <div>
-                <span className="text-amber-600 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
+                <span className="text-marigold-600 font-bold text-[11px] sm:text-xs uppercase tracking-wider font-sans flex items-center gap-1.5">
+                  <Star className="w-3.5 h-3.5 text-marigold-500 fill-marigold-400" />
                   {section.subtitle || 'Trending In Kitchens'}
                 </span>
-                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                <h2 className="font-serif text-xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-0.5">
                   {section.title}
                 </h2>
               </div>
               <Link
                 to={section.button_link || '/products?best_seller=true'}
-                className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
+                className="text-xs sm:text-sm font-semibold text-forest-700 hover:text-forest-900 flex items-center gap-1 transition-colors group/link py-1 min-h-[44px]"
               >
                 <span>{section.button_text || 'View All'}</span>
-                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/link:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
             {prodList.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2 shadow-xs">
-                <p className="text-sm font-bold text-slate-700">Fresh Harvest Coming Soon</p>
-                <p className="text-xs text-slate-400">Our farmers are currently preparing fresh seasonal vegetables for this rail.</p>
+              <div className="bg-surface rounded-2xl border border-line p-8 text-center space-y-2 shadow-soft max-w-md mx-auto">
+                <div className="w-10 h-10 rounded-full bg-sage-100 text-forest-700 flex items-center justify-center mx-auto mb-2">
+                  <Leaf className="w-5 h-5 text-forest-700" />
+                </div>
+                <p className="font-serif font-bold text-sm text-ink-900">Fresh Harvest Coming Soon</p>
+                <p className="text-xs text-ink-500 font-sans leading-relaxed">Our partner growers are currently preparing fresh seasonal vegetables for this rail.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
                 {prodList.map((p: Product) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
               </div>
             )}
-
           </section>
         );
       }
@@ -327,30 +354,31 @@ export const HomePage: React.FC = () => {
       case 'promotional_banner': {
         const coupon = section.configuration?.coupon_code || 'WELCOME50';
         return (
-          <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="bg-gradient-to-r from-[#0c831f] via-[#108934] to-[#046c1c] rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-lg border border-emerald-600/30">
-              <div className="space-y-3 z-10 text-center md:text-left">
-                <span className="inline-flex items-center gap-1.5 bg-[#ffc72c] text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider">
+          <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+            <div className="bg-gradient-to-br from-forest-900 via-forest-850 to-forest-950 rounded-3xl p-6 sm:p-10 lg:p-12 text-cream-50 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-soft-lg border border-forest-800">
+              <div className="space-y-3 z-10 text-center md:text-left max-w-xl">
+                <span className="inline-flex items-center gap-1.5 bg-marigold-500 text-forest-950 font-bold text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider shadow-soft">
                   <Tag className="w-3.5 h-3.5" />
-                  <span>{section.subtitle || 'Limited Time Special'}</span>
+                  <span>{section.subtitle || 'Seasonal Offer'}</span>
                 </span>
-                <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+                <h3 className="font-serif text-2xl sm:text-4xl font-bold text-cream-50 tracking-tight leading-tight">
                   {section.title}
                 </h3>
-                <p className="text-emerald-50 text-sm max-w-lg font-medium">
+                <p className="text-forest-200/90 text-xs sm:text-sm font-sans leading-relaxed">
                   {section.description || `Use promo coupon code ${coupon} at checkout for instant savings.`}
                 </p>
-                <div className="inline-block bg-white/20 border border-white/30 px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-white shadow-xs">
-                  Code: <strong className="text-[#ffc72c] underline">{coupon}</strong>
+                <div className="inline-block bg-forest-800/80 border border-leaf-500/30 px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-cream-100 shadow-soft">
+                  Code: <strong className="text-marigold-400 font-extrabold tracking-wide">{coupon}</strong>
                 </div>
               </div>
 
-              <div className="z-10 flex-shrink-0">
+              <div className="z-10 shrink-0">
                 <Link
                   to={section.button_link || '/products'}
-                  className="bg-[#ffc72c] hover:bg-[#f5b81a] text-slate-950 font-black px-8 py-4 rounded-xl text-sm shadow-md inline-block transition-transform hover:scale-105"
+                  className="btn-pill-primary bg-marigold-500 hover:bg-marigold-400 text-forest-950 font-bold px-7 py-3.5 rounded-full text-xs sm:text-sm shadow-soft inline-flex items-center gap-2 transition-all hover:scale-102 min-h-[44px]"
                 >
-                  {section.button_text || 'Claim Offer Now'}
+                  <span>{section.button_text || 'Claim Offer Now'}</span>
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
             </div>
@@ -362,32 +390,32 @@ export const HomePage: React.FC = () => {
         const pillars = section.configuration?.pillars || [
           { title: 'Harvested Daily', desc: 'Directly sourced from trusted regional partner farmers.' },
           { title: 'Carefully Sorted & Cleaned', desc: 'Thoroughly sorted and cleaned before hygienic packaging.' },
-          { title: 'Eco-Friendly Packaging', desc: 'Hygienic, food-safe packaging designed to preserve freshness.' },
-          { title: 'Local Delivery Service', desc: 'Fast delivery within our configured 5 km delivery radius.' },
+          { title: '5 KM Delivery Radius', desc: 'Dedicated local dispatch within 5 km of our Champapet and KPHB delivery hubs.' },
+          { title: 'Hygienic Packaging', desc: 'Food-safe packaging designed to preserve natural freshness.' },
         ];
         return (
-          <section key={section.id} className="bg-white border border-slate-200/90 mx-4 sm:mx-6 lg:mx-8 py-14 animate-slide-up rounded-3xl shadow-xs">
+          <section key={section.id} className="bg-surface border border-line mx-3 sm:mx-6 lg:mx-8 py-10 sm:py-14 animate-slide-up rounded-3xl shadow-soft">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="text-center max-w-2xl mx-auto mb-12">
-                <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
+              <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12">
+                <span className="text-leaf-700 font-bold text-xs uppercase tracking-wider font-sans">
                   {section.subtitle || 'The Fresh Vegetables Promise'}
                 </span>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight mt-1">
+                <h2 className="font-serif text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-1">
                   {section.title}
                 </h2>
-                <p className="text-slate-500 text-sm mt-2">
-                  {section.description || 'From farm soil to your kitchen within 12 hours.'}
+                <p className="text-ink-500 text-xs sm:text-sm mt-1.5 font-sans">
+                  {section.description || 'Fresh produce delivered within 5 km of our Champapet and KPHB hubs.'}
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 {pillars.map((pil: any, idx: number) => (
-                  <div key={idx} className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#0c831f] flex items-center justify-center font-bold">
-                      <CheckCircle2 className="w-5 h-5" />
+                  <div key={idx} className="p-5 sm:p-6 rounded-2xl bg-cream-50/70 border border-line hover:border-leaf-500/40 shadow-soft transition-all space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-sage-100 text-forest-700 flex items-center justify-center font-bold">
+                      <CheckCircle2 className="w-5 h-5 text-forest-700" />
                     </div>
-                    <h4 className="font-extrabold text-sm text-slate-900">{pil.title}</h4>
-                    <p className="text-xs text-slate-500 leading-relaxed">{pil.desc}</p>
+                    <h4 className="font-serif font-bold text-sm text-ink-900">{pil.title}</h4>
+                    <p className="text-xs text-ink-500 leading-relaxed font-sans">{pil.desc}</p>
                   </div>
                 ))}
               </div>
@@ -402,30 +430,30 @@ export const HomePage: React.FC = () => {
           return null;
         }
         return (
-          <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="text-center max-w-2xl mx-auto mb-10">
-              <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
+          <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+            <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">
+              <span className="text-leaf-700 font-bold text-xs uppercase tracking-wider font-sans">
                 {section.subtitle || 'Customer Trust'}
               </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
+              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-1">
                 {section.title}
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               {reviews.map((rev: any, idx: number) => (
-                <div key={idx} className="p-7 rounded-2xl bg-white border border-slate-200 shadow-xs hover:shadow-md space-y-4">
-                  <div className="flex items-center gap-1 text-amber-400">
+                <div key={idx} className="p-6 sm:p-7 rounded-2xl bg-surface border border-line shadow-soft hover:shadow-soft-md space-y-4 transition-all">
+                  <div className="flex items-center gap-1 text-marigold-400">
                     {[...Array(rev.rating || 5)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 fill-amber-400" />
+                      <Star key={i} className="w-4 h-4 fill-marigold-400" />
                     ))}
                   </div>
-                  <p className="text-xs text-slate-600 leading-relaxed italic">
+                  <p className="text-xs sm:text-sm text-ink-700 leading-relaxed italic font-sans">
                     "{rev.comment}"
                   </p>
-                  <div className="border-t border-slate-100 pt-3">
-                    <p className="font-bold text-xs text-slate-900">{rev.name}</p>
-                    <p className="text-[10px] text-slate-400">{rev.role}</p>
+                  <div className="border-t border-line/60 pt-3">
+                    <p className="font-bold text-xs text-ink-900">{rev.name}</p>
+                    <p className="text-[10px] text-ink-400">{rev.role}</p>
                   </div>
                 </div>
               ))}
@@ -436,28 +464,29 @@ export const HomePage: React.FC = () => {
 
       case 'app_promotion': {
         return (
-          <section key={section.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="bg-slate-950 text-white rounded-3xl p-8 sm:p-12 border border-slate-800 grid grid-cols-1 md:grid-cols-12 gap-8 items-center shadow-2xl">
-              <div className="md:col-span-8 space-y-3">
-                <span className="text-brand-400 font-black text-xs uppercase tracking-wider">
-                  {section.subtitle || 'Progressive Mobile App'}
+          <section key={section.id} className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+            <div className="bg-forest-950 text-cream-50 rounded-3xl p-6 sm:p-10 lg:p-12 border border-forest-850 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 items-center shadow-soft-lg">
+              <div className="md:col-span-8 space-y-2 sm:space-y-3">
+                <span className="text-leaf-400 font-bold text-xs uppercase tracking-wider font-sans">
+                  {section.subtitle || 'Mobile Convenience'}
                 </span>
-                <h3 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                <h3 className="font-serif text-2xl sm:text-3xl font-bold text-cream-50 tracking-tight">
                   {section.title}
                 </h3>
-                <p className="text-slate-400 text-xs sm:text-sm max-w-xl">
-                  {section.description || 'Get lightning-fast 1-tap checkout, live delivery GPS tracking, and subscriber discounts right from your home screen.'}
+                <p className="text-forest-200/90 text-xs sm:text-sm max-w-xl font-sans leading-relaxed">
+                  {section.description || 'Enjoy seamless ordering and fast live tracking from your smartphone home screen.'}
                 </p>
               </div>
 
               <div className="md:col-span-4 flex justify-start md:justify-end">
                 <button
+                  type="button"
                   onClick={() => {
                     const evt = new CustomEvent('trigger-pwa-install');
                     window.dispatchEvent(evt);
                     alert('Tap your browser menu and choose "Add to Home Screen" to install Fresh Veggies!');
                   }}
-                  className="bg-brand-500 hover:bg-brand-400 text-slate-950 font-black px-6 py-4 rounded-2xl text-xs flex items-center gap-2 shadow-xl shadow-brand-500/25 transition-transform hover:scale-105"
+                  className="btn-pill-primary bg-leaf-500 hover:bg-leaf-400 text-forest-950 font-bold px-6 py-3.5 rounded-full text-xs sm:text-sm flex items-center gap-2 shadow-soft transition-all hover:scale-102 min-h-[44px] cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
                   <span>{section.button_text || 'Install App (Free)'}</span>
@@ -474,7 +503,7 @@ export const HomePage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 sm:space-y-12 pb-24 md:pb-12">
+    <div className="space-y-8 sm:space-y-12 pb-24 md:pb-16">
       {/* Dynamic SEO Meta & Structured Data */}
       <SEOHead
         title="Fresh Vegetables Organic Hyderabad | Buy Fresh Vegetables Online"
@@ -482,59 +511,36 @@ export const HomePage: React.FC = () => {
         canonicalUrl="https://fresh-vegetables-organic.vercel.app/"
       />
 
-      {/* Primary Brand H1 & Regional Delivery Notice */}
-      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-1">
-        <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-xs border border-emerald-800/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-2xl">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] sm:text-xs font-bold tracking-wide uppercase">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
-              Direct From Farmers • Hyderabad
-            </span>
-            <h1 className="text-xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
-              Fresh Vegetables Organic Hyderabad
-            </h1>
-            <p className="text-emerald-100/90 text-xs sm:text-sm font-medium leading-relaxed">
-              Buy fresh vegetables online with Fresh Vegetables Organic in Hyderabad. Discover farm-fresh produce and convenient doorstep delivery within our 5 km Champapet service zone.
-            </p>
-          </div>
-          <div className="flex items-center gap-2.5 shrink-0">
-            <Link
-              to="/products"
-              className="px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-black text-xs sm:text-sm transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>Explore All Vegetables</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* Cinematic Interactive 3D Hero Section */}
+      <Hero3DSection onCheckLocation={() => setIsLocationModalOpen(true)} />
 
       {/* Outside 5 km Service Area Prominent Banner */}
       {serviceability.checked && !serviceability.serviceable && (
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3">
-          <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-300 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
+        <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-1">
+          <div className="p-4 sm:p-5 rounded-2xl bg-marigold-50 border border-marigold-200/80 shadow-soft flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-ink-900">
             <div className="flex items-start sm:items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
-                <AlertCircle className="w-5 h-5 text-amber-600" />
+              <div className="w-10 h-10 rounded-xl bg-marigold-100 border border-marigold-200 text-marigold-800 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                <AlertCircle className="w-5 h-5 text-marigold-700" />
               </div>
               <div>
-                <h3 className="font-black text-sm sm:text-base text-amber-950">
-                  Sorry, we are currently unavailable in your area.
+                <h3 className="font-serif font-bold text-sm sm:text-base text-ink-900">
+                  Delivery is currently unavailable at your selected location
                 </h3>
-                <p className="text-xs text-amber-800 mt-0.5">
-                  Your selected location is outside our 5 km delivery zone. Choose a different location to check availability.
+                <p className="text-xs text-ink-600 mt-0.5 font-sans leading-relaxed">
+                  Your selected location is outside our 5 km delivery radius. Select another address to check serviceability.
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setIsLocationModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-98 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer whitespace-nowrap self-start sm:self-center"
+              className="px-4 py-2.5 rounded-full bg-forest-900 hover:bg-forest-850 active:scale-98 text-cream-50 font-semibold text-xs shadow-soft transition-all cursor-pointer whitespace-nowrap self-start sm:self-center min-h-[44px] flex items-center gap-2"
             >
-              Choose a Different Location
+              <MapPin className="w-3.5 h-3.5 text-leaf-400" />
+              <span>Choose Another Location</span>
             </button>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Dynamic Banner Slider for admin-uploaded banners (if any) */}
@@ -547,38 +553,39 @@ export const HomePage: React.FC = () => {
         <>
           {/* Harvest Categories Rail */}
           {fallbackCategories.length > 0 && (
-            <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
-              <div className="flex items-center justify-between mb-4 sm:mb-8">
+            <section id="categories-section" className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up scroll-mt-20">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <div>
-                  <span className="text-[#0c831f] font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
+                  <span className="text-leaf-700 font-bold text-[11px] sm:text-xs uppercase tracking-wider font-sans flex items-center gap-1.5">
+                    <Leaf className="w-3.5 h-3.5 text-leaf-500" />
                     Organized Harvest
                   </span>
-                  <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  <h2 className="font-serif text-xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-0.5">
                     Shop by Harvest Category
                   </h2>
                 </div>
                 <Link
                   to="/products"
-                  className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
+                  className="text-xs sm:text-sm font-semibold text-forest-700 hover:text-forest-900 flex items-center gap-1 transition-colors group/link py-1 min-h-[44px]"
                 >
                   <span>View All</span>
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/link:translate-x-0.5 transition-transform" />
                 </Link>
               </div>
 
-              <div className="flex overflow-x-auto no-scrollbar gap-3 pb-3 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-5">
+              <div className="flex overflow-x-auto no-scrollbar gap-3 pb-3 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:gap-4 lg:gap-5">
                 {fallbackCategories.map((cat: Category) => (
                   <Link
                     key={cat.id}
                     to={`/categories/${cat.slug}`}
-                    className="group shrink-0 w-44 sm:w-auto p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 hover:border-emerald-500 shadow-xs hover:shadow-lg flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
+                    className="card-organic group shrink-0 w-36 xs:w-40 sm:w-auto p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-surface border border-line hover:border-leaf-500 shadow-soft hover:shadow-soft-md flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 cursor-pointer select-none"
                   >
-                    <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-2xl sm:rounded-3xl bg-emerald-50/70 group-hover:bg-emerald-100/80 flex items-center justify-center overflow-hidden mb-3 sm:mb-4 transition-all duration-300 shadow-xs group-hover:shadow-md">
+                    <div className="w-24 h-24 xs:w-28 xs:h-28 sm:w-36 sm:h-36 lg:w-40 lg:h-40 rounded-2xl bg-cream-100/80 group-hover:bg-sage-100/60 flex items-center justify-center overflow-hidden mb-2.5 sm:mb-3 transition-all duration-300 border border-line/60 shadow-soft">
                       {cat.image ? (
                         <img
                           src={getProductImageUrl(cat.image, cat.name)}
                           alt={cat.name}
-                          className="w-full h-full object-cover rounded-2xl sm:rounded-3xl group-hover:scale-108 transition-transform duration-500 ease-out"
+                          className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500 ease-out"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}
@@ -599,10 +606,12 @@ export const HomePage: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <h3 className="font-black text-slate-900 text-sm sm:text-base lg:text-lg group-hover:text-[#0c831f] transition-colors truncate max-w-full tracking-tight">
+                    <h3 className="font-serif font-bold text-ink-900 text-sm sm:text-base group-hover:text-forest-900 transition-colors truncate max-w-full tracking-tight">
                       {cat.name}
                     </h3>
-                    <span className="text-[10px] sm:text-xs text-slate-400 group-hover:text-emerald-600 mt-1 font-semibold transition-colors">Fresh Harvest</span>
+                    <span className="text-[10px] sm:text-xs text-ink-500 group-hover:text-leaf-700 mt-0.5 font-sans font-medium transition-colors">
+                      Fresh Harvest
+                    </span>
                   </Link>
                 ))}
               </div>
@@ -612,25 +621,26 @@ export const HomePage: React.FC = () => {
           {/* Featured Fresh Harvest Produce Rail */}
           {fallbackProducts.length > 0 && (
             <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
-              <div className="flex items-center justify-between mb-4 sm:mb-8">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <div>
-                  <span className="text-[#0c831f] font-extrabold text-[11px] sm:text-xs uppercase tracking-wider">
+                  <span className="text-leaf-700 font-bold text-[11px] sm:text-xs uppercase tracking-wider font-sans flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-leaf-500" />
                     Hand-Picked At Dawn
                   </span>
-                  <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  <h2 className="font-serif text-xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-0.5">
                     Handpicked Fresh Today
                   </h2>
                 </div>
                 <Link
                   to="/products"
-                  className="text-xs sm:text-sm font-bold text-[#0c831f] hover:text-emerald-800 flex items-center gap-1"
+                  className="text-xs sm:text-sm font-semibold text-forest-700 hover:text-forest-900 flex items-center gap-1 transition-colors group/link py-1 min-h-[44px]"
                 >
                   <span>Explore</span>
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/link:translate-x-0.5 transition-transform" />
                 </Link>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
                 {fallbackProducts.map((p: Product) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
@@ -639,63 +649,64 @@ export const HomePage: React.FC = () => {
           )}
 
           {/* Promotional Special Offer */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-slide-up">
-            <div className="bg-gradient-to-r from-[#0c831f] via-[#108934] to-[#046c1c] rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-lg border border-emerald-600/30">
-              <div className="space-y-3 z-10 text-center md:text-left">
-                <span className="inline-flex items-center gap-1.5 bg-[#ffc72c] text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider">
+          <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 animate-slide-up">
+            <div className="bg-gradient-to-br from-forest-900 via-forest-850 to-forest-950 rounded-3xl p-6 sm:p-10 lg:p-12 text-cream-50 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-soft-lg border border-forest-800">
+              <div className="space-y-3 z-10 text-center md:text-left max-w-xl">
+                <span className="inline-flex items-center gap-1.5 bg-marigold-500 text-forest-950 font-bold text-xs px-3.5 py-1.5 rounded-full uppercase tracking-wider shadow-soft">
                   <Tag className="w-3.5 h-3.5" />
                   <span>Limited Time Special</span>
                 </span>
-                <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+                <h3 className="font-serif text-2xl sm:text-4xl font-bold text-cream-50 tracking-tight leading-tight">
                   Super Saver Farm Offer
                 </h3>
-                <p className="text-emerald-50 text-sm max-w-lg font-medium">
-                  Use promo coupon code <strong className="text-[#ffc72c]">FRESH20</strong> at checkout for 20% instant savings on your fresh morning harvest.
+                <p className="text-forest-200/90 text-xs sm:text-sm font-sans leading-relaxed">
+                  Use promo coupon code <strong className="text-marigold-400 font-extrabold">FRESH20</strong> at checkout for 20% savings on your fresh morning harvest order.
                 </p>
-                <div className="inline-block bg-white/20 border border-white/30 px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-white shadow-xs">
-                  Code: <strong className="text-[#ffc72c] underline">FRESH20</strong>
+                <div className="inline-block bg-forest-800/80 border border-leaf-500/30 px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold text-cream-100 shadow-soft">
+                  Code: <strong className="text-marigold-400 font-extrabold tracking-wide">FRESH20</strong>
                 </div>
               </div>
 
-              <div className="z-10 flex-shrink-0">
+              <div className="z-10 shrink-0">
                 <Link
                   to="/products"
-                  className="bg-[#ffc72c] hover:bg-[#f5b81a] text-slate-950 font-black px-8 py-4 rounded-xl text-sm shadow-md inline-block transition-transform hover:scale-105"
+                  className="btn-pill-primary bg-marigold-500 hover:bg-marigold-400 text-forest-950 font-bold px-7 py-3.5 rounded-full text-xs sm:text-sm shadow-soft inline-flex items-center gap-2 transition-all hover:scale-102 min-h-[44px]"
                 >
-                  Claim Offer Now
+                  <span>Claim Offer Now</span>
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
             </div>
           </section>
 
           {/* Farm-to-Fork Trust Pillars */}
-          <section className="bg-white border border-slate-200/90 mx-4 sm:mx-6 lg:mx-8 py-14 animate-slide-up rounded-3xl shadow-xs">
+          <section className="bg-surface border border-line mx-3 sm:mx-6 lg:mx-8 py-10 sm:py-14 animate-slide-up rounded-3xl shadow-soft">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="text-center max-w-2xl mx-auto mb-12">
-                <span className="text-[#0c831f] font-extrabold text-xs uppercase tracking-wider">
+              <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12">
+                <span className="text-leaf-700 font-bold text-xs uppercase tracking-wider font-sans">
                   The Pure Farm Promise
                 </span>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight mt-1">
+                <h2 className="font-serif text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-1">
                   Why Choose Fresh Vegetables?
                 </h2>
-                <p className="text-slate-500 text-sm mt-2">
-                  From farm soil to your kitchen within 12 hours.
+                <p className="text-ink-500 text-xs sm:text-sm mt-1.5 font-sans">
+                  Fresh produce delivered within 5 km of our Champapet and KPHB hubs.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 {[
-                  { title: 'Harvested at 4 AM', desc: 'Directly sourced from trusted regional partner farmers.' },
-                  { title: 'Ozone Washed & Safe', desc: 'Gentle sanitization eliminating dust and bacteria without heat.' },
-                  { title: 'Eco Biodegradable Bags', desc: '100% plastic-free compostable kraft packaging.' },
-                  { title: '15-Minute Speed Dispatch', desc: 'Temperature controlled EV delivery straight to your doorstep.' },
+                  { title: 'Harvested Daily', desc: 'Directly sourced from trusted regional partner farms.' },
+                  { title: 'Hand-Sorted & Cleaned', desc: 'Carefully inspected and cleaned before hygienic packaging.' },
+                  { title: '5 KM Delivery Radius', desc: 'Dedicated local dispatch within 5 km of our Champapet and KPHB hubs.' },
+                  { title: 'Hygienic Packaging', desc: 'Food-safe packaging designed to preserve natural freshness.' },
                 ].map((pil, idx) => (
-                  <div key={idx} className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#0c831f] flex items-center justify-center font-bold">
-                      <CheckCircle2 className="w-5 h-5" />
+                  <div key={idx} className="p-5 sm:p-6 rounded-2xl bg-cream-50/70 border border-line hover:border-leaf-500/40 shadow-soft transition-all space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-sage-100 text-forest-700 flex items-center justify-center font-bold">
+                      <CheckCircle2 className="w-5 h-5 text-forest-700" />
                     </div>
-                    <h4 className="font-extrabold text-sm text-slate-900">{pil.title}</h4>
-                    <p className="text-xs text-slate-500 leading-relaxed">{pil.desc}</p>
+                    <h4 className="font-serif font-bold text-sm text-ink-900">{pil.title}</h4>
+                    <p className="text-xs text-ink-500 leading-relaxed font-sans">{pil.desc}</p>
                   </div>
                 ))}
               </div>
@@ -703,6 +714,9 @@ export const HomePage: React.FC = () => {
           </section>
         </>
       )}
+
+      {/* Interactive 3D Farm Experience ("From Farm to Your Home") */}
+      <FarmExperienceSection />
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Phone, Lock, ArrowRight, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Sparkles, Loader2, AlertCircle, CheckCircle2, HeartHandshake } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { SEOHead } from '../../components/common/SEOHead';
@@ -29,30 +29,16 @@ const GoogleIcon = () => (
 
 export const RegisterPage: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/';
+  const rawRedirect = searchParams.get('redirect') || '/';
+  const redirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/';
   const navigate = useNavigate();
   const { login, showLoginSuccess } = useAuth();
 
-  // Customer Form Fields
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-
-  // Password Visibility Toggle States (Operate Independently)
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  // Status & Error
-  const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [alreadyExists, setAlreadyExists] = useState(false);
 
   const handleGoogleAuth = async () => {
     setErrorMsg('');
-    setAlreadyExists(false);
 
     try {
       setIsGoogleLoading(true);
@@ -83,336 +69,111 @@ export const RegisterPage: React.FC = () => {
       } else if (err.message) {
         setErrorMsg(err.message);
       } else {
-        setErrorMsg('Failed to sign up with Google. Please try again or use email.');
+        setErrorMsg('Failed to sign up with Google. Please try again.');
       }
     } finally {
       setIsGoogleLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setAlreadyExists(false);
-
-    const cleanName = name.trim();
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
-
-    // Validation
-    if (cleanName.length < 2) {
-      setErrorMsg('Please enter your full name (at least 2 characters).');
-      return;
-    }
-
-    if (!cleanEmail) {
-      setErrorMsg('Please enter a valid email address.');
-      return;
-    }
-
-    if (!cleanMobile || cleanMobile.length !== 10 || !/^[6-9]\d{9}$/.test(cleanMobile)) {
-      setErrorMsg('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
-      return;
-    }
-
-    if (password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters long.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setErrorMsg('Passwords do not match. Please verify your confirm password.');
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-
-      const res = await api.post('/auth/register', {
-        name: cleanName,
-        email: cleanEmail,
-        mobile: cleanMobile,
-        password,
-      });
-
-      if (res.data?.data) {
-        const { token, accessToken, user, refreshToken } = res.data.data;
-        login(accessToken || token, user, refreshToken);
-        showLoginSuccess(user, false, () => {
-          navigate(redirect);
-        });
-      }
-    } catch (err: any) {
-      console.error('Customer registration error:', err);
-      const serverMsg = err.response?.data?.message;
-      if (serverMsg) {
-        setErrorMsg(serverMsg);
-        if (serverMsg.toLowerCase().includes('already registered')) {
-          setAlreadyExists(true);
-        }
-      } else if (err.response?.status === 409) {
-        setAlreadyExists(true);
-        setErrorMsg('An account with this email or mobile number already exists.');
-      } else {
-        setErrorMsg('Failed to create account. Please try again.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-      <SEOHead title="Customer Registration | Fresh Vegetables Organic" noindex={true} />
-      <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200/80 shadow-xl p-8 sm:p-10 space-y-6">
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 font-sans animate-slide-up">
+      <SEOHead title="Create Customer Account | Fresh Vegetables Organic" noindex={true} />
+      <div className="max-w-md w-full bg-surface rounded-3xl border border-line shadow-soft-xl p-8 sm:p-10 space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
           <img
             src="/logo.png"
             alt="Fresh Vegetables Organic"
-            className="w-20 h-20 rounded-full object-cover mx-auto shadow-md shadow-brand-500/20 ring-4 ring-brand-50"
+            className="w-20 h-20 rounded-full object-cover mx-auto shadow-soft ring-4 ring-sage-100 border border-line"
           />
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            Create an Account
-          </h2>
-          <p className="text-xs text-slate-500">
-            Join thousands enjoying daily crisp, farm-picked organic vegetables
+          <h1 className="font-serif text-2xl font-bold text-ink-900 tracking-tight">
+            Join Fresh Vegetables
+          </h1>
+          <p className="text-xs text-ink-500 font-sans leading-relaxed">
+            Get fresh, organic farm produce delivered directly to your doorstep in Hyderabad.
           </p>
         </div>
 
         {/* Error Notification */}
         {errorMsg && (
-          <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-2xl flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+          <div className="p-3.5 bg-tomato-50 border border-tomato-200/80 text-tomato-600 text-xs font-semibold rounded-2xl flex items-start gap-2.5 shadow-soft">
+            <AlertCircle className="w-4 h-4 text-tomato-500 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p>{errorMsg}</p>
-              {alreadyExists && (
-                <Link
-                  to={`/login?redirect=${encodeURIComponent(redirect)}`}
-                  className="inline-block text-[#0c831f] hover:underline font-black mt-1"
-                >
-                  Click here to Log In &rarr;
-                </Link>
-              )}
             </div>
           </div>
         )}
 
-        {/* Google Authentication Button */}
-        <div>
+        {/* Google Authentication Button - Sole Customer Registration Method */}
+        <div className="space-y-3 pt-2">
           <button
             type="button"
             onClick={handleGoogleAuth}
-            disabled={isGoogleLoading || isLoading}
-            className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white hover:bg-slate-50 text-slate-800 font-bold text-sm rounded-xl border border-slate-300 shadow-sm hover:shadow transition-all active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+            disabled={isGoogleLoading}
+            className="w-full flex items-center justify-center gap-3 py-3.5 px-4 bg-surface hover:bg-cream-50 text-ink-900 font-bold text-sm rounded-full border border-line shadow-soft hover:shadow-soft-md transition-all active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer min-h-[48px]"
           >
             {isGoogleLoading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin text-slate-600" />
+                <Loader2 className="w-5 h-5 animate-spin text-forest-700" />
                 <span>Connecting with Google...</span>
               </>
             ) : (
               <>
                 <GoogleIcon />
-                <span>Continue with Google</span>
+                <span>Sign Up with Google</span>
               </>
             )}
           </button>
+
+          <p className="text-[11px] text-center text-ink-400 font-medium">
+            One-tap account creation • Zero password setup
+          </p>
         </div>
 
-        {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-200" />
+        {/* Farm Direct Benefits */}
+        <div className="p-4 bg-cream-50 border border-line rounded-2xl space-y-2.5">
+          <div className="flex items-center gap-2 text-forest-900 font-serif font-bold text-xs">
+            <Sparkles className="w-4 h-4 text-marigold-500" />
+            <span>Why Join Fresh Vegetables?</span>
           </div>
-          <div className="relative flex justify-center text-xs">
-            <span className="bg-white px-3 text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
-              or register with email
-            </span>
-          </div>
+          <ul className="text-[11px] text-ink-600 space-y-1.5 font-sans">
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-leaf-500 shrink-0 mt-0.5" />
+              <span><strong>100% Genuine Organic:</strong> Chemical-free, pesticide-free harvest.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-leaf-500 shrink-0 mt-0.5" />
+              <span><strong>Hyperlocal Hubs:</strong> Champapet Hub & KPHB Hub ensure express fresh fulfillment.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-leaf-500 shrink-0 mt-0.5" />
+              <span><strong>Order History & Wallet:</strong> Save multiple addresses, reorder quickly, track deliveries live.</span>
+            </li>
+          </ul>
         </div>
 
-        {/* Registration Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          {/* Full Name */}
+        {/* Footer Link to Login */}
+        <div className="text-center text-xs text-ink-500 pt-2 border-t border-line font-sans space-y-2">
           <div>
-            <label className="font-bold text-slate-700 block mb-1">
-              Full Name <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                required
-                autoFocus
-                placeholder="e.g. Rahul Sharma"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-800 text-sm"
-                aria-label="Full Name"
-              />
-              <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
+            Already have an account?{' '}
+            <Link
+              to={`/login?redirect=${encodeURIComponent(redirect)}`}
+              className="font-bold text-forest-700 hover:text-forest-900 transition-colors"
+            >
+              Sign In with Google
+            </Link>
           </div>
-
-          {/* Email Address */}
-          <div>
-            <label className="font-bold text-slate-700 block mb-1">
-              Email Address <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type="email"
-                required
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-800 text-sm"
-                aria-label="Email Address"
-              />
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
+          <div className="pt-2 text-[11px] text-ink-400">
+            Staff access:{' '}
+            <Link to="/admin/login" className="font-semibold text-ink-600 hover:text-forest-700 underline">
+              Admin Portal
+            </Link>
           </div>
-
-          {/* Phone Number with default +91 mentioned */}
-          <div>
-            <label className="font-bold text-slate-700 block mb-1">
-              Phone Number <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative flex items-center">
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none select-none">
-                <span className="font-extrabold text-slate-700 text-xs bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
-                  +91
-                </span>
-              </div>
-              <input
-                type="tel"
-                required
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="9876543210"
-                value={mobile}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/\D/g, '');
-                  if (raw.length === 12 && raw.startsWith('91')) {
-                    setMobile(raw.slice(2));
-                  } else {
-                    setMobile(raw.slice(0, 10));
-                  }
-                }}
-                className="w-full pl-18 pr-10 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-800 text-sm tracking-wider"
-                aria-label="Phone Number"
-              />
-              <Phone className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1">
-              Enter your 10-digit Indian mobile number for order delivery updates
-            </p>
-          </div>
-
-          {/* Password with Eye View/Hide Toggle */}
-          <div>
-            <label className="font-bold text-slate-700 block mb-1">
-              Password <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative flex items-center">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                minLength={6}
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-12 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-800 text-sm"
-                aria-label="Password"
-              />
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                title={showPassword ? 'Hide password' : 'Show password'}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? (
-                  <EyeOff className="w-4 h-4 text-slate-600" />
-                ) : (
-                  <Eye className="w-4 h-4 text-slate-500" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Confirm Password with Eye View/Hide Toggle */}
-          <div>
-            <label className="font-bold text-slate-700 block mb-1">
-              Confirm Password <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative flex items-center">
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                required
-                minLength={6}
-                placeholder="Re-enter your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full pl-10 pr-12 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-800 text-sm"
-                aria-label="Confirm Password"
-              />
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((prev) => !prev)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="w-4 h-4 text-slate-600" />
-                ) : (
-                  <Eye className="w-4 h-4 text-slate-500" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={
-              isLoading ||
-              !name.trim() ||
-              !email.trim() ||
-              mobile.replace(/\D/g, '').length !== 10 ||
-              password.length < 6 ||
-              confirmPassword.length < 6
-            }
-            className="w-full bg-[#0c831f] hover:bg-emerald-700 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-700/25 flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Creating Account...</span>
-              </>
-            ) : (
-              <>
-                <span>Register & Start Shopping</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* Link to Sign In */}
-        <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
-          Already have an account?{' '}
-          <Link
-            to={`/login?redirect=${encodeURIComponent(redirect)}`}
-            className="font-bold text-[#0c831f] hover:text-emerald-700"
-          >
-            Sign In Here
-          </Link>
         </div>
       </div>
     </div>
   );
 };
+
+export default RegisterPage;

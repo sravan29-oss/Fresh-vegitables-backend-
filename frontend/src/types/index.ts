@@ -40,6 +40,11 @@ export interface Product {
   category_slug?: string;
   discount?: number;
   stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock';
+  average_rating?: number;
+  review_count?: number;
+  seo_title?: string;
+  seo_description?: string;
+  image_alt_text?: string;
   variants?: ProductVariant[];
   created_at?: string;
 }
@@ -131,6 +136,13 @@ export interface Order {
   delivery_address: any;
   address_snapshot?: any;
   notes?: string;
+  assigned_hub_id?: string | null;
+  assigned_hub_code?: string | null;
+  assigned_hub_name?: string | null;
+  assigned_hub_address?: string | null;
+  hub_distance_km?: number | null;
+  confirmed_eta?: string | null;
+  delivery_zone_name?: string | null;
   admin_email_sent?: boolean;
   admin_email_sent_at?: string | null;
   admin_email_error?: string | null;
@@ -250,7 +262,7 @@ export interface Refund {
   created_at: string;
 }
 
-// ================= Phase 8 & 9: Delivery & Tracking =================
+// ================= Phase 8 & 9 & 11 & 12: Delivery & Tracking =================
 export interface DeliveryPartner {
   id: string;
   name: string;
@@ -260,11 +272,18 @@ export interface DeliveryPartner {
   vehicle_type: string;
   vehicle_number: string;
   status: 'OFFLINE' | 'AVAILABLE' | 'BUSY' | 'ON_DELIVERY' | 'SUSPENDED';
-  availability?: string;
+  availability?: string | boolean;
+  assigned_hub_id?: string;
+  assigned_hub_name?: string;
+  is_active?: boolean;
+  pin_code?: string;
   latitude: number;
   longitude: number;
   rating?: number;
   total_deliveries?: number;
+  failed_deliveries?: number;
+  active_tasks_count?: number;
+  last_location_at?: string;
   created_at?: string;
 }
 
@@ -274,12 +293,57 @@ export interface DeliveryAssignment {
   delivery_partner_id: string;
   partner_name?: string;
   partner_phone?: string;
-  status: 'ASSIGNED' | 'ACCEPTED' | 'HEADING_TO_STORE' | 'PICKED_UP' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'CANCELLED';
+  status: 'ASSIGNED' | 'DRIVER_ASSIGNED' | 'ACCEPTED' | 'READY_FOR_PICKUP' | 'HEADING_TO_STORE' | 'PICKED_UP' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'DELIVERY_FAILED' | 'CANCELLED';
   assigned_at?: string;
   picked_up_at?: string;
   delivered_at?: string;
+  dispatched_at?: string;
+  failed_at?: string;
+  failure_reason?: string;
+  failure_notes?: string;
   estimated_delivery_time?: string;
   notes?: string;
+  otp_code?: string;
+  hub_id?: string;
+}
+
+export interface DeliveryDashboardKPIs {
+  total_deliveries: number;
+  pending_assignment: number;
+  ready_for_dispatch: number;
+  assigned_deliveries: number;
+  out_for_delivery: number;
+  delivered: number;
+  failed: number;
+  cancelled: number;
+}
+
+export interface DeliveryDashboardItem {
+  order_id: string;
+  order_number: string;
+  customer_name: string;
+  customer_phone: string;
+  delivery_address: string;
+  assigned_hub_id: string;
+  assigned_hub_name: string;
+  items: any[];
+  subtotal: number;
+  total_amount: number;
+  payment_method: string;
+  payment_status: string;
+  order_status: string;
+  delivery_status: string;
+  assignment_id: string | null;
+  assigned_partner_id: string | null;
+  assigned_partner_name: string | null;
+  assigned_partner_phone: string | null;
+  assigned_at: string | null;
+  dispatched_at: string | null;
+  delivered_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
+  created_at: string;
+  expected_delivery_time: string | null;
 }
 
 export interface DeliveryTimelineEvent {
@@ -298,10 +362,27 @@ export interface DeliveryTrackingResponse {
   carrier_name?: string;
   tracking_number?: string;
   expected_delivery?: string;
+  confirmed_eta?: string;
   logistics_status?: string;
+  delivery_status?: string;
   fulfillment_center?: string;
   package_type?: string;
   activities?: DeliveryTimelineEvent[];
+  timeline?: any[];
+  live_gps?: {
+    latitude: number;
+    longitude: number;
+    recorded_at: string;
+    status: 'live' | 'stale' | 'unavailable';
+  } | null;
+  delivery_person?: {
+    name: string;
+    phone: string;
+    vehicle_type: string;
+    vehicle_number: string;
+    rating?: number;
+    profile_image?: string;
+  } | null;
   tracking?: {
     id?: string;
     order_id: string;
@@ -325,8 +406,8 @@ export interface DeliveryTrackingResponse {
   };
   destination: {
     address: string;
-    latitude: number;
-    longitude: number;
+    latitude: number | null;
+    longitude: number | null;
   };
 }
 
@@ -339,13 +420,18 @@ export interface Coupon {
   discount_type: 'FLAT' | 'PERCENTAGE';
   discount_value: number;
   minimum_order_amount: number;
-  maximum_discount: number;
+  maximum_discount: number | null;
   usage_limit: number;
   usage_count: number;
   per_customer_limit: number;
+  first_order_only?: boolean;
+  applicable_hub_id?: string | null;
+  applicable_category_id?: string | null;
+  applicable_product_id?: string | null;
   start_date: string;
   end_date: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'paused';
+  total_discount_given?: number;
   created_at?: string;
 }
 
@@ -356,11 +442,75 @@ export interface CouponValidationResult {
     name: string;
     discount_type: 'FLAT' | 'PERCENTAGE';
     discount_value: number;
+    minimum_order_amount?: number;
+    maximum_discount?: number | null;
+    applicable_hub_id?: string | null;
+    first_order_only?: boolean;
   };
   order_amount: number;
   discount_amount: number;
   final_amount: number;
   savings_message: string;
+}
+
+// ================= Phase 9: Hub Inventory Management =================
+export interface HubInventoryItem {
+  id: string;
+  hub_id: string;
+  hub_name?: string;
+  product_id: string;
+  product_name: string;
+  product_image?: string;
+  sku?: string;
+  category_name?: string;
+  unit: string;
+  selling_price: number;
+  purchase_price?: number;
+  stock_quantity: number;
+  reserved_quantity: number;
+  available_to_sell: number;
+  minimum_stock: number;
+  status: 'in_stock' | 'low_stock' | 'out_of_stock';
+  updated_at: string;
+}
+
+export interface InventorySummary {
+  total_products: number;
+  total_stock: number;
+  in_stock: number;
+  low_stock: number;
+  out_of_stock: number;
+  total_inventory_value: number;
+}
+
+export interface HubStockMovement {
+  id: string;
+  hub_id: string;
+  product_id: string;
+  product_name?: string;
+  variant_id?: string | null;
+  previous_stock: number;
+  new_stock: number;
+  quantity_changed: number;
+  operation_type: 'ADD' | 'REDUCE' | 'ADJUST' | 'CORRECTION' | 'ORDER_DEDUCT' | 'ORDER_CANCEL_RESTORE' | 'ORDER_FAILED_RESTORE' | 'SEED';
+  reason: string;
+  reference_type?: string;
+  reference_id?: string;
+  created_by?: string;
+  created_at: string;
+}
+
+export interface LowStockAlert {
+  alert_key: string;
+  hub_id: string;
+  hub_name: string;
+  product_id: string;
+  product_name: string;
+  current_stock: number;
+  minimum_stock: number;
+  status: 'low_stock' | 'out_of_stock';
+  alert_severity: 'CRITICAL' | 'WARNING';
+  message: string;
 }
 
 // ================= Phase 11: Notifications =================
@@ -379,6 +529,7 @@ export interface Notification {
 // ================= Phase 12: Business Intelligence =================
 export interface BusinessIntelligenceData {
   range: string;
+  hub_filter?: string;
   overview: {
     today_orders: number;
     today_revenue: number;
@@ -390,6 +541,22 @@ export interface BusinessIntelligenceData {
     online_orders: number;
     active_deliveries: number;
   };
+  hubs_breakdown?: Record<string, {
+    hub_id: string;
+    hub_code: string;
+    name: string;
+    address: string;
+    total_orders: number;
+    total_revenue: number;
+    delivered_orders: number;
+    pending_orders: number;
+    cancelled_orders: number;
+    cod_revenue: number;
+    online_revenue: number;
+    avg_order_value: number;
+    active_deliveries: number;
+    fleet_count: number;
+  }>;
   sales_analytics: {
     total_revenue: number;
     avg_order_value: number;
@@ -426,6 +593,13 @@ export interface BusinessIntelligenceData {
     failed: number;
     refunded: number;
     cod_count: number;
+  };
+  coupon_analytics?: {
+    total_coupons: number;
+    active_coupons: number;
+    total_discount_disbursed: number;
+    total_redemptions: number;
+    top_performing_coupon: string;
   };
 }
 
@@ -717,6 +891,44 @@ export interface AuditLog {
   ip_address: string;
   user_agent?: string;
   created_at: string;
+}
+
+// ================= Phase 16: Customer Reviews & Ratings =================
+export interface ProductReview {
+  id: string;
+  product_id: string;
+  user_id: string;
+  order_id: string;
+  rating: number;
+  title: string | null;
+  review_text: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'hidden';
+  admin_notes?: string | null;
+  reported_count?: number;
+  created_at: string;
+  updated_at: string;
+  customer_name?: string;
+  product_name?: string;
+  product_image?: string;
+  order_number?: string;
+}
+
+export interface ReviewRatingDistribution {
+  1: number;
+  2: number;
+  3: number;
+  4: number;
+  5: number;
+}
+
+export interface ReviewEligibilityResponse {
+  eligible: boolean;
+  message?: string;
+  eligible_orders?: Array<{
+    order_id: string;
+    order_number: string;
+    delivered_at: string;
+  }>;
 }
 
 

@@ -26,6 +26,7 @@ import {
   Settings,
   Sliders,
   Clock,
+  Star,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { AdminOrderAlertProvider, useAdminOrderAlerts } from '../../context/AdminOrderAlertContext';
@@ -72,12 +73,13 @@ export const AdminLayoutContent: React.FC = () => {
     { name: 'Delivery Charges & Zones', path: '/admin/delivery-charges', icon: MapPin },
     { name: 'Products Catalog', path: '/admin/products', icon: Package },
     { name: 'Categories', path: '/admin/categories', icon: Layers },
+    { name: 'Customer Reviews', path: '/admin/reviews', icon: Star },
     { name: 'Inventory & Stock', path: '/admin/inventory', icon: Boxes },
-    { name: 'Deliveries & Fleet', path: '/admin/deliveries', icon: Truck },
     { name: 'Customers Directory', path: '/admin/customers', icon: Users },
     { name: 'Analytics & BI', path: '/admin/analytics', icon: BarChart3 },
     { name: 'Homepage CMS', path: '/admin/cms', icon: LayoutTemplate },
     { name: 'Coupons & Offers', path: '/admin/coupons', icon: Tag },
+    { name: 'Notifications & Outbox', path: '/admin/notifications', icon: Bell },
     { name: 'Loyalty & Wallets', path: '/admin/loyalty', icon: Wallet },
     { name: 'Sellers & Farmers', path: '/admin/sellers', icon: Store },
     { name: 'Audit Logs', path: '/admin/audit-logs', icon: ShieldAlert },

@@ -25,29 +25,29 @@ export const MobileBottomNav: React.FC = () => {
   return (
     <nav
       aria-label="Mobile navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] safe-area-pb"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface/98 backdrop-blur-xl border-t border-line shadow-soft-md safe-area-pb"
     >
-      <div className="grid grid-cols-4 w-full h-14 items-center px-1">
+      <div className="grid grid-cols-4 w-full h-15 items-center px-2">
         
         {/* 1. Home */}
         <NavLink
           to="/"
           end
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center h-full min-h-[48px] py-1 rounded-xl transition-all select-none ${
-              isActive ? 'text-[#0c831f] font-extrabold' : 'text-slate-500 hover:text-slate-800'
+            `flex flex-col items-center justify-center h-full min-h-[48px] py-1.5 rounded-xl transition-all select-none cursor-pointer ${
+              isActive ? 'text-forest-900 font-bold' : 'text-ink-500 hover:text-forest-900'
             }`
           }
         >
           {({ isActive }) => (
             <>
               <div className="relative flex items-center justify-center">
-                <Home className={`w-5 h-5 transition-transform ${isActive ? 'stroke-[2.5] scale-105' : 'stroke-[1.8]'}`} />
+                <Home className={`w-5 h-5 transition-transform ${isActive ? 'stroke-[2.5] scale-105 text-forest-900' : 'stroke-[1.8]'}`} />
                 {isActive && (
-                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#0c831f]" />
+                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-leaf-500" />
                 )}
               </div>
-              <span className={`text-[10.5px] mt-0.5 tracking-tight ${isActive ? 'font-black text-[#0c831f]' : 'font-medium'}`}>
+              <span className={`text-[11px] mt-1 tracking-tight ${isActive ? 'font-bold text-forest-900' : 'font-medium'}`}>
                 Home
               </span>
             </>
@@ -58,62 +58,62 @@ export const MobileBottomNav: React.FC = () => {
         <NavLink
           to="/products"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center h-full min-h-[48px] py-1 rounded-xl transition-all select-none ${
-              isActive ? 'text-[#0c831f] font-extrabold' : 'text-slate-500 hover:text-slate-800'
+            `flex flex-col items-center justify-center h-full min-h-[48px] py-1.5 rounded-xl transition-all select-none cursor-pointer ${
+              isActive ? 'text-forest-900 font-bold' : 'text-ink-500 hover:text-forest-900'
             }`
           }
         >
           {({ isActive }) => (
             <>
               <div className="relative flex items-center justify-center">
-                <Grid className={`w-5 h-5 transition-transform ${isActive ? 'stroke-[2.5] scale-105' : 'stroke-[1.8]'}`} />
+                <Grid className={`w-5 h-5 transition-transform ${isActive ? 'stroke-[2.5] scale-105 text-forest-900' : 'stroke-[1.8]'}`} />
                 {isActive && (
-                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#0c831f]" />
+                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-leaf-500" />
                 )}
               </div>
-              <span className={`text-[10.5px] mt-0.5 tracking-tight ${isActive ? 'font-black text-[#0c831f]' : 'font-medium'}`}>
+              <span className={`text-[11px] mt-1 tracking-tight ${isActive ? 'font-bold text-forest-900' : 'font-medium'}`}>
                 Categories
               </span>
             </>
           )}
         </NavLink>
 
-        {/* 3. Cart - Quick Commerce Bottom Cart Opener */}
+        {/* 3. Cart - Bottom Cart Opener */}
         <button
           type="button"
           onClick={() => setIsCartOpen(true)}
-          className="flex flex-col items-center justify-center h-full min-h-[48px] py-1 rounded-xl text-slate-500 hover:text-[#0c831f] transition-all cursor-pointer relative select-none"
+          className="flex flex-col items-center justify-center h-full min-h-[48px] py-1.5 rounded-xl text-ink-500 hover:text-forest-900 transition-all cursor-pointer relative select-none"
           title="Open Cart"
           aria-label={`Open Cart with ${itemCount} items`}
         >
           <div className="relative flex items-center justify-center">
             <ShoppingBag className="w-5 h-5 stroke-[1.8]" />
             {itemCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 bg-[#0c831f] text-white text-[10px] font-black min-w-[17px] h-[17px] px-1 rounded-full flex items-center justify-center ring-2 ring-white shadow-xs">
+              <span className="absolute -top-1.5 -right-2 bg-marigold-500 text-forest-950 text-[10px] font-bold min-w-[17px] h-[17px] px-1 rounded-full flex items-center justify-center ring-2 ring-surface shadow-soft">
                 {itemCount}
               </span>
             )}
           </div>
-          <span className={`text-[10.5px] mt-0.5 tracking-tight ${itemCount > 0 ? 'font-black text-[#0c831f]' : 'font-medium text-slate-500'}`}>
+          <span className={`text-[11px] mt-1 tracking-tight ${itemCount > 0 ? 'font-bold text-forest-900' : 'font-medium text-ink-500'}`}>
             {itemCount > 0 ? `Cart (${itemCount})` : 'Cart'}
           </span>
         </button>
 
-        {/* 4. Account / Sign In with Quick Logout Support */}
+        {/* 4. Account / Sign In */}
         {user ? (
           <button
             type="button"
             onClick={() => setIsAccountSheetOpen(true)}
-            className="flex flex-col items-center justify-center h-full min-h-[48px] py-1 rounded-xl text-slate-600 hover:text-[#0c831f] transition-all cursor-pointer relative select-none"
+            className="flex flex-col items-center justify-center h-full min-h-[48px] py-1.5 rounded-xl text-ink-600 hover:text-forest-900 transition-all cursor-pointer relative select-none"
             title="Account & Menu"
             aria-label="Open Account Menu"
           >
             <div className="relative flex items-center justify-center">
-              <div className="w-5 h-5 rounded-full bg-[#0c831f] text-white font-black text-[10px] flex items-center justify-center ring-1 ring-emerald-600/30">
+              <div className="w-5 h-5 rounded-full bg-forest-900 text-cream-50 font-bold text-[10px] flex items-center justify-center shadow-soft">
                 {user.name.charAt(0).toUpperCase()}
               </div>
             </div>
-            <span className="text-[10.5px] mt-0.5 tracking-tight truncate max-w-[65px] font-bold text-slate-700">
+            <span className="text-[11px] mt-1 tracking-tight truncate max-w-[65px] font-medium text-ink-700">
               {user.name.split(' ')[0]}
             </span>
           </button>
@@ -121,20 +121,20 @@ export const MobileBottomNav: React.FC = () => {
           <NavLink
             to="/login"
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center h-full min-h-[48px] py-1 rounded-xl transition-all select-none ${
-                isActive ? 'text-[#0c831f] font-extrabold' : 'text-slate-500 hover:text-slate-800'
+              `flex flex-col items-center justify-center h-full min-h-[48px] py-1.5 rounded-xl transition-all select-none cursor-pointer ${
+                isActive ? 'text-forest-900 font-bold' : 'text-ink-500 hover:text-forest-900'
               }`
             }
           >
             {({ isActive }) => (
               <>
                 <div className="relative flex items-center justify-center">
-                  <User className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
+                  <User className={`w-5 h-5 ${isActive ? 'stroke-[2.5] text-forest-900' : 'stroke-[1.8]'}`} />
                   {isActive && (
-                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#0c831f]" />
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-leaf-500" />
                   )}
                 </div>
-                <span className={`text-[10.5px] mt-0.5 tracking-tight truncate max-w-[65px] ${isActive ? 'font-black text-[#0c831f]' : 'font-medium'}`}>
+                <span className={`text-[11px] mt-1 tracking-tight truncate max-w-[65px] ${isActive ? 'font-bold text-forest-900' : 'font-medium'}`}>
                   Sign In
                 </span>
               </>
@@ -144,31 +144,31 @@ export const MobileBottomNav: React.FC = () => {
 
       </div>
 
-      {/* Mobile Account Bottom Sheet with Explicit Logout Button */}
+      {/* Mobile Account Bottom Sheet */}
       {isAccountSheetOpen && user && createPortal(
         <div
-          className="fixed inset-0 z-[99999] bg-slate-950/60 backdrop-blur-xs flex flex-col justify-end animate-fade-in"
+          className="fixed inset-0 z-[99999] bg-forest-950/60 backdrop-blur-xs flex flex-col justify-end animate-fade-in"
           onClick={() => setIsAccountSheetOpen(false)}
         >
           <div
-            className="bg-white border-t border-slate-200 rounded-t-3xl p-5 space-y-4 shadow-2xl max-h-[80vh] overflow-y-auto animate-slide-up text-slate-900"
+            className="bg-surface border-t border-line rounded-t-3xl p-5 space-y-4 shadow-soft-lg max-h-[80vh] overflow-y-auto animate-slide-up text-ink-900"
             onClick={(e) => e.stopPropagation()}
           >
             {/* User Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-[#0c831f] text-white font-black text-base flex items-center justify-center shadow-xs">
+                <div className="w-11 h-11 rounded-2xl bg-forest-900 text-cream-50 font-bold text-base flex items-center justify-center shadow-soft">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm text-slate-900 leading-tight">{user.name}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{user.email || user.mobile || 'Organic Customer'}</p>
+                  <h3 className="font-serif font-bold text-sm text-ink-900 leading-tight">{user.name}</h3>
+                  <p className="text-xs text-ink-500 mt-0.5 font-sans">{user.email || user.mobile || 'Organic Customer'}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAccountSheetOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800"
+                className="w-8 h-8 rounded-full bg-cream-50 hover:bg-cream-100 flex items-center justify-center text-ink-500 hover:text-ink-900 transition-colors"
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
@@ -176,25 +176,25 @@ export const MobileBottomNav: React.FC = () => {
             </div>
 
             {/* Quick Links */}
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <button
                 type="button"
                 onClick={() => {
                   setIsAccountSheetOpen(false);
                   navigate('/profile');
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+                className="w-full flex items-center justify-between p-3 rounded-2xl bg-cream-50 hover:bg-sage-100/60 transition-colors text-left border border-line"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-[#0c831f] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-700 flex items-center justify-center">
                     <User className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-bold text-xs text-slate-900 block">Profile & Addresses</span>
-                    <span className="text-[10px] text-slate-400">Manage address and contact info</span>
+                    <span className="font-semibold text-xs text-ink-900 block">Profile & Addresses</span>
+                    <span className="text-[10px] text-ink-400">Manage address and contact info</span>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
+                <ChevronRight className="w-4 h-4 text-ink-400" />
               </button>
 
               <button
@@ -203,18 +203,18 @@ export const MobileBottomNav: React.FC = () => {
                   setIsAccountSheetOpen(false);
                   navigate('/orders');
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+                className="w-full flex items-center justify-between p-3 rounded-2xl bg-cream-50 hover:bg-sage-100/60 transition-colors text-left border border-line"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-[#0c831f] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-sage-100 text-forest-700 flex items-center justify-center">
                     <Package className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-bold text-xs text-slate-900 block">My Orders</span>
-                    <span className="text-[10px] text-slate-400">Track and view past orders</span>
+                    <span className="font-semibold text-xs text-ink-900 block">My Orders</span>
+                    <span className="text-[10px] text-ink-400">Track and view harvest orders</span>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
+                <ChevronRight className="w-4 h-4 text-ink-400" />
               </button>
 
               <button
@@ -223,18 +223,18 @@ export const MobileBottomNav: React.FC = () => {
                   setIsAccountSheetOpen(false);
                   navigate('/wallet');
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+                className="w-full flex items-center justify-between p-3 rounded-2xl bg-cream-50 hover:bg-sage-100/60 transition-colors text-left border border-line"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-marigold-50 text-marigold-600 flex items-center justify-center border border-marigold-500/20">
                     <Wallet className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-bold text-xs text-slate-900 block">Wallet & Cashback</span>
-                    <span className="text-[10px] text-slate-400">View balance & credits</span>
+                    <span className="font-semibold text-xs text-ink-900 block">Wallet & Credits</span>
+                    <span className="text-[10px] text-ink-400">View store credits & balance</span>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
+                <ChevronRight className="w-4 h-4 text-ink-400" />
               </button>
             </div>
 
@@ -243,9 +243,9 @@ export const MobileBottomNav: React.FC = () => {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-2 p-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 active:scale-98 border border-rose-200 text-rose-600 font-black text-xs transition-all shadow-xs cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 p-3.5 rounded-full bg-tomato-50 hover:bg-tomato-100/80 active:scale-[0.98] border border-tomato-500/20 text-tomato-500 font-semibold text-xs transition-all cursor-pointer min-h-[44px]"
               >
-                <LogOut className="w-4 h-4 text-rose-600" />
+                <LogOut className="w-4 h-4 text-tomato-500" />
                 <span>Log Out of Account</span>
               </button>
             </div>

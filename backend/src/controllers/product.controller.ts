@@ -77,6 +77,9 @@ export async function getProducts(req: Request, res: Response, next: NextFunctio
       SELECT p.id, p.name, p.slug, p.category_id, p.description, p.images, p.unit,
              p.mrp, p.selling_price, p.stock_quantity, p.minimum_stock,
              p.status, p.featured, p.best_seller, p.created_at,
+             COALESCE(p.average_rating, 0) as average_rating,
+             COALESCE(p.review_count, 0) as review_count,
+             p.seo_title, p.seo_description, p.image_alt_text,
              c.name as category_name, c.slug as category_slug
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id

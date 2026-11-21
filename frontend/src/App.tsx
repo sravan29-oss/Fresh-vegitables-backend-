@@ -17,6 +17,7 @@ import { ProductDetailPage } from './pages/customer/ProductDetailPage';
 
 // Customer Protected/Secondary Pages (Lazy loaded for optimal initial bundle)
 const CheckoutPage = React.lazy(() => import('./pages/customer/CheckoutPage').then(m => ({ default: m.CheckoutPage })));
+const CartPage = React.lazy(() => import('./pages/customer/CartPage').then(m => ({ default: m.CartPage })));
 const OrderSuccessPage = React.lazy(() => import('./pages/customer/OrderSuccessPage').then(m => ({ default: m.OrderSuccessPage })));
 const OrdersPage = React.lazy(() => import('./pages/customer/OrdersPage').then(m => ({ default: m.OrdersPage })));
 const TrackingPage = React.lazy(() => import('./pages/customer/TrackingPage').then(m => ({ default: m.TrackingPage })));
@@ -44,12 +45,15 @@ const AdminSellersPage = React.lazy(() => import('./pages/admin/AdminSellersPage
 const AdminZonesPage = React.lazy(() => import('./pages/admin/AdminZonesPage').then(m => ({ default: m.AdminZonesPage })));
 const AdminLoyaltyPage = React.lazy(() => import('./pages/admin/AdminLoyaltyPage').then(m => ({ default: m.AdminLoyaltyPage })));
 const AdminAuditLogsPage = React.lazy(() => import('./pages/admin/AdminAuditLogsPage').then(m => ({ default: m.AdminAuditLogsPage })));
+const AdminReviewsPage = React.lazy(() => import('./pages/admin/AdminReviewsPage').then(m => ({ default: m.AdminReviewsPage })));
 import { PermissionsPromptModal } from './components/common/PermissionsPromptModal';
 import { SplashScreen } from './components/common/SplashScreen';
+import { OfflineBanner } from './components/common/OfflineBanner';
 
 const CustomerLayout: React.FC = () => {
   return (
-    <div className="flex flex-col min-h-screen min-h-[100dvh] bg-[#f8fafc] text-slate-900 relative pb-safe-nav md:pb-0">
+    <div className="flex flex-col min-h-screen min-h-[100dvh] bg-cream-50 text-ink-900 relative pb-safe-nav md:pb-0 font-sans">
+      <OfflineBanner />
       <SplashScreen />
       <Header />
       <main className="flex-1">
@@ -78,7 +82,7 @@ const isAdminDeployment =
 
 const RouteLoadingFallback: React.FC = () => (
   <div className="flex items-center justify-center min-h-[50vh] p-8">
-    <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+    <div className="w-8 h-8 border-3 border-forest-900 border-t-transparent rounded-full animate-spin" />
   </div>
 );
 
@@ -103,6 +107,7 @@ export const App: React.FC = () => {
                     <Route path="products/:slug" element={<ProductDetailPage />} />
                     <Route path="categories/:categorySlug" element={<ProductsPage />} />
                     <Route path="category/:categorySlug" element={<ProductsPage />} />
+                    <Route path="cart" element={<CartPage />} />
                     <Route path="checkout" element={<CheckoutPage />} />
                     <Route path="order-success/:id" element={<OrderSuccessPage />} />
                     <Route path="orders" element={<OrdersPage />} />
@@ -112,6 +117,10 @@ export const App: React.FC = () => {
                     <Route path="login" element={<LoginPage />} />
                     <Route path="register" element={<RegisterPage />} />
                   </Route>
+
+                  {/* Delivery Fleet Portal: Decommissioned in favor of direct admin-managed delivery */}
+                  <Route path="/delivery" element={<Navigate to="/" replace />} />
+                  <Route path="/delivery/*" element={<Navigate to="/" replace />} />
 
                   {/* Admin Auth */}
                   <Route path="/admin/login" element={<AdminLoginPage />} />
@@ -125,7 +134,7 @@ export const App: React.FC = () => {
                     <Route path="categories" element={<AdminCategoriesPage />} />
                     <Route path="orders" element={<AdminOrdersPage />} />
                     <Route path="orders/:id" element={<AdminOrdersPage />} />
-                    <Route path="deliveries" element={<AdminDeliveriesPage />} />
+                    <Route path="deliveries" element={<Navigate to="/admin/orders" replace />} />
                     <Route path="delivery-slots" element={<AdminZonesPage initialTab="slots" />} />
                     <Route path="delivery-timings" element={<AdminZonesPage initialTab="slots" />} />
 
@@ -141,6 +150,7 @@ export const App: React.FC = () => {
                     <Route path="notifications" element={<AdminNotificationsPage />} />
                     <Route path="customers" element={<AdminCustomersPage />} />
                     <Route path="inventory" element={<AdminInventoryPage />} />
+                    <Route path="reviews" element={<AdminReviewsPage />} />
                     <Route path="audit-logs" element={<AdminAuditLogsPage />} />
                   </Route>
                 </Routes>
