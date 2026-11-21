@@ -17,6 +17,9 @@ import {
   RotateCcw,
   Sparkles,
   AlertCircle,
+  Search,
+  X,
+  Phone,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Order } from '../../types';
@@ -35,6 +38,7 @@ export const OrdersPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'delivered' | 'cancelled'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [reorderingId, setReorderingId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async (silent = false) => {
@@ -95,22 +99,35 @@ export const OrdersPage: React.FC = () => {
     return { all: orders.length, active, delivered, cancelled };
   }, [orders]);
 
-  // Filtered orders list
+  // Filtered orders list with status and keyword search
   const filteredOrders = useMemo(() => {
-    if (statusFilter === 'all') return orders;
-    if (statusFilter === 'active') {
-      return orders.filter((o) =>
-        ['pending', 'confirmed', 'preparing', 'packed', 'out_for_delivery'].includes(o.order_status)
-      );
+    let list = orders;
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'active') {
+        list = list.filter((o) =>
+          ['pending', 'confirmed', 'preparing', 'packed', 'out_for_delivery'].includes(o.order_status)
+        );
+      } else if (statusFilter === 'delivered') {
+        list = list.filter((o) => o.order_status === 'delivered');
+      } else if (statusFilter === 'cancelled') {
+        list = list.filter((o) => o.order_status === 'cancelled');
+      }
     }
-    if (statusFilter === 'delivered') {
-      return orders.filter((o) => o.order_status === 'delivered');
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((o) => {
+        const matchesNum = (o.order_number || '').toLowerCase().includes(q);
+        const matchesHub = (o.assigned_hub_name || o.assigned_hub_code || '').toLowerCase().includes(q);
+        const matchesItem = o.items?.some((it: any) =>
+          (it.product_name || it.product_name_snapshot || '').toLowerCase().includes(q)
+        );
+        return matchesNum || matchesHub || matchesItem;
+      });
     }
-    if (statusFilter === 'cancelled') {
-      return orders.filter((o) => o.order_status === 'cancelled');
-    }
-    return orders;
-  }, [orders, statusFilter]);
+
+    return list;
+  }, [orders, statusFilter, searchQuery]);
 
   const handleReorder = async (e: React.MouseEvent, order: Order) => {
     e.stopPropagation();
@@ -269,36 +286,62 @@ export const OrdersPage: React.FC = () => {
         </Link>
       </div>
 
-      {/* Filter Tabs */}
+      {/* Filter and Search Bar */}
       {orders.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {[
-            { id: 'all', label: 'All Orders', count: counts.all },
-            { id: 'active', label: 'In Progress', count: counts.active },
-            { id: 'delivered', label: 'Delivered', count: counts.delivered },
-            { id: 'cancelled', label: 'Cancelled', count: counts.cancelled },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id as any)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === tab.id
-                  ? 'bg-forest-900 text-cream-50 shadow-soft'
-                  : 'bg-surface text-ink-600 border border-line hover:bg-cream-100'
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                  statusFilter === tab.id
-                    ? 'bg-forest-800 text-cream-100'
-                    : 'bg-cream-100 text-ink-500'
-                }`}
-              >
-                {tab.count}
-              </span>
-            </button>
-          ))}
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {[
+                { id: 'all', label: 'All Orders', count: counts.all },
+                { id: 'active', label: 'In Progress', count: counts.active },
+                { id: 'delivered', label: 'Delivered', count: counts.delivered },
+                { id: 'cancelled', label: 'Cancelled', count: counts.cancelled },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setStatusFilter(tab.id as any)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                    statusFilter === tab.id
+                      ? 'bg-forest-900 text-cream-50 shadow-soft'
+                      : 'bg-surface text-ink-600 border border-line hover:bg-cream-100'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      statusFilter === tab.id
+                        ? 'bg-forest-800 text-cream-100'
+                        : 'bg-cream-100 text-ink-500'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Keyword / Order ID Search */}
+            <div className="relative min-w-[220px] sm:w-64">
+              <Search className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search order ID or item..."
+                className="w-full pl-9 pr-8 py-2 text-xs rounded-full bg-white border border-line focus:outline-none focus:border-forest-700 focus:ring-1 focus:ring-forest-700 transition-all font-sans text-ink-900 placeholder:text-ink-400"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600 p-0.5"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -572,6 +615,63 @@ export const OrdersPage: React.FC = () => {
                         </div>
                       </div>
                     )}
+
+                    {/* Order Bill Summary & Cancellation Policy Notice */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Price Breakdown */}
+                      <div className="bg-surface p-4 rounded-2xl border border-line shadow-soft space-y-2 text-xs">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-ink-400 font-serif border-b border-line pb-2 flex items-center justify-between">
+                          <span>Bill Summary</span>
+                          <span className="text-[10px] text-ink-400 normal-case font-mono">{order.payment_method?.toUpperCase()}</span>
+                        </h4>
+                        <div className="flex justify-between text-ink-600">
+                          <span>Items Subtotal:</span>
+                          <span className="font-semibold text-ink-900 font-mono">₹{order.subtotal || order.total}</span>
+                        </div>
+                        <div className="flex justify-between text-ink-600">
+                          <span>Delivery Fee:</span>
+                          <span className="font-semibold text-ink-900 font-mono">
+                            {Number(order.delivery_charge || 0) > 0 ? `₹${order.delivery_charge}` : 'FREE'}
+                          </span>
+                        </div>
+                        {Number(order.discount || 0) > 0 && (
+                          <div className="flex justify-between text-leaf-700 font-semibold">
+                            <span>Discount Applied:</span>
+                            <span className="font-mono">-₹{order.discount}</span>
+                          </div>
+                        )}
+                        <div className="border-t border-line pt-2 flex justify-between items-center text-sm">
+                          <span className="font-serif font-bold text-ink-900">Total Paid/Payable:</span>
+                          <span className="font-serif font-bold text-forest-900 text-base">₹{order.total}</span>
+                        </div>
+                      </div>
+
+                      {/* Modification / Cancellation & Support */}
+                      <div className="bg-surface p-4 rounded-2xl border border-line shadow-soft flex flex-col justify-between text-xs space-y-3">
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-ink-400 font-serif border-b border-line pb-2">
+                            Order Support & Assistance
+                          </h4>
+                          <p className="text-[11px] text-ink-600 mt-2 leading-relaxed">
+                            {['pending', 'confirmed'].includes(order.order_status)
+                              ? 'This order is eligible for modification or cancellation prior to fresh harvest packaging.'
+                              : order.order_status === 'cancelled'
+                              ? 'This order was cancelled. Any online payment is refunded per standard policy.'
+                              : 'Order is currently packed or out for delivery and cannot be modified.'}
+                          </p>
+                        </div>
+                        <div className="pt-2 border-t border-line flex items-center justify-between">
+                          <span className="text-[11px] text-ink-500 font-medium">Need immediate help?</span>
+                          <a
+                            href="tel:+918106970384"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-forest-900 text-cream-50 font-bold text-[11px] hover:bg-forest-850 transition-colors shadow-soft"
+                          >
+                            <Phone className="w-3 h-3 text-leaf-300" />
+                            <span>Call Support</span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
