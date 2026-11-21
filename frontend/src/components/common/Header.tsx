@@ -471,6 +471,38 @@ export const Header: React.FC = () => {
             </div>
           </form>
         </div>
+
+        {/* Row 3: Horizontal Category Scrolling Bar on Mobile */}
+        {categories.length > 0 && (
+          <div className="pt-2 pb-0.5 -mx-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <Link
+              to="/products"
+              className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 transition-all ${
+                location.pathname === '/products' && !location.search
+                  ? 'bg-forest-900 text-white shadow-soft'
+                  : 'bg-white text-charcoal-700 hover:bg-cream-100 border border-line'
+              }`}
+            >
+              All Produce
+            </Link>
+            {categories.map((c) => {
+              const isCatActive = location.pathname.includes(`/categories/${c.slug}`) || location.search.includes(`category=${c.slug}`);
+              return (
+                <Link
+                  key={c.id}
+                  to={`/categories/${c.slug}`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
+                    isCatActive
+                      ? 'bg-forest-900 text-white font-semibold shadow-soft'
+                      : 'bg-white text-charcoal-700 hover:bg-cream-100 border border-line'
+                  }`}
+                >
+                  {c.name}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════

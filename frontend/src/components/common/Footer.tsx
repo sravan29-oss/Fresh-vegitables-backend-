@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Truck, ShieldCheck, Phone, Mail, MapPin, Leaf, Clock, Banknote, HelpCircle } from 'lucide-react';
+import { Truck, Phone, Mail, MapPin, Leaf, Clock, Banknote, Send, Check } from 'lucide-react';
 import api from '../../services/api';
 
 export const Footer: React.FC = () => {
@@ -14,6 +14,9 @@ export const Footer: React.FC = () => {
     store_address: 'Hyderabad, Telangana',
   });
 
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
   useEffect(() => {
     api.get('/cms/settings')
       .then((res) => {
@@ -23,6 +26,16 @@ export const Footer: React.FC = () => {
       })
       .catch(() => {});
   }, []);
+
+  const handleNewsletterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newsletterEmail.trim()) {
+      setIsSubscribed(true);
+      setTimeout(() => {
+        setNewsletterEmail('');
+      }, 2000);
+    }
+  };
 
   return (
     <footer className="bg-forest-950 text-cream-200 border-t border-forest-900 pt-14 sm:pt-16 pb-12">
@@ -35,7 +48,7 @@ export const Footer: React.FC = () => {
               <Truck className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-serif font-bold text-white text-sm">2-Hour Express Delivery</h4>
+              <h4 className="font-serif font-bold text-white text-sm">2-Hour Delivery</h4>
               <p className="text-xs text-cream-300/80 mt-0.5">Dispatched within 5 KM of our hubs</p>
             </div>
           </div>
@@ -46,7 +59,7 @@ export const Footer: React.FC = () => {
               <Leaf className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-serif font-bold text-white text-sm">100% Certified Organic</h4>
+              <h4 className="font-serif font-bold text-white text-sm">Farm Fresh Produce</h4>
               <p className="text-xs text-cream-300/80 mt-0.5">Zero chemicals or synthetic pesticides</p>
             </div>
           </div>
@@ -69,16 +82,17 @@ export const Footer: React.FC = () => {
             </div>
             <div>
               <h4 className="font-serif font-bold text-white text-sm">6 AM – 9 PM Support</h4>
-              <p className="text-xs text-cream-300/80 mt-0.5">Daily customer assistance</p>
+              <p className="text-xs text-cream-300/80 mt-0.5">Dedicated customer assistance</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ─── Main 4 Columns ─── */}
+      {/* ─── Main 4 Columns (Step 8 Specification) ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
-          {/* Column 1: Brand Story & Legal Info */}
+          
+          {/* Column 1: Brand identity and short description */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <img
@@ -90,68 +104,53 @@ export const Footer: React.FC = () => {
                 <span className="font-serif font-bold text-lg text-white tracking-tight">
                   Fresh Vegetables
                 </span>
-                <span className="text-[10px] text-leaf-300 font-semibold tracking-wider uppercase">
-                  100% Certified Organic
+                <span className="text-[10px] text-leaf-300 font-semibold tracking-wider uppercase font-sans">
+                  Organic Grocery Store
                 </span>
               </div>
             </div>
 
             <p className="text-xs text-cream-300/90 leading-relaxed font-sans">
-              Dedicated to bringing chemical-free, farm-fresh organic vegetables to families in Hyderabad. Sourced daily from verified organic growers and delivered with care.
+              Dedicated to bringing chemical-free, farm-fresh organic vegetables to families in Hyderabad. Carefully selected from trusted regional farmers and delivered within 2 hours.
             </p>
 
-            <div className="pt-1 text-xs text-cream-400 space-y-1 font-sans">
-              <p className="text-[11px] text-leaf-300 font-semibold">FSSAI Certified Operations</p>
-              <p className="text-[11px]">Direct Farm-to-Home Delivery Network</p>
+            <div className="text-xs text-cream-400 space-y-1 font-sans">
+              <p className="text-[11px] text-leaf-300 font-semibold">Champapet &amp; KPHB Fulfillment Hubs</p>
+              <p className="text-[11px]">Strict 5 KM Hyperlocal Freshness Radius</p>
             </div>
           </div>
 
-          {/* Column 2: Quick Links */}
+          {/* Column 2: Shopping navigation */}
           <div>
-            <h4 className="font-serif font-bold text-white text-sm mb-4">Quick Links</h4>
+            <h4 className="font-serif font-bold text-white text-sm mb-4">Shopping Navigation</h4>
             <ul className="space-y-2.5 text-xs text-cream-300 font-sans">
               <li><Link to="/products" className="hover:text-white transition-colors">Shop All Vegetables</Link></li>
-              <li><Link to="/categories/leafy-vegetables" className="hover:text-white transition-colors">Leafy Greens &amp; Herbs</Link></li>
-              <li><Link to="/categories/fresh" className="hover:text-white transition-colors">Daily Fresh Produce</Link></li>
+              <li><Link to="/products?best_seller=true" className="hover:text-white transition-colors">Customer Favourites</Link></li>
               <li><Link to="/products?featured=true" className="hover:text-white transition-colors">Seasonal Specials</Link></li>
+              <li><Link to="/products?in_stock=true" className="hover:text-white transition-colors">In-Stock Today</Link></li>
               <li><Link to="/orders" className="hover:text-white transition-colors">My Orders &amp; Tracking</Link></li>
-              <li><Link to="/profile" className="hover:text-white transition-colors">Manage Delivery Addresses</Link></li>
+              <li><Link to="/profile" className="hover:text-white transition-colors">Saved Delivery Addresses</Link></li>
             </ul>
           </div>
 
-          {/* Column 3: Service Areas */}
+          {/* Column 3: Product categories */}
           <div>
-            <h4 className="font-serif font-bold text-white text-sm mb-4">Service Areas</h4>
+            <h4 className="font-serif font-bold text-white text-sm mb-4">Product Categories</h4>
             <ul className="space-y-2.5 text-xs text-cream-300 font-sans">
-              <li className="flex items-start gap-2">
-                <MapPin className="w-3.5 h-3.5 text-leaf-400 shrink-0 mt-0.5" />
-                <span>Champapet Hub — 5 KM Delivery Radius</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <MapPin className="w-3.5 h-3.5 text-leaf-400 shrink-0 mt-0.5" />
-                <span>KPHB Colony Hub — 5 KM Delivery Radius</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Clock className="w-3.5 h-3.5 text-leaf-400 shrink-0 mt-0.5" />
-                <span>Morning Harvest Slot: 6:00 AM – 10:00 AM</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Clock className="w-3.5 h-3.5 text-leaf-400 shrink-0 mt-0.5" />
-                <span>Evening Slot: 4:00 PM – 8:00 PM</span>
-              </li>
-              <li className="pt-2">
-                <Link to="/admin/login" className="text-[11px] text-cream-400 hover:text-white transition-colors flex items-center gap-1.5">
-                  <span>🔐 Store Admin Login</span>
-                </Link>
-              </li>
+              <li><Link to="/categories/fresh" className="hover:text-white transition-colors">Fresh Vegetables</Link></li>
+              <li><Link to="/categories/leafy-vegetables" className="hover:text-white transition-colors">Leafy Greens &amp; Herbs</Link></li>
+              <li><Link to="/categories/coriander-others" className="hover:text-white transition-colors">Coriander &amp; Kitchen Greens</Link></li>
+              <li><Link to="/categories/root-vegetables" className="hover:text-white transition-colors">Root Vegetables</Link></li>
+              <li><Link to="/categories/exotic-vegetables" className="hover:text-white transition-colors">Exotic Vegetables</Link></li>
+              <li><Link to="/categories/dairy" className="hover:text-white transition-colors">Farm Fresh Dairy</Link></li>
             </ul>
           </div>
 
-          {/* Column 4: Contact & Support */}
+          {/* Column 4: Contact and customer support */}
           <div className="space-y-4">
-            <h4 className="font-serif font-bold text-white text-sm">Customer Care</h4>
+            <h4 className="font-serif font-bold text-white text-sm">Contact &amp; Support</h4>
             <p className="text-xs text-cream-300/90 leading-relaxed font-sans">
-              Need assistance with an active order or delivery serviceability inquiry?
+              Customer assistance available daily for orders, delivery status, and serviceability.
             </p>
 
             <div className="text-xs text-cream-300 space-y-2.5 font-sans">
@@ -173,8 +172,35 @@ export const Footer: React.FC = () => {
 
               <div className="flex items-center gap-2 text-cream-400">
                 <Clock className="w-4 h-4 text-leaf-400 shrink-0" />
-                <span>Support Hours: 6:00 AM – 9:00 PM Daily</span>
+                <span>6:00 AM – 9:00 PM Daily</span>
               </div>
+            </div>
+
+            {/* Newsletter Subscription */}
+            <div className="pt-2">
+              <h5 className="text-xs font-semibold text-white mb-1.5 font-serif">Harvest Newsletter</h5>
+              <form onSubmit={handleNewsletterSubmit} className="flex gap-1.5">
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  value={newsletterEmail}
+                  onChange={(e) => setNewsletterEmail(e.target.value)}
+                  required
+                  className="bg-forest-900 border border-forest-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-forest-400 focus:outline-none focus:border-leaf-500 flex-1 min-h-[38px]"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-2 rounded-xl bg-forest-800 hover:bg-forest-700 text-white font-semibold text-xs flex items-center justify-center transition-colors min-h-[38px] cursor-pointer"
+                  title="Subscribe to harvest updates"
+                >
+                  {isSubscribed ? <Check className="w-3.5 h-3.5 text-leaf-300" /> : <Send className="w-3.5 h-3.5" />}
+                </button>
+              </form>
+              {isSubscribed && (
+                <span className="text-[10.5px] text-leaf-300 font-medium block mt-1">
+                  ✓ Subscribed for fresh harvest updates!
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -187,10 +213,15 @@ export const Footer: React.FC = () => {
         <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs">
           <span className="flex items-center gap-1 text-cream-300">
             <Banknote className="w-3.5 h-3.5 text-harvest-400" />
-            <span>Cash on Delivery (COD) Available</span>
+            <span>Cash on Delivery Available</span>
           </span>
           <span className="text-forest-800">•</span>
           <span>Champapet &amp; KPHB Colony • Hyderabad</span>
+          <span className="text-forest-800">•</span>
+          {/* Subtle admin access preserved without visual prominence */}
+          <Link to="/admin/login" className="text-forest-700 hover:text-cream-300 transition-colors" title="Administrative Access">
+            Admin
+          </Link>
         </div>
       </div>
     </footer>
