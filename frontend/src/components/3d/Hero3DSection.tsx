@@ -1,8 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Leaf, Truck, CheckCircle2, MapPin, Sparkles } from 'lucide-react';
-import { SceneCanvas } from './SceneCanvas';
-import { FloatingVegetables } from './FloatingVegetables';
+import { ArrowRight, Leaf, Truck, CheckCircle2, MapPin, Sparkles, Clock, ShieldCheck } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
 interface Hero3DSectionProps {
@@ -10,7 +8,7 @@ interface Hero3DSectionProps {
 }
 
 export const Hero3DSection: React.FC<Hero3DSectionProps> = ({ onCheckLocation }) => {
-  const { setIsLocationModalOpen } = useCart();
+  const { setIsLocationModalOpen, serviceability, deliveryEstimate } = useCart();
 
   const handleLocationClick = () => {
     if (onCheckLocation) {
@@ -22,105 +20,123 @@ export const Hero3DSection: React.FC<Hero3DSectionProps> = ({ onCheckLocation })
 
   return (
     <section className="relative overflow-hidden pt-2 sm:pt-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-      <div className="relative rounded-3xl bg-gradient-to-br from-forest-950 via-forest-900 to-forest-950 border border-forest-800/90 shadow-soft-lg overflow-hidden min-h-[460px] sm:min-h-[520px] lg:min-h-[560px] flex flex-col justify-between p-6 sm:p-10 lg:p-12 text-cream-50">
-        {/* Subtle Background Glow Spheres */}
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-leaf-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-10 w-80 h-80 bg-forest-700/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative rounded-2xl sm:rounded-3xl bg-white border border-line shadow-soft-md overflow-hidden p-6 sm:p-10 lg:p-14">
+        {/* Subtle decorative background gradient accent */}
+        <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-cream-100/60 to-transparent pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-sage-100/40 rounded-full blur-3xl pointer-events-none" />
 
-        {/* 3D Floating Vegetables Canvas Background Layer */}
-        <div className="absolute inset-0 z-0 opacity-90 transition-opacity duration-700">
-          <SceneCanvas
-            camera={{ position: [0, 0, 5], fov: 45 }}
-            fallbackTitle="Freshness Delivered Straight From Nature"
-            fallbackSubtitle="Discover fresh, quality vegetables sourced for your everyday healthy lifestyle."
-            interactive={true}
-          >
-            <FloatingVegetables interactive={true} />
-          </SceneCanvas>
-        </div>
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+          {/* Left Column: Editorial Content (7 cols) */}
+          <div className="lg:col-span-7 space-y-5 sm:space-y-6">
+            {/* Trust Pill Badges */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sage-100 text-forest-900 border border-leaf-500/20 text-xs font-semibold tracking-wide">
+                <Sparkles className="w-3.5 h-3.5 text-leaf-600" />
+                100% Certified Organic Harvest
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-cream-100 text-charcoal-700 border border-line text-xs font-medium">
+                <Truck className="w-3.5 h-3.5 text-forest-700" />
+                Champapet &amp; KPHB Hubs (5 KM)
+              </span>
+            </div>
 
-        {/* Semi-transparent protective gradient mask so text stays razor sharp */}
-        <div className="absolute inset-0 bg-gradient-to-r from-forest-950/95 via-forest-950/75 to-transparent pointer-events-none z-[1] max-w-3xl" />
+            {/* Main Editorial Headline */}
+            <h1 className="font-serif font-bold text-3xl sm:text-5xl lg:text-[54px] text-charcoal-900 tracking-tight leading-[1.12]">
+              100% Organic Vegetables,{' '}
+              <span className="text-forest-900 block sm:inline">Harvested Daily</span> &amp; Delivered in 2 Hours.
+            </h1>
 
-        {/* Foreground Content (High Z-Index, Interactive) */}
-        <div className="relative z-10 max-w-2xl space-y-4 my-auto">
-          {/* Badges */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-forest-800/90 text-leaf-300 border border-leaf-500/40 text-[11px] font-bold tracking-wider uppercase font-sans shadow-soft backdrop-blur-md">
-              <Sparkles className="w-3.5 h-3.5 text-leaf-400" />
-              100% Organically Grown
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-forest-900/80 text-cream-200 border border-forest-700 text-[10px] font-semibold tracking-wide uppercase font-sans backdrop-blur-md">
-              <Truck className="w-3 h-3 text-leaf-400" />
-              Champapet & KPHB Hubs (5 KM)
-            </span>
+            {/* Subheading */}
+            <p className="text-charcoal-500 text-sm sm:text-base lg:text-lg font-sans leading-relaxed max-w-xl">
+              Directly sourced every sunrise from trusted local Telangana organic farms. Zero chemicals, verified freshness, delivered straight to your door from our Champapet and KPHB hubs.
+            </p>
+
+            {/* CTAs Row */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+              <Link
+                to="/products"
+                className="btn-pill-primary bg-forest-900 hover:bg-forest-800 text-white font-semibold px-7 py-3.5 rounded-full text-sm transition-all shadow-soft flex items-center justify-center gap-2 min-h-[48px] active:scale-98"
+              >
+                <span>Shop Fresh Vegetables</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+
+              <a
+                href="#categories-section"
+                className="btn-pill-secondary bg-white hover:bg-cream-50 text-forest-900 border border-line font-medium px-5 py-3.5 rounded-full text-sm transition-all flex items-center justify-center gap-2 min-h-[48px]"
+              >
+                <Leaf className="w-4 h-4 text-leaf-600" />
+                <span>Explore Categories</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={handleLocationClick}
+                className="px-4 py-3 rounded-full text-xs sm:text-sm font-medium text-charcoal-600 hover:text-forest-900 hover:bg-cream-100/60 transition-colors flex items-center justify-center gap-1.5 min-h-[48px] cursor-pointer"
+              >
+                <MapPin className="w-4 h-4 text-forest-700" />
+                <span>{serviceability.serviceable ? 'Delivery Available' : 'Check Delivery Area'}</span>
+              </button>
+            </div>
+
+            {/* Inline Trust Stats Row */}
+            <div className="pt-2 sm:pt-4 border-t border-line/80 grid grid-cols-3 gap-3 sm:gap-6 max-w-lg">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 text-forest-900 font-serif font-bold text-base sm:text-lg">
+                  <Clock className="w-4 h-4 text-leaf-600 shrink-0" />
+                  <span>2 Hours</span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-charcoal-500 font-sans">Hyperlocal Dispatch</p>
+              </div>
+
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 text-forest-900 font-serif font-bold text-base sm:text-lg">
+                  <ShieldCheck className="w-4 h-4 text-leaf-600 shrink-0" />
+                  <span>Zero Chemicals</span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-charcoal-500 font-sans">100% Tested Organic</p>
+              </div>
+
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 text-forest-900 font-serif font-bold text-base sm:text-lg">
+                  <CheckCircle2 className="w-4 h-4 text-leaf-600 shrink-0" />
+                  <span>Direct Farm</span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-charcoal-500 font-sans">Fair Farmer Pricing</p>
+              </div>
+            </div>
           </div>
 
-          {/* Primary Branding Headline */}
-          <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-bold text-cream-50 tracking-tight leading-[1.12] drop-shadow-sm">
-            Freshness Delivered Straight From Nature.
-          </h1>
+          {/* Right Column: Visual Showcase Photography (5 cols) */}
+          <div className="lg:col-span-5 relative">
+            <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-cream-100/80 border border-line aspect-[4/3] sm:aspect-[5/4] lg:aspect-[4/3] shadow-soft flex items-center justify-center group">
+              <img
+                src="https://images.unsplash.com/photo-1540420773420-3366772f4999?w=900&auto=format&fit=crop&q=80"
+                alt="Fresh Organic Vegetables Basket"
+                className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-700 ease-out"
+                loading="eager"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-charcoal-900/60 via-transparent to-transparent pointer-events-none" />
 
-          {/* Brand Description */}
-          <p className="text-forest-200/95 text-sm sm:text-base font-sans font-medium leading-relaxed max-w-xl drop-shadow-sm">
-            Discover fresh, quality vegetables sourced for your everyday healthy lifestyle. Hand-harvested daily at dawn and dispatched within our strict 5 KM local freshness boundaries.
-          </p>
+              {/* Floating Badge Top Left */}
+              <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md border border-line px-3 py-1.5 rounded-xl shadow-soft flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-leaf-500 animate-pulse" />
+                <span className="text-xs font-semibold text-charcoal-800">
+                  Morning Harvest • 5:30 AM
+                </span>
+              </div>
 
-          {/* Trust Highlights */}
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-xs text-forest-200 font-sans">
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-leaf-400" />
-              Pesticide-Free
-            </span>
-            <span className="text-forest-700">•</span>
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-leaf-400" />
-              Direct Farm Sourcing
-            </span>
-            <span className="text-forest-700">•</span>
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-leaf-400" />
-              Express Delivery Slots
-            </span>
+              {/* Floating Badge Bottom Left */}
+              <div className="absolute bottom-3 left-3 right-3 sm:right-auto bg-forest-900/95 backdrop-blur-md text-white px-3.5 py-2 rounded-xl shadow-soft flex items-center justify-between sm:justify-start gap-2.5 text-xs">
+                <span className="font-semibold text-cream-100">5 KM Local Radius</span>
+                <span className="text-leaf-300">•</span>
+                <span className="text-cream-200">Champapet &amp; KPHB</span>
+              </div>
+            </div>
           </div>
-
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-3">
-            <Link
-              to="/products"
-              className="btn-pill-primary bg-leaf-500 hover:bg-leaf-400 active:scale-98 text-forest-950 font-bold px-7 py-3.5 rounded-full text-sm transition-all shadow-soft flex items-center justify-center gap-2 cursor-pointer min-h-[46px]"
-            >
-              <span>Shop Fresh Vegetables</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-
-            <a
-              href="#categories-section"
-              className="px-6 py-3.5 rounded-full border border-forest-600/80 hover:bg-forest-800/80 text-cream-100 font-semibold text-sm transition-all flex items-center justify-center gap-2 backdrop-blur-sm cursor-pointer min-h-[46px]"
-            >
-              <Leaf className="w-4 h-4 text-leaf-400" />
-              <span>Explore Our Collection</span>
-            </a>
-
-            <button
-              type="button"
-              onClick={handleLocationClick}
-              className="px-4 py-3 rounded-full border border-forest-700/60 hover:bg-forest-800/60 text-forest-200 hover:text-cream-50 text-xs sm:text-sm font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[46px]"
-            >
-              <MapPin className="w-3.5 h-3.5 text-leaf-400" />
-              <span>Check 5 KM Zone</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Micro 3D Studio Floating Indicator */}
-        <div className="relative z-10 self-end pt-4 pointer-events-none hidden sm:block">
-          <span className="text-[11px] font-sans text-forest-300/80 px-3 py-1 rounded-full bg-forest-950/60 backdrop-blur-md border border-forest-800/60 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-leaf-400 animate-ping" />
-            Interactive 3D Studio • Move mouse to inspect
-          </span>
         </div>
       </div>
     </section>
   );
 };
+export default Hero3DSection;

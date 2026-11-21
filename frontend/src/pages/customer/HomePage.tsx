@@ -23,6 +23,7 @@ import { ServerMaintenance } from '../../components/common/ServerMaintenance';
 import { SEOHead } from '../../components/common/SEOHead';
 import { Hero3DSection } from '../../components/3d/Hero3DSection';
 import { FarmExperienceSection } from '../../components/3d/FarmExperienceSection';
+import { TrustSection } from '../../components/home/TrustSection';
 import { useCart } from '../../context/CartContext';
 import { getProductImageUrl } from '../../utils/imageUrl';
 import { useHomepageCMS } from '../../hooks/useHomepageCMS';
@@ -679,39 +680,8 @@ export const HomePage: React.FC = () => {
             </div>
           </section>
 
-          {/* Farm-to-Fork Trust Pillars */}
-          <section className="bg-surface border border-line mx-3 sm:mx-6 lg:mx-8 py-10 sm:py-14 animate-slide-up rounded-3xl shadow-soft">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12">
-                <span className="text-leaf-700 font-bold text-xs uppercase tracking-wider font-sans">
-                  The Pure Farm Promise
-                </span>
-                <h2 className="font-serif text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight mt-1">
-                  Why Choose Fresh Vegetables?
-                </h2>
-                <p className="text-ink-500 text-xs sm:text-sm mt-1.5 font-sans">
-                  Fresh produce delivered within 5 km of our Champapet and KPHB hubs.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                {[
-                  { title: 'Harvested Daily', desc: 'Directly sourced from trusted regional partner farms.' },
-                  { title: 'Hand-Sorted & Cleaned', desc: 'Carefully inspected and cleaned before hygienic packaging.' },
-                  { title: '5 KM Delivery Radius', desc: 'Dedicated local dispatch within 5 km of our Champapet and KPHB hubs.' },
-                  { title: 'Hygienic Packaging', desc: 'Food-safe packaging designed to preserve natural freshness.' },
-                ].map((pil, idx) => (
-                  <div key={idx} className="p-5 sm:p-6 rounded-2xl bg-cream-50/70 border border-line hover:border-leaf-500/40 shadow-soft transition-all space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-sage-100 text-forest-700 flex items-center justify-center font-bold">
-                      <CheckCircle2 className="w-5 h-5 text-forest-700" />
-                    </div>
-                    <h4 className="font-serif font-bold text-sm text-ink-900">{pil.title}</h4>
-                    <p className="text-xs text-ink-500 leading-relaxed font-sans">{pil.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
+          {/* Farm-to-Fork Trust Pillars & Delivery Coverage */}
+          <TrustSection />
         </>
       )}
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Truck, ShieldCheck, HeartHandshake, Sparkles, Phone, Mail, MapPin, Leaf } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, Mail, MapPin, Leaf, Clock, Banknote, HelpCircle } from 'lucide-react';
 import api from '../../services/api';
 
 export const Footer: React.FC = () => {
@@ -25,60 +25,60 @@ export const Footer: React.FC = () => {
   }, []);
 
   return (
-    <footer className="bg-forest-950 text-forest-200 border-t border-forest-900/80 pt-16 pb-12">
-      {/* ─── Top Trust Points Banner ─── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 border-b border-forest-900">
+    <footer className="bg-forest-950 text-cream-200 border-t border-forest-900 pt-14 sm:pt-16 pb-12">
+      {/* ─── Top Trust Banner ─── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10 border-b border-forest-900/80">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {/* 1. Same-Day Delivery */}
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-forest-900/60 border border-forest-800/80 hover:border-leaf-500/30 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-forest-800/80 text-leaf-400 flex items-center justify-center shrink-0">
-              <Truck className="w-6 h-6" />
+          {/* 1. 2-Hour Delivery */}
+          <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-forest-900/60 border border-forest-800/80">
+            <div className="w-11 h-11 rounded-xl bg-forest-800 text-leaf-300 flex items-center justify-center shrink-0">
+              <Truck className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-serif font-bold text-cream-50 text-sm">Same-Day Delivery</h4>
-              <p className="text-xs text-forest-300/80 mt-0.5">Fresh delivery within our serviceable areas in Hyderabad</p>
+              <h4 className="font-serif font-bold text-white text-sm">2-Hour Express Delivery</h4>
+              <p className="text-xs text-cream-300/80 mt-0.5">Dispatched within 5 KM of our hubs</p>
             </div>
           </div>
 
-          {/* 2. Organic Produce */}
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-forest-900/60 border border-forest-800/80 hover:border-leaf-500/30 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-forest-800/80 text-leaf-400 flex items-center justify-center shrink-0">
-              <Sparkles className="w-6 h-6" />
+          {/* 2. 100% Certified Organic */}
+          <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-forest-900/60 border border-forest-800/80">
+            <div className="w-11 h-11 rounded-xl bg-forest-800 text-leaf-300 flex items-center justify-center shrink-0">
+              <Leaf className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-serif font-bold text-cream-50 text-sm">Organic Produce</h4>
-              <p className="text-xs text-forest-300/80 mt-0.5">Carefully sourced fresh vegetables</p>
+              <h4 className="font-serif font-bold text-white text-sm">100% Certified Organic</h4>
+              <p className="text-xs text-cream-300/80 mt-0.5">Zero chemicals or synthetic pesticides</p>
             </div>
           </div>
 
-          {/* 3. 5 KM Delivery Radius */}
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-forest-900/60 border border-forest-800/80 hover:border-leaf-500/30 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-forest-800/80 text-leaf-400 flex items-center justify-center shrink-0">
-              <Leaf className="w-6 h-6" />
+          {/* 3. Cash on Delivery Available */}
+          <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-forest-900/60 border border-forest-800/80">
+            <div className="w-11 h-11 rounded-xl bg-forest-800 text-harvest-400 flex items-center justify-center shrink-0">
+              <Banknote className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-serif font-bold text-cream-50 text-sm">5 KM Delivery Radius</h4>
-              <p className="text-xs text-forest-300/80 mt-0.5">Local dispatch for maximum freshness</p>
+              <h4 className="font-serif font-bold text-white text-sm">Cash on Delivery (COD)</h4>
+              <p className="text-xs text-cream-300/80 mt-0.5">Pay at your doorstep upon arrival</p>
             </div>
           </div>
 
-          {/* 4. Customer Support */}
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-forest-900/60 border border-forest-800/80 hover:border-leaf-500/30 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-forest-800/80 text-marigold-400 flex items-center justify-center shrink-0">
-              <Phone className="w-6 h-6" />
+          {/* 4. Dedicated Support */}
+          <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-forest-900/60 border border-forest-800/80">
+            <div className="w-11 h-11 rounded-xl bg-forest-800 text-leaf-300 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-serif font-bold text-cream-50 text-sm">Dedicated Support</h4>
-              <p className="text-xs text-forest-300/80 mt-0.5">Quick assistance for your orders</p>
+              <h4 className="font-serif font-bold text-white text-sm">6 AM – 9 PM Support</h4>
+              <p className="text-xs text-cream-300/80 mt-0.5">Daily customer assistance</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ─── Main Footer Columns ─── */}
+      {/* ─── Main 4 Columns ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
-          {/* Brand Bio */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
+          {/* Column 1: Brand Story & Legal Info */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <img
@@ -87,97 +87,110 @@ export const Footer: React.FC = () => {
                 className="w-11 h-11 rounded-2xl object-cover border border-forest-700 shadow-soft"
               />
               <div className="flex flex-col">
-                <span className="font-serif font-bold text-lg text-cream-50 tracking-tight">
+                <span className="font-serif font-bold text-lg text-white tracking-tight">
                   Fresh Vegetables
                 </span>
-                <span className="text-[10px] text-leaf-400 font-semibold tracking-wider uppercase">
-                  Organic Boutique Delivery
+                <span className="text-[10px] text-leaf-300 font-semibold tracking-wider uppercase">
+                  100% Certified Organic
                 </span>
               </div>
             </div>
-            <p className="text-xs text-forest-300/90 leading-relaxed font-sans">
-              Fresh vegetables delivered directly to your doorstep in Hyderabad within our 5 km service zone.
+
+            <p className="text-xs text-cream-300/90 leading-relaxed font-sans">
+              Dedicated to bringing chemical-free, farm-fresh organic vegetables to families in Hyderabad. Sourced daily from verified organic growers and delivered with care.
             </p>
-            <div className="text-xs text-forest-300 space-y-2.5 pt-2 font-sans">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-leaf-400 shrink-0" />
-                <span>{storeSettings.store_address || 'Hyderabad, Telangana'}</span>
-              </div>
+
+            <div className="pt-1 text-xs text-cream-400 space-y-1 font-sans">
+              <p className="text-[11px] text-leaf-300 font-semibold">FSSAI Certified Operations</p>
+              <p className="text-[11px]">Direct Farm-to-Home Delivery Network</p>
+            </div>
+          </div>
+
+          {/* Column 2: Quick Links */}
+          <div>
+            <h4 className="font-serif font-bold text-white text-sm mb-4">Quick Links</h4>
+            <ul className="space-y-2.5 text-xs text-cream-300 font-sans">
+              <li><Link to="/products" className="hover:text-white transition-colors">Shop All Vegetables</Link></li>
+              <li><Link to="/categories/leafy-vegetables" className="hover:text-white transition-colors">Leafy Greens &amp; Herbs</Link></li>
+              <li><Link to="/categories/fresh" className="hover:text-white transition-colors">Daily Fresh Produce</Link></li>
+              <li><Link to="/products?featured=true" className="hover:text-white transition-colors">Seasonal Specials</Link></li>
+              <li><Link to="/orders" className="hover:text-white transition-colors">My Orders &amp; Tracking</Link></li>
+              <li><Link to="/profile" className="hover:text-white transition-colors">Manage Delivery Addresses</Link></li>
+            </ul>
+          </div>
+
+          {/* Column 3: Service Areas */}
+          <div>
+            <h4 className="font-serif font-bold text-white text-sm mb-4">Service Areas</h4>
+            <ul className="space-y-2.5 text-xs text-cream-300 font-sans">
+              <li className="flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 text-leaf-400 shrink-0 mt-0.5" />
+                <span>Champapet Hub — 5 KM Delivery Radius</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 text-leaf-400 shrink-0 mt-0.5" />
+                <span>KPHB Colony Hub — 5 KM Delivery Radius</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Clock className="w-3.5 h-3.5 text-leaf-400 shrink-0 mt-0.5" />
+                <span>Morning Harvest Slot: 6:00 AM – 10:00 AM</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Clock className="w-3.5 h-3.5 text-leaf-400 shrink-0 mt-0.5" />
+                <span>Evening Slot: 4:00 PM – 8:00 PM</span>
+              </li>
+              <li className="pt-2">
+                <Link to="/admin/login" className="text-[11px] text-cream-400 hover:text-white transition-colors flex items-center gap-1.5">
+                  <span>🔐 Store Admin Login</span>
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Column 4: Contact & Support */}
+          <div className="space-y-4">
+            <h4 className="font-serif font-bold text-white text-sm">Customer Care</h4>
+            <p className="text-xs text-cream-300/90 leading-relaxed font-sans">
+              Need assistance with an active order or delivery serviceability inquiry?
+            </p>
+
+            <div className="text-xs text-cream-300 space-y-2.5 font-sans">
               <a
                 href={`tel:${(storeSettings.support_phone || '+91 8106970384').replace(/[\s-]/g, '')}`}
-                className="flex items-center gap-2 hover:text-cream-50 transition-colors font-medium"
+                className="flex items-center gap-2 hover:text-white transition-colors font-medium"
               >
                 <Phone className="w-4 h-4 text-leaf-400 shrink-0" />
                 <span>{storeSettings.support_phone || '+91 8106970384'}</span>
               </a>
+
               <a
                 href={`mailto:${storeSettings.support_email || 'freshvegitables29@gmail.com'}`}
-                className="flex items-center gap-2 hover:text-cream-50 transition-colors font-medium"
+                className="flex items-center gap-2 hover:text-white transition-colors font-medium"
               >
                 <Mail className="w-4 h-4 text-leaf-400 shrink-0" />
                 <span>{storeSettings.support_email || 'freshvegitables29@gmail.com'}</span>
               </a>
-            </div>
-          </div>
 
-          {/* Quick Links */}
-          <div>
-            <h4 className="font-serif font-bold text-cream-50 text-sm mb-4">Quick Links</h4>
-            <ul className="space-y-2.5 text-xs text-forest-300 font-sans">
-              <li><Link to="/products" className="hover:text-cream-50 transition-colors">All Vegetables</Link></li>
-              <li><Link to="/products?featured=true" className="hover:text-cream-50 transition-colors">Seasonal Specials</Link></li>
-              <li><Link to="/products?best_seller=true" className="hover:text-cream-50 transition-colors">Best Sellers</Link></li>
-              <li><Link to="/orders" className="hover:text-cream-50 transition-colors">Track My Order</Link></li>
-              <li><Link to="/profile" className="hover:text-cream-50 transition-colors">My Addresses</Link></li>
-            </ul>
-          </div>
-
-          {/* Categories */}
-          <div>
-            <h4 className="font-serif font-bold text-cream-50 text-sm mb-4">Harvest Categories</h4>
-            <ul className="space-y-2.5 text-xs text-forest-300 font-sans">
-              <li><Link to="/categories/fresh" className="hover:text-cream-50 transition-colors">Daily Fresh Produce</Link></li>
-              <li><Link to="/categories/leafy-vegetables" className="hover:text-cream-50 transition-colors">Leafy Greens &amp; Herbs</Link></li>
-              <li><Link to="/categories/coriander-others" className="hover:text-cream-50 transition-colors">Coriander, Mint &amp; Essentials</Link></li>
-              <li><Link to="/categories/dairy" className="hover:text-cream-50 transition-colors">Farm Fresh Dairy</Link></li>
-              <li><Link to="/products" className="hover:text-cream-50 transition-colors">All Organic Vegetables</Link></li>
-            </ul>
-          </div>
-
-          {/* Newsletter */}
-          <div className="space-y-4">
-            <h4 className="font-serif font-bold text-cream-50 text-sm">Harvest Updates</h4>
-            <p className="text-xs text-forest-300/90 leading-relaxed font-sans">
-              Subscribe for weekly harvest arrivals, seasonal specials, and organic produce updates.
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                placeholder="Enter your email"
-                className="bg-forest-900 border border-forest-800 rounded-full px-4 py-2.5 text-xs text-cream-50 placeholder:text-forest-400 focus:outline-none focus:border-leaf-500 focus:ring-1 focus:ring-leaf-500 flex-1 min-h-[44px]"
-              />
-              <button
-                type="button"
-                className="btn-pill-primary px-4 py-2 text-xs font-semibold shrink-0 min-h-[44px]"
-              >
-                Join
-              </button>
-            </div>
-            <div className="pt-2">
-              <Link to="/admin/login" className="text-xs text-forest-400 hover:text-cream-50 transition-colors font-sans">
-                🔐 Store Administration Login
-              </Link>
+              <div className="flex items-center gap-2 text-cream-400">
+                <Clock className="w-4 h-4 text-leaf-400 shrink-0" />
+                <span>Support Hours: 6:00 AM – 9:00 PM Daily</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ─── Bottom Copyright Bar ─── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 border-t border-forest-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-forest-400 font-sans">
+      {/* ─── Bottom Bar ─── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 border-t border-forest-900/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-cream-400 font-sans">
         <p>© 2026 Fresh Vegetables Organic. All rights reserved.</p>
-        <div className="flex items-center gap-2 text-forest-200 font-medium bg-forest-900/80 border border-forest-800 px-3.5 py-1.5 rounded-full shadow-soft">
-          <ShieldCheck className="w-4 h-4 text-leaf-400 shrink-0" />
-          <span>Fresh Vegetables Organic • Hyderabad, Telangana</span>
+
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs">
+          <span className="flex items-center gap-1 text-cream-300">
+            <Banknote className="w-3.5 h-3.5 text-harvest-400" />
+            <span>Cash on Delivery (COD) Available</span>
+          </span>
+          <span className="text-forest-800">•</span>
+          <span>Champapet &amp; KPHB Colony • Hyderabad</span>
         </div>
       </div>
     </footer>

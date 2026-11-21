@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Minus, Check, Clock, Ban, AlertTriangle, AlertCircle, ChevronDown, X, Star } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { Product, ProductVariant } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -19,18 +18,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   const [isAdding, setIsAdding] = useState(false);
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
-  const [tilt, setTilt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    setTilt({ x: x * 6, y: -y * 6 });
-  };
-
-  const handleMouseLeave = () => {
-    setTilt({ x: 0, y: 0 });
-  };
 
   // Filter active variants
   const activeVariants = useMemo(() => {
@@ -103,97 +90,81 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     }
   }, [availablePackOptions, selectedOptionId]);
 
-  // If user has an item in cart for this product, keep the card's active pack synchronized with their added item
-  useEffect(() => {
-    const itemsInCart = cart?.items?.filter((item) => item.product_id === product.id) || [];
-    if (itemsInCart.length > 0) {
-      const currentInCart = itemsInCart.find((ci) => (selectedOptionId ? ci.variant_id === selectedOptionId : !ci.variant_id));
-      if (!currentInCart) {
-        setSelectedOptionId(itemsInCart[0].variant_id || null);
-      }
-    }
-  }, [cart?.items, product.id, selectedOptionId]);
-
-  const currentOption = useMemo(() => {
+  // Active selected option
+  const activeOption = useMemo(() => {
     return availablePackOptions.find((o) => o.id === selectedOptionId) || availablePackOptions[0] || null;
   }, [availablePackOptions, selectedOptionId]);
 
-  const rawProductImage =
-    (product.images && product.images.length > 0 ? product.images[0] : '') ||
-    (product as any).image_url ||
-    (product as any).image ||
-    '';
-  const resolvedProductImage = getProductImageUrl(rawProductImage, product.name);
-
-  const price = currentOption ? currentOption.selling_price : Number(product.selling_price);
-  const mrp = currentOption ? currentOption.mrp : Number(product.mrp || product.selling_price);
-  const unit = currentOption ? currentOption.unit : product.unit;
-  const stock = currentOption
-    ? Number(currentOption.stock_quantity ?? 0)
-    : Number(product.stock_quantity ?? 0);
-  const minStock = product.minimum_stock ? Number(product.minimum_stock) : 5;
-  const isOutOfStock = stock <= 0 || product.status !== 'active';
-  const isLowStock = !isOutOfStock && stock <= Math.max(minStock, 5);
-
+  // Dynamic pricing, stock, unit
+  const price = activeOption ? activeOption.selling_price : Number(product.selling_price);
+  const mrp = activeOption ? activeOption.mrp : Number(product.mrp || product.selling_price);
+  const stock = activeOption ? activeOption.stock_quantity : Number(product.stock_quantity ?? 0);
+  const unit = activeOption ? activeOption.unit : (product.unit || '1 unit');
   const discount = mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
 
-  // Check if current selected option is currently in cart
-  const cartItem = cart?.items?.find((item) =>
-    item.product_id === product.id &&
-    (currentOption?.id ? item.variant_id === currentOption.id : !item.variant_id)
-  );
-  const currentQuantity = cartItem ? cartItem.quantity : 0;
+  // Cart item matching this exact product and selected pack variant
+  const cartItem = cart?.items?.find((item) => {
+    if (item.product_id !== product.id) return false;
+    if (selectedOptionId === null) return !item.variant_id;
+    return item.variant_id === selectedOptionId;
+  });
+
+  const currentQuantity = cartItem?.quantity || 0;
+  const isOutOfStock = stock <= 0 || (product.status as string) === 'out_of_stock' || product.status === 'inactive';
+  const isLowStock = !isOutOfStock && stock <= (product.minimum_stock || 5);
+
+  // Authentic product image URL from record
+  const resolvedProductImage = useMemo(() => {
+    const rawImage = (product.images && product.images.length > 0) ? product.images[0] : undefined;
+    return getProductImageUrl(rawImage, product.name);
+  }, [product.images, product.name]);
 
   const handleAdd = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (isOutOfStock) return;
-
-    // If product has multiple pack size options, open variant selection popup so customer can choose
-    if (availablePackOptions.length > 1) {
-      setIsVariantModalOpen(true);
+    if (serviceability.checked && !serviceability.serviceable) {
+      window.dispatchEvent(new CustomEvent('fresh_open_location_modal'));
       return;
     }
 
-    setIsAdding(true);
-    try {
-      await addToCart(product.id, currentOption?.id || null, 1, {
-        name: product.name,
-        image: resolvedProductImage,
-        selling_price: price,
-        mrp: mrp,
-        unit: unit,
-        variant_name: currentOption?.isBase ? undefined : currentOption?.name,
-      });
+    if (isOutOfStock || isAdding) return;
 
-      // Celebratory micro-confetti on successful addition
-      try {
-        confetti({
-          particleCount: 16,
-          spread: 40,
-          origin: { y: 0.8 },
-          colors: ['#2e8b57', '#a3d977', '#f2a93b'],
-          ticks: 100,
-          disableForReducedMotion: true,
-        });
-      } catch {}
+    try {
+      setIsAdding(true);
+      await addToCart(
+        product.id,
+        selectedOptionId || null,
+        1,
+        {
+          name: product.name,
+          image: resolvedProductImage,
+          selling_price: price,
+          mrp: mrp,
+          unit: unit,
+          variant_name: activeOption?.isBase ? undefined : activeOption?.name,
+        }
+      );
+    } catch (err) {
+      console.error('Failed to add to cart:', err);
     } finally {
-      setIsAdding(false);
+      setTimeout(() => setIsAdding(false), 300);
     }
   };
 
   const handleUpdate = async (e: React.MouseEvent, newQty: number) => {
     e.preventDefault();
     e.stopPropagation();
+
     if (cartItem) {
       await updateQuantity(cartItem.id, newQty);
     }
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
+    // Navigate to product detail page unless clicking an action button
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('select') || target.closest('a')) {
+    if (target.closest('button') || target.closest('a') || target.closest('.no-card-nav')) {
       return;
     }
     navigate(`/products/${product.slug}`);
@@ -202,50 +173,41 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   return (
     <div
       onClick={handleCardClick}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      style={{
-        transform:
-          tilt.x !== 0 || tilt.y !== 0
-            ? `perspective(800px) rotateX(${tilt.y}deg) rotateY(${tilt.x}deg) scale3d(1.02, 1.02, 1.02)`
-            : undefined,
-        transition: tilt.x === 0 && tilt.y === 0 ? 'transform 0.4s ease-out' : 'none',
-      }}
-      className={`card-organic group bg-surface rounded-2xl border border-line hover:border-leaf-500 shadow-soft hover:shadow-soft-md flex flex-col justify-between overflow-hidden relative h-full cursor-pointer p-2.5 sm:p-3.5 select-none will-change-transform ${
+      className={`group bg-white rounded-2xl border border-line hover:border-leaf-500/80 shadow-soft hover:shadow-card-hover flex flex-col justify-between overflow-hidden relative h-full cursor-pointer p-3 sm:p-4 select-none transition-all duration-200 hover:-translate-y-1 ${
         isOutOfStock ? 'opacity-85' : ''
       }`}
     >
-      {/* ─── Top Showcase Stage ─── */}
-      <div className="relative w-full h-32 sm:h-40 rounded-xl bg-cream-100/70 group-hover:bg-sage-100/50 flex items-center justify-center p-2 overflow-hidden transition-colors border border-line/60 shrink-0">
+      {/* ─── Top Showcase Stage (1:1 / clean aspect ratio) ─── */}
+      <div className="relative w-full aspect-[4/3] sm:aspect-square rounded-xl bg-cream-100/70 group-hover:bg-cream-100/90 flex items-center justify-center p-2.5 overflow-hidden transition-colors border border-line/60 shrink-0">
         {/* Floating Badges Header */}
-        <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between z-30 pointer-events-none">
-          {/* Top Left: Discount Badge (only when real discount exists) */}
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-30 pointer-events-none">
+          {/* Top Left: Discount Badge */}
           {discount > 0 ? (
-            <span className="bg-marigold-500 text-forest-950 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full shadow-soft tracking-tight uppercase font-sans">
+            <span className="bg-harvest-500 text-charcoal-900 font-bold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full shadow-soft tracking-tight uppercase font-sans">
               {discount}% OFF
             </span>
           ) : (
-            <span className="bg-forest-900 text-cream-50 font-semibold text-[8.5px] sm:text-[9.5px] px-2 py-0.5 rounded-full shadow-soft tracking-wider uppercase font-sans">
-              Fresh
+            <span className="bg-forest-900 text-white font-medium text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full shadow-soft tracking-wider uppercase font-sans">
+              Organic
             </span>
           )}
 
           {/* Top Right: Pure Vegetarian/Organic Symbol */}
           <div
-            className="w-3.5 h-3.5 rounded-[3px] border border-forest-700 p-[1px] flex items-center justify-center bg-surface shadow-soft shrink-0"
-            title="Fresh Organic Veg"
+            className="w-4 h-4 rounded-[3px] border border-forest-700 p-[1.5px] flex items-center justify-center bg-white shadow-soft shrink-0"
+            title="100% Organic Produce"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-forest-700" />
           </div>
         </div>
 
         {/* Delivery ETA Pill */}
-        <div className={`absolute bottom-1.5 left-1.5 z-30 flex items-center gap-1 backdrop-blur-xs px-2 py-0.5 rounded-full border shadow-soft text-[9px] sm:text-[9.5px] font-semibold tracking-tight pointer-events-none ${
+        <div className={`absolute bottom-2 left-2 z-30 flex items-center gap-1 backdrop-blur-md px-2 py-0.5 rounded-full border shadow-soft text-[9px] sm:text-[10px] font-semibold tracking-tight pointer-events-none ${
           serviceability.checked && !serviceability.serviceable
             ? 'bg-tomato-50/95 border-tomato-200 text-tomato-600'
             : deliveryEstimate?.isPaused
-            ? 'bg-marigold-50/95 border-marigold-200 text-marigold-800'
-            : 'bg-surface/95 border-line text-forest-900'
+            ? 'bg-harvest-50/95 border-harvest-200 text-harvest-800'
+            : 'bg-white/95 border-line text-forest-900'
         }`}>
           {serviceability.checked && !serviceability.serviceable ? (
             <>
@@ -254,23 +216,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </>
           ) : deliveryEstimate?.isPaused ? (
             <>
-              <AlertTriangle className="w-2.5 h-2.5 text-marigold-600 stroke-[2.5]" />
+              <AlertTriangle className="w-2.5 h-2.5 text-harvest-600 stroke-[2.5]" />
               <span>{deliveryEstimate.etaText || 'PAUSED'}</span>
             </>
           ) : (
             <>
               <Clock className="w-2.5 h-2.5 text-forest-700 stroke-[2.5]" />
-              <span>{deliveryEstimate?.etaText || deliverySettings?.estimated_delivery_time || 'Available'}</span>
+              <span>{deliveryEstimate?.etaText || deliverySettings?.estimated_delivery_time || '2 Hours'}</span>
             </>
           )}
         </div>
 
-        {/* Vegetable Image */}
-        <div className="w-full h-full flex items-center justify-center p-1.5 relative z-10 overflow-hidden">
+        {/* Authentic Vegetable Image */}
+        <div className="w-full h-full flex items-center justify-center p-2 relative z-10 overflow-hidden">
           <img
             src={resolvedProductImage}
-            alt={`Fresh ${product.name}`}
-            className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain rounded-lg filter drop-shadow-xs group-hover:scale-105 transition-transform duration-300 ease-out select-none ${
+            alt={product.name}
+            className={`max-w-[90%] max-h-[90%] w-auto h-auto object-contain rounded-lg filter drop-shadow-xs group-hover:scale-104 transition-transform duration-300 ease-out select-none ${
               isOutOfStock ? 'opacity-40 grayscale' : ''
             }`}
             loading="lazy"
@@ -282,8 +244,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
         {/* Sold Out Overlay */}
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-forest-950/40 backdrop-blur-[1px] flex items-center justify-center z-40">
-            <span className="bg-tomato-500 text-cream-50 text-[10px] sm:text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-soft border border-cream-100/20 flex items-center gap-1 font-sans">
+          <div className="absolute inset-0 bg-charcoal-900/40 backdrop-blur-[1px] flex items-center justify-center z-40">
+            <span className="bg-charcoal-800 text-white text-[10px] sm:text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-soft border border-white/20 flex items-center gap-1 font-sans">
               <Ban className="w-3 h-3" /> Sold Out
             </span>
           </div>
@@ -291,9 +253,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </div>
 
       {/* ─── Body Section ─── */}
-      <div className="pt-2 flex-1 flex flex-col justify-between">
+      <div className="pt-2.5 flex-1 flex flex-col justify-between">
         <div>
-          {/* Pack / Weight Pill & Brand Tag */}
+          {/* Pack / Weight Pill & Category Tag */}
           <div className="flex items-center justify-between gap-1 min-h-[22px]">
             {availablePackOptions.length > 1 ? (
               <button
@@ -303,30 +265,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   e.stopPropagation();
                   setIsVariantModalOpen(true);
                 }}
-                className="text-[10px] sm:text-[11px] font-semibold text-ink-700 bg-cream-100 hover:bg-sage-100 hover:text-forest-900 hover:border-leaf-500 border border-line rounded-lg px-2 py-0.5 flex items-center gap-1 transition-all cursor-pointer shadow-soft group/pill"
+                className="text-[10px] sm:text-[11px] font-semibold text-charcoal-700 bg-cream-100 hover:bg-sage-100 hover:text-forest-900 hover:border-leaf-500 border border-line rounded-lg px-2 py-0.5 flex items-center gap-1 transition-all cursor-pointer shadow-soft group/pill"
                 title="Click to view all pack sizes"
               >
                 <span className="truncate max-w-[85px] sm:max-w-[110px]">
                   {unit}
                 </span>
-                <ChevronDown className="w-3 h-3 text-ink-400 group-hover/pill:text-forest-900 shrink-0 transition-transform group-hover/pill:translate-y-0.5" />
+                <ChevronDown className="w-3 h-3 text-charcoal-400 group-hover/pill:text-forest-900 shrink-0 transition-transform group-hover/pill:translate-y-0.5" />
               </button>
             ) : (
-              <span className="text-[10px] sm:text-[11px] font-semibold text-ink-700 bg-cream-100 border border-line px-2 py-0.5 rounded-lg inline-block truncate max-w-[85px]">
+              <span className="text-[10px] sm:text-[11px] font-medium text-charcoal-500 bg-cream-100/80 border border-line px-2 py-0.5 rounded-lg inline-block truncate max-w-[85px]">
                 {unit}
               </span>
             )}
 
-            {/* Brand / Category Tag */}
-            <span className="text-[9px] sm:text-[9.5px] font-bold text-forest-800 uppercase tracking-wider px-2 py-0.5 rounded-lg bg-sage-100 border border-leaf-500/20 truncate max-w-[80px] xs:max-w-[110px] shrink-0 text-center font-sans">
-              {(product as any).brand || product.category_name || 'FRESH'}
+            {/* Category Tag */}
+            <span className="text-[9px] sm:text-[10px] font-bold text-forest-800 uppercase tracking-wider px-2 py-0.5 rounded-md bg-sage-100/80 border border-leaf-500/20 truncate max-w-[90px] xs:max-w-[120px] shrink-0 text-center font-sans">
+              {(product as any).brand || product.category_name || 'ORGANIC'}
             </span>
           </div>
 
-          {/* Product Title */}
-          <div className="h-[2.35rem] sm:h-[2.5rem] mt-1.5 flex items-start">
+          {/* Product Title (DM Sans, 15-17px, max 2 lines with proper truncation) */}
+          <div className="h-[2.5rem] sm:h-[2.75rem] mt-1.5 flex items-start">
             <h3
-              className="font-serif font-bold text-ink-900 text-[13px] sm:text-[14px] leading-snug line-clamp-2 group-hover:text-forest-900 transition-colors text-left"
+              className="font-serif font-bold text-charcoal-900 text-sm sm:text-base leading-snug line-clamp-2 group-hover:text-forest-900 transition-colors text-left"
               title={product.name}
             >
               <Link to={`/products/${product.slug}`} className="hover:underline text-inherit">
@@ -336,15 +298,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>
 
           {/* Micro Status & Rating Row */}
-          <div className="mt-1 flex items-center justify-between gap-1 text-[9.5px] sm:text-[10px]">
+          <div className="mt-1 flex items-center justify-between gap-1 text-[10px] sm:text-[11px]">
             <div>
               {isOutOfStock ? (
-                <span className="font-bold text-tomato-500 flex items-center gap-1 font-sans">
-                  <Ban className="w-2.5 h-2.5" /> Out of stock
+                <span className="font-semibold text-charcoal-500 flex items-center gap-1 font-sans">
+                  <span className="w-1.5 h-1.5 rounded-full bg-charcoal-400" />
+                  <span>Out of stock</span>
                 </span>
               ) : isLowStock ? (
-                <span className="font-bold text-marigold-600 flex items-center gap-1 font-sans">
-                  <AlertTriangle className="w-2.5 h-2.5 text-marigold-500" /> Only {stock} left
+                <span className="font-semibold text-harvest-700 flex items-center gap-1 font-sans">
+                  <AlertTriangle className="w-2.5 h-2.5 text-harvest-600" /> Only {stock} left
                 </span>
               ) : (
                 <span className="text-forest-700 font-medium flex items-center gap-1 font-sans">
@@ -356,35 +319,35 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
             {/* Customer Rating Badge */}
             {product.review_count && product.review_count > 0 ? (
-              <div className="flex items-center gap-1 bg-amber-50/80 border border-amber-200/60 px-1.5 py-0.5 rounded text-[10px] text-amber-900 font-medium font-sans shrink-0">
-                <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-500" />
-                <span className="font-bold text-ink-900 leading-none">{Number(product.average_rating || 0).toFixed(1)}</span>
-                <span className="text-ink-400 leading-none">({product.review_count})</span>
+              <div className="flex items-center gap-1 bg-harvest-50 border border-harvest-200/80 px-1.5 py-0.5 rounded text-[10px] text-harvest-900 font-medium font-sans shrink-0">
+                <Star className="w-2.5 h-2.5 fill-harvest-400 text-harvest-500" />
+                <span className="font-bold text-charcoal-900 leading-none">{Number(product.average_rating || 0).toFixed(1)}</span>
+                <span className="text-charcoal-400 leading-none">({product.review_count})</span>
               </div>
             ) : null}
           </div>
         </div>
 
         {/* ─── Bottom Pricing & Action Row ─── */}
-        <div className="mt-2.5 pt-2 border-t border-line/80 flex items-center justify-between gap-1">
+        <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between gap-1.5">
           {/* Price Column */}
           <div className="flex flex-col justify-center leading-none min-w-0 pr-1">
-            <div className="flex items-baseline flex-wrap gap-x-1">
-              <span className="font-serif font-bold text-ink-900 text-[13px] sm:text-base tracking-tight">
+            <div className="flex items-baseline flex-wrap gap-x-1.5">
+              <span className="font-serif font-bold text-forest-900 text-base sm:text-xl tracking-tight tabular-nums">
                 ₹{Number(price).toFixed(0)}
               </span>
               {mrp > price && (
-                <span className="text-ink-400 text-[10.5px] sm:text-xs line-through font-sans">
+                <span className="text-charcoal-400 text-xs line-through font-sans tabular-nums">
                   ₹{Number(mrp).toFixed(0)}
                 </span>
               )}
             </div>
-            <span className="text-[9px] sm:text-[9.5px] font-medium text-ink-400 mt-0.5 truncate font-sans">
+            <span className="text-[10px] font-medium text-charcoal-400 mt-0.5 truncate font-sans">
               per {unit}
             </span>
           </div>
 
-          {/* Action Button: Pill "ADD" button or Stepper */}
+          {/* Action Button: Tactile "ADD" or Stepper */}
           <div className="shrink-0">
             {serviceability.checked && !serviceability.serviceable ? (
               <button
@@ -392,7 +355,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 disabled
                 title="Delivery unavailable at this location. Please choose a different delivery location."
                 aria-label="Delivery unavailable at this location"
-                className="h-7 sm:h-8 px-2 sm:px-2.5 rounded-full bg-cream-100 border border-line text-ink-400 font-semibold text-[9px] sm:text-[9.5px] flex items-center gap-1 cursor-not-allowed select-none"
+                className="h-8 sm:h-9 px-2.5 rounded-full bg-cream-100 border border-line text-charcoal-400 font-semibold text-[10px] flex items-center gap-1 cursor-not-allowed select-none"
               >
                 <span>Unavailable</span>
               </button>
@@ -400,23 +363,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               <button
                 type="button"
                 disabled
-                className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-full bg-cream-100 border border-line text-ink-400 font-semibold text-[10px] sm:text-[10.5px] flex items-center gap-1 cursor-not-allowed select-none"
+                className="h-8 sm:h-9 px-3 rounded-full bg-cream-100 border border-line text-charcoal-400 font-semibold text-[10px] sm:text-xs flex items-center gap-1 cursor-not-allowed select-none"
               >
-                <Ban className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-ink-400" />
+                <Ban className="w-3 h-3 text-charcoal-400" />
                 <span>Sold Out</span>
               </button>
             ) : currentQuantity > 0 ? (
-              <div className="h-7 sm:h-8 min-w-[70px] sm:min-w-[80px] flex items-center justify-between bg-forest-900 text-cream-50 rounded-full p-0.5 shadow-soft">
+              <div className="h-8 sm:h-9 min-w-[76px] sm:min-w-[88px] flex items-center justify-between bg-forest-900 text-white rounded-full p-0.5 shadow-soft">
                 <button
                   type="button"
                   onClick={(e) => handleUpdate(e, currentQuantity - 1)}
-                  className="w-5 sm:w-6 h-6 sm:h-7 rounded-full hover:bg-forest-800 flex items-center justify-center text-cream-50 transition-all active:scale-90 cursor-pointer"
+                  className="w-6 sm:w-7 h-7 sm:h-8 rounded-full hover:bg-forest-800 flex items-center justify-center text-white transition-all active:scale-90 cursor-pointer min-w-[28px]"
                   title="Remove one"
                   aria-label="Remove one item"
                 >
-                  <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
+                  <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
                 </button>
-                <span className="text-xs font-bold px-1 text-cream-50 font-mono select-none">
+                <span className="text-xs font-bold px-1.5 text-white font-mono select-none">
                   {currentQuantity}
                 </span>
                 <button
@@ -425,9 +388,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   disabled={currentQuantity >= stock}
                   title={currentQuantity >= stock ? 'Maximum stock reached' : 'Add one more'}
                   aria-label="Add one more item"
-                  className="w-5 sm:w-6 h-6 sm:h-7 rounded-full hover:bg-forest-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-cream-50 transition-all active:scale-90 cursor-pointer"
+                  className="w-6 sm:w-7 h-7 sm:h-8 rounded-full hover:bg-forest-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all active:scale-90 cursor-pointer min-w-[28px]"
                 >
-                  <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
+                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                 </button>
               </div>
             ) : (
@@ -436,14 +399,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 onClick={handleAdd}
                 disabled={isAdding}
                 aria-label={`Add ${product.name} to cart`}
-                className="h-7 sm:h-8 min-w-[62px] sm:min-w-[72px] px-2.5 sm:px-3.5 rounded-full border border-forest-900 bg-forest-900 hover:bg-forest-850 text-cream-50 font-bold text-[11px] sm:text-xs uppercase tracking-wider shadow-soft hover:shadow-soft-md transition-all active:scale-95 flex items-center justify-center gap-1 group/btn cursor-pointer"
+                className="h-8 sm:h-9 min-w-[68px] sm:min-w-[78px] px-3.5 rounded-full bg-forest-900 hover:bg-forest-800 text-white font-bold text-xs uppercase tracking-wider shadow-soft hover:shadow-soft-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {isAdding ? (
-                  <Check className="w-3.5 h-3.5 animate-bounce text-leaf-400" />
+                  <Check className="w-3.5 h-3.5 animate-bounce text-leaf-300" />
                 ) : (
                   <>
                     <span>ADD</span>
-                    <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[2.5] group-hover/btn:rotate-90 transition-transform" />
+                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                   </>
                 )}
               </button>
@@ -457,7 +420,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="fixed inset-0 z-[9999] bg-forest-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 z-[9999] bg-charcoal-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -466,12 +429,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="bg-surface w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-soft-xl overflow-hidden border border-line flex flex-col max-h-[85vh] sm:max-h-[90vh] animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+              className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-soft-lg overflow-hidden border border-line flex flex-col max-h-[85vh] sm:max-h-[90vh] animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
             >
               {/* Modal Header */}
               <div className="p-4 sm:p-5 border-b border-line flex items-start gap-3.5 bg-cream-50/70 relative">
                 {/* Product Image Stage */}
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-surface border border-line p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-soft">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white border border-line p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-soft">
                   <img
                     src={resolvedProductImage}
                     alt={product.name}
@@ -486,7 +449,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 <div className="flex-1 min-w-0 pr-8">
                   <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                     <span className="text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-sage-100 text-forest-800 border border-leaf-500/20 font-sans">
-                      {(product as any).brand || product.category_name || 'FRESH'}
+                      {(product as any).brand || product.category_name || 'ORGANIC'}
                     </span>
                     <span className="text-[10px] font-semibold text-forest-700 flex items-center gap-1 font-sans">
                       <span className="w-1.5 h-1.5 rounded-full bg-leaf-500 animate-pulse" />
@@ -494,12 +457,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                     </span>
                   </div>
 
-                  <h3 className="font-serif font-bold text-base sm:text-lg text-ink-900 leading-tight truncate">
+                  <h3 className="font-serif font-bold text-base sm:text-lg text-charcoal-900 leading-tight truncate">
                     {product.name}
                   </h3>
-
-                  <p className="text-xs text-ink-500 mt-1 font-sans">
-                    Select your preferred pack size & quantity
+                  <p className="text-xs text-charcoal-500 mt-1">
+                    Select your preferred quantity pack size
                   </p>
                 </div>
 
@@ -507,209 +469,96 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 <button
                   type="button"
                   onClick={() => setIsVariantModalOpen(false)}
-                  className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-cream-200/80 hover:bg-cream-300 text-ink-700 hover:text-ink-900 flex items-center justify-center transition-colors cursor-pointer"
-                  aria-label="Close variant modal"
+                  className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white hover:bg-cream-100 border border-line flex items-center justify-center text-charcoal-400 hover:text-charcoal-900 transition-colors cursor-pointer shadow-soft"
+                  aria-label="Close modal"
                 >
-                  <X className="w-4 h-4 stroke-[2.5]" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Scrollable Variants List */}
-              <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 flex-1 divide-y divide-line/60">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-ink-500 flex items-center justify-between pb-1 font-sans">
-                  <span>Available Pack Sizes</span>
-                  <span className={`text-[11px] font-semibold flex items-center gap-1 ${deliveryEstimate?.isPaused ? 'text-marigold-700' : 'text-forest-700'}`}>
-                    <Clock className={`w-3 h-3 ${deliveryEstimate?.isPaused ? 'text-marigold-600' : 'text-leaf-600'}`} />
-                    {deliveryEstimate?.isPaused ? 'Delivery Paused' : (deliveryEstimate?.etaText ? `${deliveryEstimate.etaText} Delivery` : 'Delivery Available')}
-                  </span>
-                </div>
+              {/* Pack Sizes List */}
+              <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 max-h-[50vh]">
+                {availablePackOptions.map((opt) => {
+                  const isSelected = (selectedOptionId === null && opt.id === null) || selectedOptionId === opt.id;
+                  const optDiscount = opt.mrp > opt.selling_price ? Math.round(((opt.mrp - opt.selling_price) / opt.mrp) * 100) : 0;
+                  const optOutOfStock = opt.stock_quantity <= 0;
 
-                {availablePackOptions && availablePackOptions.length > 0 ? (
-                  availablePackOptions.map((opt) => {
-                    const optCartItem = cart?.items?.find(
-                      (ci) => ci.product_id === product.id && (opt.id ? ci.variant_id === opt.id : !ci.variant_id)
-                    );
-                    const optQty = optCartItem ? optCartItem.quantity : 0;
-                    const optPrice = Number(opt.selling_price);
-                    const optMrp = Number(opt.mrp);
-                    const optDiscount = optMrp > optPrice ? Math.round(((optMrp - optPrice) / optMrp) * 100) : 0;
-                    const optStock = Number(opt.stock_quantity ?? 0);
-                    const optOut = optStock <= 0 || opt.status !== 'active';
-                    const isSelected = selectedOptionId === opt.id;
-
-                    return (
-                      <div
-                        key={opt.id || 'base-pack'}
-                        onClick={() => setSelectedOptionId(opt.id)}
-                        className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-3 rounded-2xl transition-all cursor-pointer border ${
-                          isSelected
-                            ? 'border-leaf-500 bg-sage-50/50 shadow-soft'
-                            : 'border-line hover:border-forest-300 bg-surface hover:bg-cream-50/50'
-                        }`}
-                      >
-                        {/* Variant Thumbnail Stage */}
-                        <div className="w-12 h-12 rounded-xl bg-cream-100/80 border border-line p-1 shrink-0 flex items-center justify-center overflow-hidden">
-                          <img
-                            src={resolvedProductImage}
-                            alt={opt.name}
-                            className="w-full h-full object-contain"
-                            onError={(e) => {
-                              e.currentTarget.src = getFallbackImageUrl(product.name);
-                            }}
-                          />
+                  return (
+                    <div
+                      key={opt.id || 'base'}
+                      onClick={() => {
+                        if (!optOutOfStock) {
+                          setSelectedOptionId(opt.id);
+                        }
+                      }}
+                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        isSelected
+                          ? 'border-forest-900 bg-sage-50/70 shadow-soft'
+                          : optOutOfStock
+                          ? 'border-line/60 bg-cream-50/40 opacity-60 cursor-not-allowed'
+                          : 'border-line hover:border-leaf-500 bg-white hover:bg-cream-50/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Radio Check Circle */}
+                        <div
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                            isSelected ? 'border-forest-900 bg-forest-900 text-white' : 'border-line bg-white'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
 
-                        {/* Left Details */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-serif font-bold text-sm text-ink-900">
-                              {opt.name}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-serif font-bold text-sm text-charcoal-900 truncate">
+                              {opt.unit}
                             </span>
-                            {opt.unit && (
-                              <span className="text-[10px] font-semibold text-ink-600 bg-cream-100 border border-line px-1.5 py-0.5 rounded font-sans">
-                                {opt.unit}
-                              </span>
-                            )}
                             {optDiscount > 0 && (
-                              <span className="text-[9.5px] font-bold text-forest-950 bg-marigold-400 px-1.5 py-0.5 rounded font-sans">
+                              <span className="bg-harvest-500 text-charcoal-900 text-[10px] font-bold px-1.5 py-0.2 rounded-full uppercase tracking-tight">
                                 {optDiscount}% OFF
                               </span>
                             )}
                           </div>
-
-                          <div className="flex items-baseline gap-2 mt-1">
-                            <span className="font-serif font-bold text-base text-ink-900">
-                              ₹{optPrice.toFixed(0)}
-                            </span>
-                            {optMrp > optPrice && (
-                              <span className="text-xs text-ink-400 line-through font-sans">
-                                ₹{optMrp.toFixed(0)}
-                              </span>
-                            )}
-                            {optOut ? (
-                              <span className="text-[10px] font-bold text-tomato-500 ml-1 font-sans">
-                                Sold Out
-                              </span>
-                            ) : optStock <= 5 ? (
-                              <span className="text-[10px] font-bold text-marigold-600 ml-1 font-sans">
-                                Only {optStock} left
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-semibold text-forest-700 ml-1 font-sans">
-                                In Stock
-                              </span>
-                            )}
-                          </div>
+                          <span className="text-[11px] text-charcoal-500 block truncate mt-0.5">
+                            {optOutOfStock ? 'Sold out in this size' : `Available in stock (${opt.stock_quantity} units)`}
+                          </span>
                         </div>
+                      </div>
 
-                        {/* Right Quantity Control */}
-                        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {serviceability.checked && !serviceability.serviceable ? (
-                            <button
-                              type="button"
-                              disabled
-                              className="h-8 px-2.5 rounded-full bg-cream-100 text-ink-400 font-semibold text-[10px] border border-line cursor-not-allowed"
-                            >
-                              Unavailable
-                            </button>
-                          ) : optOut ? (
-                            <button
-                              type="button"
-                              disabled
-                              className="h-8 px-3 rounded-full bg-cream-100 text-ink-400 font-semibold text-xs border border-line cursor-not-allowed"
-                            >
-                              Sold Out
-                            </button>
-                          ) : optQty > 0 ? (
-                            <div className="h-8 min-w-[84px] flex items-center justify-between bg-forest-900 text-cream-50 rounded-full p-0.5 shadow-soft">
-                              <button
-                                type="button"
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  if (optCartItem) {
-                                    await updateQuantity(optCartItem.id, optQty - 1);
-                                  }
-                                }}
-                                className="w-7 h-7 rounded-full hover:bg-forest-800 flex items-center justify-center text-cream-50 transition-all active:scale-90 cursor-pointer"
-                                title="Remove one"
-                                aria-label="Decrease quantity"
-                              >
-                                <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
-                              </button>
-                              <span className="text-xs font-bold px-1.5 text-cream-50 font-mono select-none">
-                                {optQty}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  if (optCartItem) {
-                                    await updateQuantity(optCartItem.id, optQty + 1);
-                                  }
-                                }}
-                                disabled={optQty >= optStock}
-                                className="w-7 h-7 rounded-full hover:bg-forest-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-cream-50 transition-all active:scale-90 cursor-pointer"
-                                title="Add one more"
-                                aria-label="Increase quantity"
-                              >
-                                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setSelectedOptionId(opt.id);
-                                await addToCart(
-                                  product.id,
-                                  opt.id || null,
-                                  1,
-                                  {
-                                    name: product.name,
-                                    image: resolvedProductImage,
-                                    selling_price: optPrice,
-                                    mrp: optMrp,
-                                    unit: opt.unit,
-                                    variant_name: opt.isBase ? undefined : opt.name,
-                                  },
-                                  true
-                                );
-                              }}
-                              className="h-8 min-w-[76px] px-3.5 rounded-full border border-forest-900 bg-forest-900 hover:bg-forest-850 text-cream-50 font-bold text-xs uppercase tracking-wider shadow-soft hover:shadow-soft-md transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
-                            >
-                              <span>ADD</span>
-                              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                            </button>
+                      {/* Pricing Column */}
+                      <div className="text-right shrink-0">
+                        <div className="flex items-baseline justify-end gap-1.5">
+                          <span className="font-serif font-bold text-forest-900 text-base">
+                            ₹{opt.selling_price.toFixed(0)}
+                          </span>
+                          {opt.mrp > opt.selling_price && (
+                            <span className="text-xs text-charcoal-400 line-through">
+                              ₹{opt.mrp.toFixed(0)}
+                            </span>
                           )}
                         </div>
                       </div>
-                    );
-                  })
-                ) : null}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Modal Footer */}
-              <div className="p-3.5 sm:p-4 bg-cream-50/80 border-t border-line flex items-center justify-between gap-3">
-                <div className="text-xs text-ink-600 truncate font-sans">
-                  Pack: <strong className="font-bold text-ink-900">{unit}</strong>
-                  {cart?.items?.filter((ci) => ci.product_id === product.id).length ? (
-                    <span className="ml-2 text-forest-700 font-semibold">
-                      ({cart.items.filter((ci) => ci.product_id === product.id).reduce((sum, ci) => sum + ci.quantity, 0)} in cart)
-                    </span>
-                  ) : null}
+              <div className="p-4 sm:p-5 border-t border-line bg-cream-50/70 flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-[11px] text-charcoal-500 block">Selected Pack</span>
+                  <span className="font-serif font-bold text-sm text-charcoal-900">
+                    {activeOption?.unit} • ₹{price.toFixed(0)}
+                  </span>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setIsVariantModalOpen(false)}
-                  className="px-5 py-2 bg-forest-900 hover:bg-forest-850 text-cream-50 font-semibold text-xs rounded-full shadow-soft transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                  className="btn-pill-primary px-6 py-2.5 text-xs font-semibold"
                 >
-                  <span>Done</span>
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                  Apply Pack Size
                 </button>
               </div>
             </div>
