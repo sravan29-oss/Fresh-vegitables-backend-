@@ -45,6 +45,14 @@ async function ensureSchemaAlignment() {
       SET latitude = 17.347145, longitude = 78.512947 
       WHERE (latitude IS NULL OR longitude IS NULL) 
         AND (pincode = '500059' OR LOWER(area) LIKE '%champapet%' OR LOWER(house_number) LIKE '%raji%');
+      -- Ensure Phase 16/17 review & SEO columns on products table
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS average_rating NUMERIC(3,2) DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS review_count INTEGER DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS seo_title VARCHAR(255);
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS seo_description TEXT;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS seo_slug VARCHAR(255);
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS image_alt_text VARCHAR(255);
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS sitemap_eligible BOOLEAN DEFAULT TRUE;
     `);
   } catch (e: any) {
     console.warn('[Schema] ensureSchemaAlignment notice:', e.message);
@@ -1301,8 +1309,8 @@ export const db = {
       try {
         return await pool.query(text, params);
       } catch (err: any) {
-        // If table doesn't exist yet (42P01), connection refused, or connection terminated
-        if (err.code === '42P01' || err.code === 'ECONNREFUSED' || err.code === '57P01' || err.code === 'ECONNRESET') {
+        // If table doesn't exist yet (42P01), column doesn't exist (42703), connection refused, or connection terminated
+        if (err.code === '42P01' || err.code === '42703' || err.code === 'ECONNREFUSED' || err.code === '57P01' || err.code === 'ECONNRESET') {
           console.warn(`⚠️ [PostgreSQL Query Warning] ${err.message}. Using store fallback.`);
           return runMemoryQuery(text, params);
         }

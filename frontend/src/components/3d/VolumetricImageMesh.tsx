@@ -24,7 +24,7 @@ export const VolumetricImageMesh: React.FC<VolumetricImageMeshProps> = ({
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
 
-    // Also measure native image dimensions to guarantee zero distortion
+    // Measure native image dimensions to guarantee 1:1 zero distortion
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -47,7 +47,7 @@ export const VolumetricImageMesh: React.FC<VolumetricImageMeshProps> = ({
       },
       undefined,
       (err) => {
-        console.warn('[VolumetricImageMesh] Texture load error, falling back:', err);
+        console.warn('[VolumetricImageMesh] Texture load warning:', err);
       }
     );
 
@@ -70,7 +70,7 @@ export const VolumetricImageMesh: React.FC<VolumetricImageMeshProps> = ({
       w = h * aspect;
     }
 
-    const d = (profile.depth || 0.25) * (w > h ? 0.9 : 1.1);
+    const d = (profile.depth || 0.22) * (w > h ? 0.9 : 1.1);
     return { width: w, height: h, depth: d };
   }, [aspect, profile.depth]);
 
@@ -78,57 +78,76 @@ export const VolumetricImageMesh: React.FC<VolumetricImageMeshProps> = ({
   useFrame((state) => {
     if (!meshRef.current) return;
     const t = state.clock.getElapsedTime();
-    meshRef.current.position.y = Math.sin(t * 1.4) * 0.06;
+    meshRef.current.position.y = Math.sin(t * 1.4) * 0.05;
   });
+
+  // Single solid watertight multi-material box:
+  // Face 0: Right (+X) -> Organic theme rim
+  // Face 1: Left (-X) -> Organic theme rim
+  // Face 2: Top (+Y) -> Organic theme rim
+  // Face 3: Bottom (-Y) -> Organic theme rim
+  // Face 4: Front (+Z) -> Original product image texture
+  // Face 5: Back (-Z) -> Studio matte backplate
+  // This completely eliminates any co-planar Z-fighting or striped artifacts!
+  const rimMaterial = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(profile.themeColor),
+        roughness: profile.roughness || 0.35,
+        metalness: 0.08,
+        clearcoat: 0.35,
+        clearcoatRoughness: 0.25,
+      }),
+    [profile.themeColor, profile.roughness]
+  );
+
+  const backMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#122316'),
+        roughness: 0.65,
+        metalness: 0.1,
+      }),
+    []
+  );
+
+  const frontMaterial = useMemo(() => {
+    if (!texture) {
+      return new THREE.MeshStandardMaterial({
+        color: new THREE.Color(profile.themeColor),
+        roughness: 0.4,
+      });
+    }
+    return new THREE.MeshPhysicalMaterial({
+      map: texture,
+      roughness: profile.roughness || 0.25,
+      metalness: 0.04,
+      clearcoat: profile.clearcoat || 0.4,
+      clearcoatRoughness: 0.2,
+      reflectivity: 0.5,
+    });
+  }, [texture, profile.themeColor, profile.roughness, profile.clearcoat]);
+
+  const materials = useMemo(
+    () => [rimMaterial, rimMaterial, rimMaterial, rimMaterial, frontMaterial, backMaterial],
+    [rimMaterial, frontMaterial, backMaterial]
+  );
 
   return (
     <group ref={meshRef} scale={scale}>
-      {/* Front Face: High-Resolution Original Image with Clearcoat Specular */}
-      <mesh position={[0, 0, depth / 2]} castShadow receiveShadow>
-        <planeGeometry args={[width, height, 32, 32]} />
-        {texture ? (
-          <meshPhysicalMaterial
-            map={texture}
-            transparent={true}
-            roughness={profile.roughness || 0.28}
-            metalness={0.05}
-            clearcoat={profile.clearcoat || 0.45}
-            clearcoatRoughness={0.2}
-            reflectivity={0.5}
-            side={THREE.FrontSide}
-          />
-        ) : (
-          <meshStandardMaterial color={profile.themeColor} roughness={0.4} />
-        )}
+      {/* Seamless Single-Mesh Solid Volumetric Product Slab */}
+      <mesh
+        castShadow
+        receiveShadow
+        material={materials}
+      >
+        <boxGeometry args={[width, height, depth]} />
       </mesh>
 
-      {/* Volumetric Organic Core & Beveled Side Rim (Samples Product Hue) */}
-      <mesh position={[0, 0, 0]} castShadow receiveShadow>
-        <boxGeometry args={[width * 0.98, height * 0.98, depth]} />
-        <meshPhysicalMaterial
-          color={profile.themeColor}
-          roughness={profile.roughness || 0.35}
-          metalness={0.08}
-          clearcoat={0.3}
-          clearcoatRoughness={0.3}
-        />
-      </mesh>
-
-      {/* Back Plate: Tactile Studio Finish */}
-      <mesh position={[0, 0, -depth / 2]} rotation={[0, Math.PI, 0]} receiveShadow>
-        <planeGeometry args={[width * 0.98, height * 0.98]} />
-        <meshStandardMaterial
-          color="#1b3022"
-          roughness={0.65}
-          metalness={0.1}
-          side={THREE.FrontSide}
-        />
-      </mesh>
-
-      {/* Contact Shadow Below Produce */}
-      <mesh position={[0, -height / 2 - 0.35, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      {/* Soft Contact Shadow Below Produce */}
+      <mesh position={[0, -height / 2 - 0.25, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[width * 1.5, width * 1.5]} />
-        <shadowMaterial opacity={0.35} />
+        <shadowMaterial opacity={0.3} />
       </mesh>
     </group>
   );

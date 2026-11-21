@@ -42,7 +42,7 @@ export async function autoMigrateAndSeed(): Promise<void> {
     client = await pool.connect();
     console.log('🔄 [AutoMigrate] Connected to PostgreSQL. Verifying schema migrations...');
 
-    // 1. Create tracking table and ensure Firebase auth columns
+    // 1. Create tracking table and ensure essential base columns
     await client.query(`
       CREATE TABLE IF NOT EXISTS _schema_migrations (
         id VARCHAR(255) PRIMARY KEY,
@@ -55,15 +55,27 @@ export async function autoMigrateAndSeed(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid);
       CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
       CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile);
+
+      -- Ensure Phase 16/17 reviews and SEO columns exist on products
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS average_rating NUMERIC(3,2) DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS review_count INTEGER DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS seo_title VARCHAR(255);
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS seo_description TEXT;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS seo_slug VARCHAR(255);
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS image_alt_text VARCHAR(255);
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS sitemap_eligible BOOLEAN DEFAULT TRUE;
+
+      -- Remove any accidentally recorded rollback files from migration tracker
+      DELETE FROM _schema_migrations WHERE id LIKE '%rollback%';
     `);
 
     const appliedRes = await client.query('SELECT id FROM _schema_migrations');
     const appliedSet = new Set(appliedRes.rows.map((r: any) => r.id));
 
-    // 2. Read migration files
+    // 2. Read migration files (EXCLUDE rollback files to prevent accidental rollbacks on startup!)
     const files = fs
       .readdirSync(migrationsDir)
-      .filter((file) => file.endsWith('.sql'))
+      .filter((file) => file.endsWith('.sql') && !file.toLowerCase().includes('rollback'))
       .sort();
 
     for (const file of files) {
