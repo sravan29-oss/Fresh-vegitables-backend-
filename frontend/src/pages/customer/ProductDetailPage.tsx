@@ -340,6 +340,8 @@ export const ProductDetailPage: React.FC = () => {
           <ProductViewer
             productName={product.name}
             categorySlug={product.category_slug}
+            slug={product.slug}
+            productId={product.id}
             imageUrl={activeImage || product.images?.[0]}
           />
 
